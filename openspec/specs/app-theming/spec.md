@@ -36,7 +36,7 @@ On Android 12 or newer the app SHALL use the system's dynamic color scheme, in t
 - **THEN** colors come from the system dynamic scheme
 
 #### Scenario: Other platforms
-- **WHEN** the app runs on desktop, iOS, web, or Android older than 12
+- **WHEN** the app runs on desktop, iOS, or Android older than 12
 - **THEN** colors come from the app's light or dark scheme
 
 ### Requirement: Theme choice is not persisted
