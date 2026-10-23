@@ -22,6 +22,8 @@ import com.usuallycoding.openadhd.domain.Tier
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import kotlinx.datetime.LocalDate
+import kotlinx.datetime.todayIn
+import kotlinx.datetime.TimeZone
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.resetMain
@@ -334,5 +336,54 @@ class AppUiTest {
         onNodeWithText("History").performClick()
         onAllNodesWithText("Mystery roll of tier", substring = true).assertCountEquals(1)
         onAllNodesWithText("Tier 2 · ", substring = true).assertCountEquals(1)
+    }
+
+    // ---- critical hits
+
+    private fun critStore(vararg answers: Boolean, subtasks: List<String> = emptyList(), tier: Tier = Tier.Three): InMemoryStore {
+        val store = InMemoryStore(criticalHits = ScriptedCrits(*answers))
+        runBlocking {
+            val template = store.create(if (subtasks.isEmpty()) "Taxes" else "Clean", tier, Energy.Low, subtasks = subtasks)
+            store.assign(template, kotlin.time.Clock.System.todayIn(TimeZone.currentSystemDefault()))
+        }
+        return store
+    }
+
+    @Test
+    fun `a critical subtask shows a message and pays double`() = runComposeUiTest {
+        val store = critStore(true, false, subtasks = listOf("A", "B", "C"))
+        setContent { App(AppContainer(store, dateCheckInterval = null)) }
+        onNodeWithText("Critical", substring = true).assertDoesNotExist()
+        onAllNodesWithText("+7").assertCountEquals(2)
+
+        onAllNodes(isToggleable())[0].performClick()
+        onNodeWithText("Critical hit! +7 bonus coins").assertExists()
+        onNodeWithText("14").assertExists()
+
+        // the message does not get in the way of completing the next item, which is not critical
+        onAllNodes(isToggleable())[1].performClick()
+        onNodeWithText("21").assertExists()
+    }
+
+    @Test
+    fun `a critical task without subtasks pays its reward twice`() = runComposeUiTest {
+        val store = critStore(true)
+        setContent { App(AppContainer(store, dateCheckInterval = null)) }
+        onNodeWithText("Tier 3 · Low energy · +20 coins", substring = true).assertExists()
+
+        onNode(isToggleable()).performClick()
+        onNodeWithText("Critical hit! +20 bonus coins").assertExists()
+        onNodeWithText("40").assertExists()
+    }
+
+    @Test
+    fun `a usual completion shows no message`() = runComposeUiTest {
+        val store = critStore(false, subtasks = listOf("A", "B", "C"))
+        setContent { App(AppContainer(store, dateCheckInterval = null)) }
+
+        onAllNodes(isToggleable())[0].performClick()
+
+        onNodeWithText("7").assertExists()
+        onNodeWithText("Critical", substring = true).assertDoesNotExist()
     }
 }

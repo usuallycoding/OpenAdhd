@@ -2,7 +2,6 @@ package com.usuallycoding.openadhd.data
 
 import androidx.room.Room
 import com.usuallycoding.openadhd.data.room.OpenAdhdDatabase
-import com.usuallycoding.openadhd.data.room.RoomStore
 import com.usuallycoding.openadhd.data.room.buildOpenAdhdDatabase
 import java.io.File
 
@@ -11,5 +10,5 @@ fun createDesktopContainer(directory: File = File(System.getProperty("user.home"
     directory.mkdirs()
     val database = Room.databaseBuilder<OpenAdhdDatabase>(File(directory, "openadhd.db").absolutePath)
         .buildOpenAdhdDatabase()
-    return AppContainer(RoomStore(database))
+    return createContainer(database)
 }

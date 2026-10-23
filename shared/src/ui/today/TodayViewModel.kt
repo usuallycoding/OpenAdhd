@@ -2,11 +2,14 @@ package com.usuallycoding.openadhd.ui.today
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.usuallycoding.openadhd.domain.CompletionResult
 import com.usuallycoding.openadhd.domain.OpenAdhdStore
 import com.usuallycoding.openadhd.domain.PlannedTask
 import com.usuallycoding.openadhd.domain.TaskTemplate
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -23,6 +26,9 @@ import kotlin.time.Duration.Companion.seconds
 
 /** How often the current date is re-checked so the list rolls over at midnight. */
 val DefaultDateCheckInterval = 30.seconds
+
+/** A completion that turned out to be a critical hit, with the bonus coins it paid. */
+data class CriticalHitEvent(val bonus: Int)
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class TodayViewModel(
@@ -46,6 +52,11 @@ class TodayViewModel(
     val templates: StateFlow<List<TaskTemplate>> =
         store.templates.stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
 
+    private val _criticalHits = MutableSharedFlow<CriticalHitEvent>(extraBufferCapacity = 16)
+
+    /** One event per critical hit, for a short celebration; a small buffer keeps quick successive hits from being lost. */
+    val criticalHits: SharedFlow<CriticalHitEvent> = _criticalHits
+
     fun assign(template: TaskTemplate) {
         viewModelScope.launch { store.assign(template, today.value) }
     }
@@ -56,10 +67,15 @@ class TodayViewModel(
 
     /** Completes an entry that has no subtasks. */
     fun completeTask(id: String) {
-        viewModelScope.launch { store.completeTask(id) }
+        viewModelScope.launch { announce(store.completeTask(id)) }
     }
 
     fun completeSubtask(id: String) {
-        viewModelScope.launch { store.completeSubtask(id) }
+        viewModelScope.launch { announce(store.completeSubtask(id)) }
+    }
+
+    /** Tells the screen about a critical hit; usual and refused completions say nothing. */
+    private suspend fun announce(result: CompletionResult?) {
+        if (result != null && result.isCritical) _criticalHits.emit(CriticalHitEvent(result.bonus))
     }
 }

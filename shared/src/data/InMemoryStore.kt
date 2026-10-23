@@ -1,6 +1,9 @@
 package com.usuallycoding.openadhd.data
 
 import com.usuallycoding.openadhd.domain.CoinRules
+import com.usuallycoding.openadhd.domain.CompletionResult
+import com.usuallycoding.openadhd.domain.CriticalHits
+import com.usuallycoding.openadhd.domain.CriticalRules
 import com.usuallycoding.openadhd.domain.Energy
 import com.usuallycoding.openadhd.domain.LedgerEntry
 import com.usuallycoding.openadhd.domain.LedgerReason
@@ -35,7 +38,18 @@ data class StoreState(
 )
 
 /** Pure state transitions shared by every [OpenAdhdStore] implementation. */
-internal class StoreLogic(private val clock: Clock, private val random: Random = Random.Default) {
+internal class StoreLogic(
+    private val clock: Clock,
+    private val random: Random = Random.Default,
+    private val criticalHits: CriticalHits = CriticalHits.Never,
+) {
+    /** The reward entry, plus a bonus entry when this completion turns out to be a critical hit. */
+    private fun payout(reward: LedgerEntry, refId: String): Pair<List<LedgerEntry>, CompletionResult> {
+        if (!criticalHits.isCritical()) return listOf(reward) to CompletionResult(reward.amount)
+        val bonus = LedgerEntry(newId(), CriticalRules.bonus(reward.amount), reward.timestamp, LedgerReason.CriticalHit, refId)
+        return listOf(reward, bonus) to CompletionResult(reward.amount, bonus.amount)
+    }
+
     fun create(
         state: StoreState,
         name: String,
@@ -64,16 +78,17 @@ internal class StoreLogic(private val clock: Clock, private val random: Random =
     fun remove(state: StoreState, id: String): StoreState =
         state.copy(planned = state.planned.filterNot { it.id == id && !it.hasProgress })
 
-    /** Returns the new state, or null when the entry is unknown, has subtasks, or is already completed. */
-    fun completeTask(state: StoreState, id: String): StoreState? {
+    /** Returns the new state and what was paid, or null when the entry is unknown, has subtasks, or is already completed. */
+    fun completeTask(state: StoreState, id: String): Pair<StoreState, CompletionResult>? {
         val task = state.planned.firstOrNull { it.id == id } ?: return null
         if (task.subtasks.isNotEmpty() || task.isCompleted) return null
         val now = clock.now()
-        val reward = LedgerEntry(newId(), task.reward, now, LedgerReason.TaskCompleted, task.id)
-        return state.copy(
+        val (entries, result) = payout(LedgerEntry(newId(), task.reward, now, LedgerReason.TaskCompleted, task.id), task.id)
+        val next = state.copy(
             planned = state.planned.map { if (it.id == id) it.copy(completedAt = now) else it },
-            ledger = state.ledger + reward,
+            ledger = state.ledger + entries,
         )
+        return next to result
     }
 
     fun createReward(
@@ -129,20 +144,24 @@ internal class StoreLogic(private val clock: Clock, private val random: Random =
         return next to RollResult(redemption, outcome.upgraded)
     }
 
-    /** Returns the new state, or null when the subtask is unknown or already completed. */
-    fun completeSubtask(state: StoreState, id: String): StoreState? {
+    /** Returns the new state and what was paid, or null when the subtask is unknown or already completed. */
+    fun completeSubtask(state: StoreState, id: String): Pair<StoreState, CompletionResult>? {
         val task = state.planned.firstOrNull { entry -> entry.subtasks.any { it.id == id } } ?: return null
         val subtask = task.subtasks.first { it.id == id }
         if (subtask.isCompleted) return null
         val now = clock.now()
-        val reward = LedgerEntry(newId(), subtask.reward, now, LedgerReason.SubtaskCompleted, subtask.id)
-        return state.copy(
+        val (entries, result) = payout(
+            LedgerEntry(newId(), subtask.reward, now, LedgerReason.SubtaskCompleted, subtask.id),
+            subtask.id,
+        )
+        val next = state.copy(
             planned = state.planned.map { entry ->
                 if (entry.id != task.id) entry
                 else entry.copy(subtasks = entry.subtasks.map { if (it.id == id) it.copy(completedAt = now) else it })
             },
-            ledger = state.ledger + reward,
+            ledger = state.ledger + entries,
         )
+        return next to result
     }
 }
 
@@ -150,8 +169,9 @@ class InMemoryStore(
     clock: Clock = Clock.System,
     initial: StoreState = StoreState(),
     random: Random = Random.Default,
+    criticalHits: CriticalHits = CriticalHits.Never,
 ) : OpenAdhdStore {
-    private val logic = StoreLogic(clock, random)
+    private val logic = StoreLogic(clock, random, criticalHits)
     private val state = MutableStateFlow(initial)
 
     override val templates: Flow<List<TaskTemplate>> = state.map { it.templates }
@@ -228,9 +248,17 @@ class InMemoryStore(
         }
     }
 
-    override suspend fun completeTask(id: String): Boolean = transition { logic.completeTask(it, id) }
+    override suspend fun completeTask(id: String): CompletionResult? = completion { logic.completeTask(it, id) }
 
-    override suspend fun completeSubtask(id: String): Boolean = transition { logic.completeSubtask(it, id) }
+    override suspend fun completeSubtask(id: String): CompletionResult? = completion { logic.completeSubtask(it, id) }
+
+    private fun completion(next: (StoreState) -> Pair<StoreState, CompletionResult>?): CompletionResult? {
+        while (true) {
+            val before = state.value
+            val (after, result) = next(before) ?: return null
+            if (state.compareAndSet(before, after)) return result
+        }
+    }
 
     private fun transition(next: (StoreState) -> StoreState?): Boolean {
         while (true) {

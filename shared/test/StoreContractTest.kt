@@ -1,6 +1,8 @@
 package com.usuallycoding.openadhd
 
 import com.usuallycoding.openadhd.domain.CoinRules
+import com.usuallycoding.openadhd.domain.CompletionResult
+import com.usuallycoding.openadhd.domain.CriticalHits
 import com.usuallycoding.openadhd.domain.Energy
 import com.usuallycoding.openadhd.domain.LedgerReason
 import com.usuallycoding.openadhd.domain.OpenAdhdStore
@@ -32,7 +34,11 @@ class FakeClock(var current: Instant = Instant.parse("2026-10-23T10:00:00Z")) : 
 /** Behavior every [OpenAdhdStore] implementation must have. */
 abstract class StoreContractTest {
     protected val clock = FakeClock()
-    protected abstract fun newStore(clock: Clock, random: Random = Random.Default): OpenAdhdStore
+    protected abstract fun newStore(
+        clock: Clock,
+        random: Random = Random.Default,
+        criticalHits: CriticalHits = CriticalHits.Never,
+    ): OpenAdhdStore
 
     private val today: LocalDate get() = clock.todayIn(TimeZone.UTC)
 
@@ -99,7 +105,7 @@ abstract class StoreContractTest {
         val store = newStore(clock)
         val template = store.create("Taxes", Tier.Three, Energy.High)
         val entry = store.assign(template, today)
-        assertTrue(store.completeTask(entry.id))
+        assertNotNull(store.completeTask(entry.id))
         assertTrue(store.entriesFor(today).first().single().isCompleted)
         val ledger = store.entries.first().single()
         assertEquals(20, ledger.amount)
@@ -111,8 +117,8 @@ abstract class StoreContractTest {
     fun `an entry completes only once`() = runTest {
         val store = newStore(clock)
         val entry = store.assign(store.create("Taxes", Tier.Three, Energy.High), today)
-        assertTrue(store.completeTask(entry.id))
-        assertFalse(store.completeTask(entry.id))
+        assertNotNull(store.completeTask(entry.id))
+        assertNull(store.completeTask(entry.id))
         assertEquals(20, CoinRules.balance(store.entries.first()))
     }
 
@@ -225,8 +231,8 @@ abstract class StoreContractTest {
         val entry = store.assign(store.create("Clean", Tier.Three, Energy.Low, subtasks = listOf("A", "B", "C")), today)
         val first = entry.subtasks.first()
 
-        assertTrue(store.completeSubtask(first.id))
-        assertFalse(store.completeSubtask(first.id))
+        assertNotNull(store.completeSubtask(first.id))
+        assertNull(store.completeSubtask(first.id))
 
         val ledger = store.entries.first().single()
         assertEquals(7, ledger.amount)
@@ -242,7 +248,7 @@ abstract class StoreContractTest {
     fun `finishing the last subtask completes the entry and pays exactly the pool`() = runTest {
         val store = newStore(clock)
         val entry = store.assign(store.create("Clean", Tier.Three, Energy.Low, subtasks = listOf("A", "B", "C")), today)
-        entry.subtasks.forEach { assertTrue(store.completeSubtask(it.id)) }
+        entry.subtasks.forEach { assertNotNull(store.completeSubtask(it.id)) }
         assertTrue(store.entriesFor(today).first().single().isCompleted)
         assertEquals(20, CoinRules.balance(store.entries.first()))
         assertEquals(3, store.entries.first().size)
@@ -261,7 +267,7 @@ abstract class StoreContractTest {
     fun `an entry with subtasks cannot be completed directly`() = runTest {
         val store = newStore(clock)
         val entry = store.assign(store.create("Clean", Tier.Two, Energy.Low, subtasks = listOf("A")), today)
-        assertFalse(store.completeTask(entry.id))
+        assertNull(store.completeTask(entry.id))
         assertTrue(store.entries.first().isEmpty())
         assertFalse(store.entriesFor(today).first().single().isCompleted)
     }
@@ -269,7 +275,7 @@ abstract class StoreContractTest {
     @Test
     fun `an unknown subtask cannot be completed`() = runTest {
         val store = newStore(clock)
-        assertFalse(store.completeSubtask("missing"))
+        assertNull(store.completeSubtask("missing"))
         assertTrue(store.entries.first().isEmpty())
     }
 
@@ -292,7 +298,7 @@ abstract class StoreContractTest {
         val store = newStore(clock)
         val entry = store.assign(store.create("Taxes", Tier.Four, Energy.High), today)
         assertEquals(40, entry.reward)
-        assertTrue(store.completeTask(entry.id))
+        assertNotNull(store.completeTask(entry.id))
         val ledger = store.entries.first().single()
         assertEquals(40, ledger.amount)
         assertEquals(LedgerReason.TaskCompleted, ledger.reason)
@@ -302,7 +308,7 @@ abstract class StoreContractTest {
 
     private suspend fun earn(store: OpenAdhdStore, tier: Tier) {
         val entry = store.assign(store.create("Earn ${tier.level}", tier, Energy.Low), today)
-        assertTrue(store.completeTask(entry.id))
+        assertNotNull(store.completeTask(entry.id))
     }
 
     @Test
@@ -609,5 +615,129 @@ abstract class StoreContractTest {
         assertNull(newestFirst.last().rolledTier)
         assertFalse(newestFirst.last().isLuckyUpgrade)
         assertEquals(20, CoinRules.balance(store.entries.first()))
+    }
+
+    // ---- critical hits
+
+    @Test
+    fun `a usual completion pays only the reward`() = runTest {
+        val store = newStore(clock, criticalHits = ScriptedCrits(false))
+        val entry = store.assign(store.create("Taxes", Tier.Three, Energy.High), today)
+
+        val result = store.completeTask(entry.id)!!
+
+        assertEquals(20, result.reward)
+        assertEquals(0, result.bonus)
+        assertFalse(result.isCritical)
+        assertEquals(1, store.entries.first().size)
+        assertEquals(20, CoinRules.balance(store.entries.first()))
+    }
+
+    @Test
+    fun `a critical task pays the reward and an equal bonus as two entries`() = runTest {
+        val store = newStore(clock, criticalHits = ScriptedCrits(true))
+        val entry = store.assign(store.create("Taxes", Tier.Three, Energy.High), today)
+
+        val result = store.completeTask(entry.id)!!
+
+        assertTrue(result.isCritical)
+        assertEquals(20, result.reward)
+        assertEquals(20, result.bonus)
+        val ledger = store.entries.first()
+        assertEquals(listOf(20, 20), ledger.map { it.amount })
+        assertEquals(listOf(LedgerReason.TaskCompleted, LedgerReason.CriticalHit), ledger.map { it.reason })
+        assertEquals(listOf(entry.id, entry.id), ledger.map { it.refId })
+        assertEquals(40, CoinRules.balance(ledger))
+    }
+
+    @Test
+    fun `a critical subtask pays its share twice with two entries`() = runTest {
+        val store = newStore(clock, criticalHits = ScriptedCrits(true))
+        val entry = store.assign(store.create("Clean", Tier.Three, Energy.Low, subtasks = listOf("A", "B", "C")), today)
+        val first = entry.subtasks.first()
+
+        val result = store.completeSubtask(first.id)!!
+
+        assertEquals(CompletionResult(reward = 7, bonus = 7), result)
+        val ledger = store.entries.first()
+        assertEquals(listOf(LedgerReason.SubtaskCompleted, LedgerReason.CriticalHit), ledger.map { it.reason })
+        assertEquals(listOf(first.id, first.id), ledger.map { it.refId })
+        assertEquals(14, CoinRules.balance(ledger))
+    }
+
+    @Test
+    fun `each subtask is decided on its own`() = runTest {
+        val store = newStore(clock, criticalHits = ScriptedCrits(true, false, true))
+        val entry = store.assign(store.create("Clean", Tier.Three, Energy.Low, subtasks = listOf("A", "B", "C")), today)
+
+        val results = entry.subtasks.map { store.completeSubtask(it.id)!! }
+
+        assertEquals(listOf(true, false, true), results.map { it.isCritical })
+        assertEquals(listOf(7, 0, 6), results.map { it.bonus })
+        // 20 in rewards plus 13 in bonuses
+        assertEquals(33, CoinRules.balance(store.entries.first()))
+        assertEquals(5, store.entries.first().size)
+    }
+
+    @Test
+    fun `a repeated completion neither pays nor rolls again`() = runTest {
+        val crits = ScriptedCrits(false)
+        val store = newStore(clock, criticalHits = crits)
+        val entry = store.assign(store.create("Taxes", Tier.Three, Energy.High), today)
+        assertNotNull(store.completeTask(entry.id))
+        assertEquals(0, crits.remaining)
+
+        assertNull(store.completeTask(entry.id))
+
+        assertEquals(20, CoinRules.balance(store.entries.first()))
+    }
+
+    @Test
+    fun `refused completions never roll`() = runTest {
+        val crits = ScriptedCrits()
+        val store = newStore(clock, criticalHits = crits)
+        val withSubtasks = store.assign(store.create("Clean", Tier.Two, Energy.Low, subtasks = listOf("A")), today)
+
+        assertNull(store.completeTask(withSubtasks.id))
+        assertNull(store.completeTask("missing"))
+        assertNull(store.completeSubtask("missing"))
+
+        assertTrue(store.entries.first().isEmpty())
+    }
+
+    @Test
+    fun `a repeated subtask completion neither pays nor rolls again`() = runTest {
+        val crits = ScriptedCrits(true)
+        val store = newStore(clock, criticalHits = crits)
+        val entry = store.assign(store.create("Clean", Tier.Two, Energy.Low, subtasks = listOf("A", "B")), today)
+        val sub = entry.subtasks.first()
+        assertNotNull(store.completeSubtask(sub.id))
+
+        assertNull(store.completeSubtask(sub.id))
+
+        assertEquals(10, CoinRules.balance(store.entries.first()))
+        assertEquals(2, store.entries.first().size)
+    }
+
+    @Test
+    fun `the bonus follows the frozen reward even after the template changes`() = runTest {
+        val store = newStore(clock, criticalHits = ScriptedCrits(true))
+        val template = store.create("Taxes", Tier.Three, Energy.High)
+        val entry = store.assign(template, today)
+        store.update(template.copy(tier = Tier.One))
+
+        val result = store.completeTask(entry.id)!!
+
+        assertEquals(CompletionResult(reward = 20, bonus = 20), result)
+    }
+
+    @Test
+    fun `stores have no critical hits unless asked`() = runTest {
+        val store = newStore(clock)
+        repeat(40) {
+            val entry = store.assign(store.create("Task $it", Tier.One, Energy.Low), today)
+            assertFalse(store.completeTask(entry.id)!!.isCritical)
+        }
+        assertEquals(200, CoinRules.balance(store.entries.first()))
     }
 }

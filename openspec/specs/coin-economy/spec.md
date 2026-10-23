@@ -28,6 +28,10 @@ Every change to the user's coins SHALL be recorded as a ledger entry with an amo
 - **WHEN** a subtask worth 7 coins is completed
 - **THEN** a ledger entry of +7 with a subtask-completed reason referencing that subtask is added
 
+#### Scenario: Critical hit recorded
+- **WHEN** a subtask worth 7 coins is completed as a critical hit
+- **THEN** besides the +7 reward entry, a separate ledger entry of +7 with a critical-hit reason referencing that subtask is added
+
 #### Scenario: Redemption recorded
 - **WHEN** a reward costing 50 coins is redeemed
 - **THEN** a ledger entry of -50 with a reward-redeemed reason referencing that redemption is added

@@ -58,7 +58,7 @@ data class PlannedTask(
         get() = if (subtasks.isEmpty()) completedAt != null else subtasks.any { it.isCompleted }
 }
 
-enum class LedgerReason { TaskCompleted, SubtaskCompleted, RewardRedeemed, MysteryRoll }
+enum class LedgerReason { TaskCompleted, SubtaskCompleted, RewardRedeemed, MysteryRoll, CriticalHit }
 
 data class LedgerEntry(
     val id: String,

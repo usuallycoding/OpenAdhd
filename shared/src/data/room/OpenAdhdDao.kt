@@ -5,6 +5,9 @@ import androidx.room.Insert
 import androidx.room.Query
 import androidx.room.Transaction
 import androidx.room.Update
+import com.usuallycoding.openadhd.domain.CompletionResult
+import com.usuallycoding.openadhd.domain.CriticalHits
+import com.usuallycoding.openadhd.domain.CriticalRules
 import com.usuallycoding.openadhd.domain.LedgerReason
 import com.usuallycoding.openadhd.domain.RedemptionSource
 import com.usuallycoding.openadhd.domain.RewardRules
@@ -194,19 +197,43 @@ abstract class OpenAdhdDao {
     @Query("SELECT reward FROM planned_subtasks WHERE id = :id")
     abstract suspend fun subtaskReward(id: String): Int
 
-    /** Marks a subtask-less task completed and appends its reward in one transaction; false if nothing changed. */
+    /**
+     * Marks a subtask-less task completed and appends its reward in one transaction; null if nothing changed.
+     * [criticalHits] is asked only after the task was really completed, and a critical hit appends its bonus
+     * entry in the same transaction.
+     */
     @Transaction
-    open suspend fun completeTask(id: String, at: Long, ledgerId: String): Boolean {
-        if (markTaskCompleted(id, at) == 0) return false
-        insertLedger(LedgerEntity(ledgerId, taskReward(id), at, LedgerReason.TaskCompleted.name, id))
-        return true
+    open suspend fun completeTask(
+        id: String,
+        at: Long,
+        ledgerId: String,
+        bonusLedgerId: String,
+        criticalHits: CriticalHits,
+    ): CompletionResult? {
+        if (markTaskCompleted(id, at) == 0) return null
+        val reward = taskReward(id)
+        insertLedger(LedgerEntity(ledgerId, reward, at, LedgerReason.TaskCompleted.name, id))
+        if (!criticalHits.isCritical()) return CompletionResult(reward)
+        val bonus = CriticalRules.bonus(reward)
+        insertLedger(LedgerEntity(bonusLedgerId, bonus, at, LedgerReason.CriticalHit.name, id))
+        return CompletionResult(reward, bonus)
     }
 
-    /** Marks a subtask completed and appends its share in one transaction; false if nothing changed. */
+    /** Marks a subtask completed and appends its share in one transaction, with the same critical hit rule; null if nothing changed. */
     @Transaction
-    open suspend fun completeSubtask(id: String, at: Long, ledgerId: String): Boolean {
-        if (markSubtaskCompleted(id, at) == 0) return false
-        insertLedger(LedgerEntity(ledgerId, subtaskReward(id), at, LedgerReason.SubtaskCompleted.name, id))
-        return true
+    open suspend fun completeSubtask(
+        id: String,
+        at: Long,
+        ledgerId: String,
+        bonusLedgerId: String,
+        criticalHits: CriticalHits,
+    ): CompletionResult? {
+        if (markSubtaskCompleted(id, at) == 0) return null
+        val reward = subtaskReward(id)
+        insertLedger(LedgerEntity(ledgerId, reward, at, LedgerReason.SubtaskCompleted.name, id))
+        if (!criticalHits.isCritical()) return CompletionResult(reward)
+        val bonus = CriticalRules.bonus(reward)
+        insertLedger(LedgerEntity(bonusLedgerId, bonus, at, LedgerReason.CriticalHit.name, id))
+        return CompletionResult(reward, bonus)
     }
 }

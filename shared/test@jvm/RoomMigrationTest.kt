@@ -17,6 +17,7 @@ import kotlinx.datetime.LocalDate
 import kotlin.io.path.createTempDirectory
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
@@ -74,7 +75,7 @@ class RoomMigrationTest {
         val store = RoomStore(database)
 
         val gym = store.entriesFor(day).first().single { it.name == "Gym" }
-        assertTrue(store.completeTask(gym.id))
+        assertNotNull(store.completeTask(gym.id))
         assertEquals(60, CoinRules.balance(store.entries.first()))
 
         val template = store.create("Clean", Tier.Three, Energy.Low, "Whole room", listOf("A", "B", "C"))

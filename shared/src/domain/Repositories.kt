@@ -34,16 +34,17 @@ interface PlannerRepository {
     suspend fun remove(id: String)
 
     /**
-     * Completes a task that has no subtasks and appends its ledger entry as one operation.
-     * Returns false, changing nothing, if the entry is unknown, has subtasks, or is already completed.
+     * Completes a task that has no subtasks and appends its ledger entry as one operation. With a chance set
+     * by the store's [CriticalHits] it is a critical hit and also appends a bonus entry.
+     * Returns null, changing nothing and not drawing, if the entry is unknown, has subtasks, or is already completed.
      */
-    suspend fun completeTask(id: String): Boolean
+    suspend fun completeTask(id: String): CompletionResult?
 
     /**
-     * Completes one subtask and appends its ledger entry as one operation.
-     * Returns false, changing nothing, if the subtask is unknown or already completed.
+     * Completes one subtask and appends its ledger entry as one operation, with the same critical hit chance.
+     * Returns null, changing nothing and not drawing, if the subtask is unknown or already completed.
      */
-    suspend fun completeSubtask(id: String): Boolean
+    suspend fun completeSubtask(id: String): CompletionResult?
 }
 
 interface LedgerRepository {

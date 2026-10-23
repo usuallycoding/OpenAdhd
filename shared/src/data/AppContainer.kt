@@ -1,5 +1,8 @@
 package com.usuallycoding.openadhd.data
 
+import com.usuallycoding.openadhd.data.room.OpenAdhdDatabase
+import com.usuallycoding.openadhd.data.room.RoomStore
+import com.usuallycoding.openadhd.domain.CriticalHits
 import com.usuallycoding.openadhd.domain.OpenAdhdStore
 import com.usuallycoding.openadhd.ui.today.DefaultDateCheckInterval
 import kotlin.time.Clock
@@ -11,3 +14,10 @@ class AppContainer(
     val clock: Clock = Clock.System,
     val dateCheckInterval: Duration? = DefaultDateCheckInterval,
 )
+
+/**
+ * The real app's wiring, shared by every platform entry point: a Room-backed store with critical hits switched on.
+ * Stores default to no critical hits, so this is the one place that turns them on for the running app.
+ */
+fun createContainer(database: OpenAdhdDatabase): AppContainer =
+    AppContainer(RoomStore(database, criticalHits = CriticalHits.Standard))

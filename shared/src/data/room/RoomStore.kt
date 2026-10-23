@@ -1,5 +1,7 @@
 package com.usuallycoding.openadhd.data.room
 
+import com.usuallycoding.openadhd.domain.CompletionResult
+import com.usuallycoding.openadhd.domain.CriticalHits
 import com.usuallycoding.openadhd.domain.Energy
 import com.usuallycoding.openadhd.domain.LedgerEntry
 import com.usuallycoding.openadhd.domain.OpenAdhdStore
@@ -23,6 +25,7 @@ class RoomStore(
     private val database: OpenAdhdDatabase,
     private val clock: Clock = Clock.System,
     private val random: Random = Random.Default,
+    private val criticalHits: CriticalHits = CriticalHits.Never,
 ) : OpenAdhdStore {
     private val dao = database.dao()
 
@@ -89,9 +92,9 @@ class RoomStore(
             RollResult(redemption, redemption.isLuckyUpgrade)
         }
 
-    override suspend fun completeTask(id: String): Boolean =
-        dao.completeTask(id, clock.now().toEpochMilliseconds(), newId())
+    override suspend fun completeTask(id: String): CompletionResult? =
+        dao.completeTask(id, clock.now().toEpochMilliseconds(), newId(), newId(), criticalHits)
 
-    override suspend fun completeSubtask(id: String): Boolean =
-        dao.completeSubtask(id, clock.now().toEpochMilliseconds(), newId())
+    override suspend fun completeSubtask(id: String): CompletionResult? =
+        dao.completeSubtask(id, clock.now().toEpochMilliseconds(), newId(), newId(), criticalHits)
 }

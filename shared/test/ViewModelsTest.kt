@@ -3,6 +3,7 @@ package com.usuallycoding.openadhd
 import com.usuallycoding.openadhd.data.InMemoryStore
 import com.usuallycoding.openadhd.domain.Energy
 import com.usuallycoding.openadhd.domain.Tier
+import com.usuallycoding.openadhd.ui.today.CriticalHitEvent
 import com.usuallycoding.openadhd.ui.templates.TemplateInputError
 import com.usuallycoding.openadhd.ui.templates.TemplatesViewModel
 import com.usuallycoding.openadhd.ui.today.TodayViewModel
@@ -10,6 +11,8 @@ import com.usuallycoding.openadhd.ui.wallet.WalletViewModel
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.flow.toList
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.resetMain
@@ -152,6 +155,62 @@ class ViewModelsTest {
         started.subtasks.drop(1).forEach { today.completeSubtask(it.id) }
         assertTrue(today.entries.value.single().isCompleted)
         assertEquals(20, wallet.balance.value)
+        today.viewModelScope.cancel()
+    }
+
+    // ---- critical hit events
+
+    @Test
+    fun `a critical hit emits an event with the bonus and usual completions say nothing`() = runTest {
+        val crits = InMemoryStore(clock, criticalHits = ScriptedCrits(true, false))
+        val template = crits.create("Clean", Tier.Three, Energy.Low, subtasks = listOf("A", "B", "C"))
+        val today = TodayViewModel(crits, clock, TimeZone.UTC, dateCheckInterval = null)
+        val events = mutableListOf<CriticalHitEvent>()
+        backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { today.criticalHits.toList(events) }
+
+        today.assign(template)
+        val subtasks = today.entries.value.single().subtasks
+        today.completeSubtask(subtasks[0].id)
+        today.completeSubtask(subtasks[1].id)
+
+        assertEquals(listOf(CriticalHitEvent(7)), events)
+        today.viewModelScope.cancel()
+    }
+
+    @Test
+    fun `quick successive critical hits each get an event and a task can be critical too`() = runTest {
+        val crits = InMemoryStore(clock, criticalHits = ScriptedCrits(true, true, true))
+        val template = crits.create("Clean", Tier.Two, Energy.Low, subtasks = listOf("A", "B"))
+        val plain = crits.create("Taxes", Tier.Three, Energy.High)
+        val today = TodayViewModel(crits, clock, TimeZone.UTC, dateCheckInterval = null)
+        val events = mutableListOf<CriticalHitEvent>()
+        backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { today.criticalHits.toList(events) }
+
+        today.assign(template)
+        today.assign(plain)
+        val (withSubtasks, withoutSubtasks) = today.entries.value
+        today.completeSubtask(withSubtasks.subtasks[0].id)
+        today.completeSubtask(withSubtasks.subtasks[1].id)
+        today.completeTask(withoutSubtasks.id)
+
+        assertEquals(listOf(CriticalHitEvent(5), CriticalHitEvent(5), CriticalHitEvent(20)), events)
+        today.viewModelScope.cancel()
+    }
+
+    @Test
+    fun `refused completions never emit an event and never roll`() = runTest {
+        val crits = ScriptedCrits()
+        val noRolls = InMemoryStore(clock, criticalHits = crits)
+        val template = noRolls.create("Clean", Tier.Two, Energy.Low, subtasks = listOf("A"))
+        val today = TodayViewModel(noRolls, clock, TimeZone.UTC, dateCheckInterval = null)
+        val events = mutableListOf<CriticalHitEvent>()
+        backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { today.criticalHits.toList(events) }
+
+        today.assign(template)
+        today.completeTask(today.entries.value.single().id)
+        today.completeSubtask("missing")
+
+        assertTrue(events.isEmpty())
         today.viewModelScope.cancel()
     }
 }
