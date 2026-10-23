@@ -6,6 +6,8 @@ import androidx.room.Query
 import androidx.room.Transaction
 import androidx.room.Update
 import com.usuallycoding.openadhd.domain.LedgerReason
+import com.usuallycoding.openadhd.domain.RewardRules
+import com.usuallycoding.openadhd.domain.RewardTier
 import kotlinx.coroutines.flow.Flow
 
 @Dao
@@ -90,6 +92,51 @@ abstract class OpenAdhdDao {
 
     @Insert
     abstract suspend fun insertLedger(entry: LedgerEntity)
+
+    // ---- rewards and redemptions
+
+    @Query("SELECT * FROM reward_templates ORDER BY rowid")
+    abstract fun rewards(): Flow<List<RewardTemplateEntity>>
+
+    @Insert
+    abstract suspend fun insertReward(reward: RewardTemplateEntity)
+
+    @Update
+    abstract suspend fun updateReward(reward: RewardTemplateEntity)
+
+    @Query("DELETE FROM reward_templates WHERE id = :id")
+    abstract suspend fun deleteReward(id: String)
+
+    @Query("SELECT * FROM reward_templates WHERE id = :id")
+    abstract suspend fun rewardById(id: String): RewardTemplateEntity?
+
+    @Query("SELECT * FROM redemptions ORDER BY rowid DESC")
+    abstract fun redemptions(): Flow<List<RedemptionEntity>>
+
+    @Insert
+    abstract suspend fun insertRedemption(redemption: RedemptionEntity)
+
+    @Query("SELECT COUNT(*) FROM redemptions WHERE id = :id")
+    abstract suspend fun redemptionCount(id: String): Int
+
+    @Query("SELECT COALESCE(SUM(amount), 0) FROM ledger")
+    abstract suspend fun balance(): Int
+
+    /**
+     * Buys a reward in one transaction: refused (false) if the redemption id is already used, the reward is
+     * unknown, or the balance is lower than the price. SQLite has a single writer, so the balance read and
+     * the writes cannot interleave with another spend.
+     */
+    @Transaction
+    open suspend fun redeemReward(rewardId: String, redemptionId: String, ledgerId: String, at: Long): Boolean {
+        if (redemptionCount(redemptionId) > 0) return false
+        val reward = rewardById(rewardId) ?: return false
+        val price = RewardRules.price(RewardTier.fromLevel(reward.tier), reward.customPrice)
+        if (balance() < price) return false
+        insertRedemption(RedemptionEntity(redemptionId, reward.id, reward.name, reward.tier, reward.energy, price, at))
+        insertLedger(LedgerEntity(ledgerId, -price, at, LedgerReason.RewardRedeemed.name, redemptionId))
+        return true
+    }
 
     // ---- completion
 

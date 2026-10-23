@@ -58,7 +58,7 @@ data class PlannedTask(
         get() = if (subtasks.isEmpty()) completedAt != null else subtasks.any { it.isCompleted }
 }
 
-enum class LedgerReason { TaskCompleted, SubtaskCompleted }
+enum class LedgerReason { TaskCompleted, SubtaskCompleted, RewardRedeemed }
 
 data class LedgerEntry(
     val id: String,
@@ -66,4 +66,36 @@ data class LedgerEntry(
     val timestamp: Instant,
     val reason: LedgerReason,
     val refId: String? = null,
+)
+
+/** Reward tiers 1 to 5. Separate from the task [Tier] (1 to 4): only tier 5 has a custom price. */
+enum class RewardTier(val level: Int) {
+    One(1), Two(2), Three(3), Four(4), Five(5);
+
+    companion object {
+        fun fromLevel(level: Int): RewardTier = entries.first { it.level == level }
+    }
+}
+
+/** A reusable reward. [customPrice] is set for tier 5 only; other tiers are priced by [RewardRules]. */
+data class RewardTemplate(
+    val id: String,
+    val name: String,
+    val tier: RewardTier,
+    val energy: Energy,
+    val description: String = "",
+    val customPrice: Int? = null,
+) {
+    val price: Int get() = RewardRules.price(tier, customPrice)
+}
+
+/** A purchase. Everything is copied from the reward when it is bought, so later edits change nothing here. */
+data class Redemption(
+    val id: String,
+    val templateId: String?,
+    val name: String,
+    val tier: RewardTier,
+    val energy: Energy,
+    val price: Int,
+    val redeemedAt: Instant,
 )

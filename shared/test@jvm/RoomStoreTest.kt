@@ -6,6 +6,7 @@ import com.usuallycoding.openadhd.data.room.RoomStore
 import com.usuallycoding.openadhd.data.room.buildOpenAdhdDatabase
 import com.usuallycoding.openadhd.domain.CoinRules
 import com.usuallycoding.openadhd.domain.Energy
+import com.usuallycoding.openadhd.domain.RewardTier
 import com.usuallycoding.openadhd.domain.OpenAdhdStore
 import com.usuallycoding.openadhd.domain.Tier
 import kotlinx.coroutines.flow.first
@@ -38,6 +39,9 @@ class RoomStoreTest : StoreContractTest() {
         val big = first.create("Clean the kitchen", Tier.Three, Energy.Medium, "Whole room", listOf("Dishes", "Counters", "Trash"))
         val bigEntry = first.assign(big, today)
         assertTrue(first.completeSubtask(bigEntry.subtasks[1].id))
+        val treat = first.createReward("Movie night", RewardTier.One, Energy.Low, "With snacks")
+        assertTrue(first.redeem(treat.id, "r1"))
+        val saved = first.createReward("Headphones", RewardTier.Five, Energy.Low, customPrice = 500)
         firstDb.close()
 
         val second = RoomStore(Room.databaseBuilder<OpenAdhdDatabase>(file).buildOpenAdhdDatabase(), clock)
@@ -51,6 +55,10 @@ class RoomStoreTest : StoreContractTest() {
         assertEquals(listOf(false, true, false), restoredBig.subtasks.map { it.isCompleted })
         assertTrue(restoredBig.hasProgress)
         assertTrue(!restoredBig.isCompleted)
-        assertEquals(27, CoinRules.balance(second.entries.first()))
+        assertEquals(7, CoinRules.balance(second.entries.first()))
+        assertEquals(listOf(treat, saved), second.rewards.first())
+        val purchase = second.redemptions.first().single()
+        assertEquals("Movie night", purchase.name)
+        assertEquals(20, purchase.price)
     }
 }

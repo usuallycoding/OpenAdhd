@@ -50,5 +50,40 @@ interface LedgerRepository {
     val entries: Flow<List<LedgerEntry>>
 }
 
-/** All repositories behind one object, so completing a task can update entry and ledger together. */
-interface OpenAdhdStore : TemplateRepository, PlannerRepository, LedgerRepository
+interface RewardRepository {
+    val rewards: Flow<List<RewardTemplate>>
+
+    /**
+     * Name and description are trimmed; a custom price is kept for tier 5 only.
+     * @throws IllegalArgumentException if [name] is blank, or tier 5 has no custom price above [RewardRules.TopFixedPrice].
+     */
+    suspend fun createReward(
+        name: String,
+        tier: RewardTier,
+        energy: Energy,
+        description: String = "",
+        customPrice: Int? = null,
+    ): RewardTemplate
+
+    /** @throws IllegalArgumentException for the same invalid input as [createReward]. */
+    suspend fun updateReward(reward: RewardTemplate)
+
+    /** Deleting a reward keeps its redemptions and ledger entries. */
+    suspend fun deleteReward(id: String)
+}
+
+interface ShopRepository {
+    /** Purchases, newest first. */
+    val redemptions: Flow<List<Redemption>>
+
+    /**
+     * Buys a reward: records a redemption that freezes its name and price, and appends a ledger entry of
+     * minus the price, as one operation. Returns false, changing nothing, if the reward is unknown, the
+     * balance is lower than the price, or a redemption with [redemptionId] already exists (so a repeated
+     * call with the same id is a no-op).
+     */
+    suspend fun redeem(rewardId: String, redemptionId: String = newId()): Boolean
+}
+
+/** All repositories behind one object, so completing a task or buying a reward updates its records and the ledger together. */
+interface OpenAdhdStore : TemplateRepository, PlannerRepository, LedgerRepository, RewardRepository, ShopRepository

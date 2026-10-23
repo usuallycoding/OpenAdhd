@@ -17,8 +17,10 @@ import kotlinx.coroutines.Dispatchers
         PlannedTaskEntity::class,
         PlannedSubtaskEntity::class,
         LedgerEntity::class,
+        RewardTemplateEntity::class,
+        RedemptionEntity::class,
     ],
-    version = 2,
+    version = 3,
     exportSchema = false,
 )
 @ConstructedBy(OpenAdhdDatabaseConstructor::class)
@@ -57,8 +59,24 @@ val Migration1To2: Migration = object : Migration(1, 2) {
     }
 }
 
+/** Version 3 adds rewards and redemptions. It only creates tables, so no existing data is touched. */
+val Migration2To3: Migration = object : Migration(2, 3) {
+    override fun migrate(connection: SQLiteConnection) {
+        connection.execSQL(
+            "CREATE TABLE IF NOT EXISTS reward_templates " +
+                "(id TEXT NOT NULL, name TEXT NOT NULL, tier INTEGER NOT NULL, energy TEXT NOT NULL, " +
+                "description TEXT NOT NULL, customPrice INTEGER, PRIMARY KEY(id))",
+        )
+        connection.execSQL(
+            "CREATE TABLE IF NOT EXISTS redemptions " +
+                "(id TEXT NOT NULL, templateId TEXT, name TEXT NOT NULL, tier INTEGER NOT NULL, " +
+                "energy TEXT NOT NULL, price INTEGER NOT NULL, redeemedAtMillis INTEGER NOT NULL, PRIMARY KEY(id))",
+        )
+    }
+}
+
 fun RoomDatabase.Builder<OpenAdhdDatabase>.buildOpenAdhdDatabase(): OpenAdhdDatabase =
     setDriver(BundledSQLiteDriver())
         .setQueryCoroutineContext(Dispatchers.Default)
-        .addMigrations(Migration1To2)
+        .addMigrations(Migration1To2, Migration2To3)
         .build()

@@ -31,3 +31,10 @@ val CoinIcon: ImageVector by lazy {
         filled("M12,8a4,4 0 1,0 0,8a4,4 0 1,0 0,-8z")
     }
 }
+
+val ShopIcon: ImageVector by lazy {
+    themeIcon("Shop") {
+        stroked("M4,10h16v10H4zM3,6h18v4H3zM12,6v14")
+        stroked("M12,6c-2,0 -4,-3 -2,-3c1.5,0 2,1.5 2,3c0,-1.5 0.5,-3 2,-3c2,0 0,3 -2,3")
+    }
+}

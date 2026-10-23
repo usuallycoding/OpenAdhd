@@ -4,6 +4,9 @@ import com.usuallycoding.openadhd.domain.Energy
 import com.usuallycoding.openadhd.domain.LedgerEntry
 import com.usuallycoding.openadhd.domain.OpenAdhdStore
 import com.usuallycoding.openadhd.domain.PlannedTask
+import com.usuallycoding.openadhd.domain.Redemption
+import com.usuallycoding.openadhd.domain.RewardTemplate
+import com.usuallycoding.openadhd.domain.RewardTier
 import com.usuallycoding.openadhd.domain.TaskTemplate
 import com.usuallycoding.openadhd.domain.Tier
 import com.usuallycoding.openadhd.domain.newId
@@ -52,6 +55,30 @@ class RoomStore(
     }
 
     override suspend fun remove(id: String) = dao.removePlanned(id)
+
+    override val rewards: Flow<List<RewardTemplate>> = dao.rewards().map { list -> list.map { it.toDomain() } }
+    override val redemptions: Flow<List<Redemption>> = dao.redemptions().map { list -> list.map { it.toDomain() } }
+
+    override suspend fun createReward(
+        name: String,
+        tier: RewardTier,
+        energy: Energy,
+        description: String,
+        customPrice: Int?,
+    ): RewardTemplate {
+        val reward = RewardTemplate(newId(), name, tier, energy, description, customPrice).validated()
+        dao.insertReward(reward.toEntity())
+        return reward
+    }
+
+    override suspend fun updateReward(reward: RewardTemplate) {
+        dao.updateReward(reward.validated().toEntity())
+    }
+
+    override suspend fun deleteReward(id: String) = dao.deleteReward(id)
+
+    override suspend fun redeem(rewardId: String, redemptionId: String): Boolean =
+        dao.redeemReward(rewardId, redemptionId, newId(), clock.now().toEpochMilliseconds())
 
     override suspend fun completeTask(id: String): Boolean =
         dao.completeTask(id, clock.now().toEpochMilliseconds(), newId())

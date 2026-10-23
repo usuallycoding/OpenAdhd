@@ -4,6 +4,7 @@ import com.usuallycoding.openadhd.domain.CoinRules
 import com.usuallycoding.openadhd.domain.Energy
 import com.usuallycoding.openadhd.domain.LedgerReason
 import com.usuallycoding.openadhd.domain.OpenAdhdStore
+import com.usuallycoding.openadhd.domain.RewardTier
 import com.usuallycoding.openadhd.domain.Tier
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
@@ -16,6 +17,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlin.time.Clock
 import kotlin.time.Instant
@@ -291,5 +293,188 @@ abstract class StoreContractTest {
         val ledger = store.entries.first().single()
         assertEquals(40, ledger.amount)
         assertEquals(LedgerReason.TaskCompleted, ledger.reason)
+    }
+
+    // ---- rewards and the shop
+
+    private suspend fun earn(store: OpenAdhdStore, tier: Tier) {
+        val entry = store.assign(store.create("Earn ${tier.level}", tier, Energy.Low), today)
+        assertTrue(store.completeTask(entry.id))
+    }
+
+    @Test
+    fun `a reward is saved trimmed with its tier price`() = runTest {
+        val store = newStore(clock)
+        store.createReward("  Movie night ", RewardTier.Two, Energy.Low, description = " With snacks ")
+        val reward = store.rewards.first().single()
+        assertEquals("Movie night", reward.name)
+        assertEquals("With snacks", reward.description)
+        assertEquals(RewardTier.Two, reward.tier)
+        assertEquals(50, reward.price)
+        assertNull(reward.customPrice)
+    }
+
+    @Test
+    fun `a reward needs a name`() = runTest {
+        val store = newStore(clock)
+        assertFailsWith<IllegalArgumentException> { store.createReward("   ", RewardTier.One, Energy.Low) }
+        assertTrue(store.rewards.first().isEmpty())
+    }
+
+    @Test
+    fun `tier five needs a custom price above three hundred`() = runTest {
+        val store = newStore(clock)
+        assertFailsWith<IllegalArgumentException> { store.createReward("Headphones", RewardTier.Five, Energy.Low) }
+        assertFailsWith<IllegalArgumentException> {
+            store.createReward("Headphones", RewardTier.Five, Energy.Low, customPrice = 300)
+        }
+        assertTrue(store.rewards.first().isEmpty())
+
+        store.createReward("Cheap", RewardTier.Five, Energy.Low, customPrice = 301)
+        store.createReward("Headphones", RewardTier.Five, Energy.Low, customPrice = 500)
+        assertEquals(listOf(301, 500), store.rewards.first().map { it.price })
+    }
+
+    @Test
+    fun `editing a reward follows its new tier and leaving tier five clears the custom price`() = runTest {
+        val store = newStore(clock)
+        val reward = store.createReward("Treat", RewardTier.Two, Energy.Low)
+        store.updateReward(reward.copy(tier = RewardTier.Three))
+        assertEquals(120, store.rewards.first().single().price)
+
+        store.updateReward(reward.copy(tier = RewardTier.Five, customPrice = 500))
+        assertEquals(500, store.rewards.first().single().price)
+
+        store.updateReward(reward.copy(tier = RewardTier.Two, customPrice = 500))
+        val back = store.rewards.first().single()
+        assertEquals(50, back.price)
+        assertNull(back.customPrice)
+
+        assertFailsWith<IllegalArgumentException> { store.updateReward(reward.copy(tier = RewardTier.Five, customPrice = 300)) }
+        assertEquals(RewardTier.Two, store.rewards.first().single().tier)
+    }
+
+    @Test
+    fun `redeeming spends the price records the purchase and the ledger entry`() = runTest {
+        val store = newStore(clock)
+        earn(store, Tier.Four)
+        earn(store, Tier.Four)
+        val reward = store.createReward("Movie night", RewardTier.Two, Energy.Low)
+
+        assertTrue(store.redeem(reward.id, "r1"))
+
+        assertEquals(30, CoinRules.balance(store.entries.first()))
+        val spend = store.entries.first().last()
+        assertEquals(-50, spend.amount)
+        assertEquals(LedgerReason.RewardRedeemed, spend.reason)
+        assertEquals("r1", spend.refId)
+        val purchase = store.redemptions.first().single()
+        assertEquals("r1", purchase.id)
+        assertEquals("Movie night", purchase.name)
+        assertEquals(50, purchase.price)
+        assertEquals(RewardTier.Two, purchase.tier)
+        assertEquals(reward.id, purchase.templateId)
+        assertEquals(clock.current, purchase.redeemedAt)
+    }
+
+    @Test
+    fun `redeeming is refused when the balance is short`() = runTest {
+        val store = newStore(clock)
+        earn(store, Tier.Three)
+        val reward = store.createReward("Movie night", RewardTier.Two, Energy.Low)
+
+        assertFalse(store.redeem(reward.id, "r1"))
+
+        assertEquals(20, CoinRules.balance(store.entries.first()))
+        assertTrue(store.redemptions.first().isEmpty())
+        assertEquals(1, store.entries.first().size)
+    }
+
+    @Test
+    fun `the whole balance can be spent and no more`() = runTest {
+        val store = newStore(clock)
+        earn(store, Tier.Four)
+        earn(store, Tier.Three)
+        earn(store, Tier.One)
+        val reward = store.createReward("Dinner out", RewardTier.Three, Energy.High)
+        earn(store, Tier.Four)
+        assertEquals(105, CoinRules.balance(store.entries.first()))
+        assertFalse(store.redeem(reward.id, "short"))
+
+        earn(store, Tier.Two)
+        earn(store, Tier.One)
+        assertEquals(120, CoinRules.balance(store.entries.first()))
+        assertTrue(store.redeem(reward.id, "exact"))
+        assertEquals(0, CoinRules.balance(store.entries.first()))
+    }
+
+    @Test
+    fun `an unknown reward cannot be redeemed`() = runTest {
+        val store = newStore(clock)
+        earn(store, Tier.Four)
+        assertFalse(store.redeem("missing", "r1"))
+        assertTrue(store.redemptions.first().isEmpty())
+        assertEquals(40, CoinRules.balance(store.entries.first()))
+    }
+
+    @Test
+    fun `redeeming twice with the same redemption id records one purchase`() = runTest {
+        val store = newStore(clock)
+        repeat(3) { earn(store, Tier.Four) }
+        val reward = store.createReward("Movie night", RewardTier.Two, Energy.Low)
+
+        assertTrue(store.redeem(reward.id, "same"))
+        assertFalse(store.redeem(reward.id, "same"))
+
+        assertEquals(1, store.redemptions.first().size)
+        assertEquals(70, CoinRules.balance(store.entries.first()))
+    }
+
+    @Test
+    fun `the same reward can be bought again with a new redemption id`() = runTest {
+        val store = newStore(clock)
+        repeat(3) { earn(store, Tier.Four) }
+        earn(store, Tier.Three)
+        earn(store, Tier.One)
+        earn(store, Tier.One)
+        val reward = store.createReward("Movie night", RewardTier.Two, Energy.Low)
+        assertEquals(150, CoinRules.balance(store.entries.first()))
+
+        assertTrue(store.redeem(reward.id, "a"))
+        assertTrue(store.redeem(reward.id, "b"))
+
+        assertEquals(50, CoinRules.balance(store.entries.first()))
+        assertEquals(2, store.redemptions.first().size)
+    }
+
+    @Test
+    fun `a redemption keeps what was paid after the reward is edited or deleted`() = runTest {
+        val store = newStore(clock)
+        repeat(2) { earn(store, Tier.Four) }
+        val reward = store.createReward("Movie night", RewardTier.Two, Energy.Low)
+        store.redeem(reward.id, "r1")
+
+        store.updateReward(reward.copy(name = "Cinema trip", tier = RewardTier.Three))
+        var purchase = store.redemptions.first().single()
+        assertEquals("Movie night", purchase.name)
+        assertEquals(50, purchase.price)
+        assertEquals(RewardTier.Two, purchase.tier)
+
+        store.deleteReward(reward.id)
+        assertTrue(store.rewards.first().isEmpty())
+        purchase = store.redemptions.first().single()
+        assertEquals("Movie night", purchase.name)
+        assertEquals(30, CoinRules.balance(store.entries.first()))
+    }
+
+    @Test
+    fun `purchases are listed newest first`() = runTest {
+        val store = newStore(clock)
+        repeat(3) { earn(store, Tier.Four) }
+        val first = store.createReward("First", RewardTier.One, Energy.Low)
+        val second = store.createReward("Second", RewardTier.One, Energy.Low)
+        store.redeem(first.id, "a")
+        store.redeem(second.id, "b")
+        assertEquals(listOf("Second", "First"), store.redemptions.first().map { it.name })
     }
 }

@@ -21,6 +21,8 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Tab
+import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -29,6 +31,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -38,14 +41,32 @@ import com.usuallycoding.openadhd.domain.Energy
 import com.usuallycoding.openadhd.domain.CoinRules
 import com.usuallycoding.openadhd.domain.TaskTemplate
 import com.usuallycoding.openadhd.domain.Tier
+import com.usuallycoding.openadhd.ui.rewards.RewardTemplatesViewModel
 import com.usuallycoding.openadhd.ui.templates.TemplateInputError
 import com.usuallycoding.openadhd.ui.templates.TemplatesViewModel
 import com.usuallycoding.openadhd.ui.theme.AddIcon
 import com.usuallycoding.openadhd.ui.theme.DeleteIcon
 import com.usuallycoding.openadhd.ui.theme.EditIcon
 
+/** The Templates destination: a Tasks tab and a Rewards tab. */
 @Composable
-fun TemplatesScreen(viewModel: TemplatesViewModel, modifier: Modifier = Modifier) {
+fun TemplatesScreen(
+    taskViewModel: TemplatesViewModel,
+    rewardViewModel: RewardTemplatesViewModel,
+    modifier: Modifier = Modifier,
+) {
+    var tab by rememberSaveable { mutableStateOf(0) }
+    Column(modifier) {
+        TabRow(selectedTabIndex = tab) {
+            Tab(selected = tab == 0, onClick = { tab = 0 }, text = { Text("Tasks") })
+            Tab(selected = tab == 1, onClick = { tab = 1 }, text = { Text("Rewards") })
+        }
+        if (tab == 0) TaskTemplatesScreen(taskViewModel) else RewardsScreen(rewardViewModel)
+    }
+}
+
+@Composable
+fun TaskTemplatesScreen(viewModel: TemplatesViewModel, modifier: Modifier = Modifier) {
     val templates by viewModel.templates.collectAsStateWithLifecycle()
     TemplatesContent(
         templates = templates,

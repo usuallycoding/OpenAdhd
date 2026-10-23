@@ -10,6 +10,9 @@ import com.usuallycoding.openadhd.domain.LedgerEntry
 import com.usuallycoding.openadhd.domain.LedgerReason
 import com.usuallycoding.openadhd.domain.PlannedSubtask
 import com.usuallycoding.openadhd.domain.PlannedTask
+import com.usuallycoding.openadhd.domain.Redemption
+import com.usuallycoding.openadhd.domain.RewardTemplate
+import com.usuallycoding.openadhd.domain.RewardTier
 import com.usuallycoding.openadhd.domain.TaskTemplate
 import com.usuallycoding.openadhd.domain.Tier
 import kotlinx.datetime.LocalDate
@@ -62,6 +65,27 @@ data class LedgerEntity(
     val timestampMillis: Long,
     val reason: String,
     val refId: String?,
+)
+
+@Entity(tableName = "reward_templates")
+data class RewardTemplateEntity(
+    @PrimaryKey val id: String,
+    val name: String,
+    val tier: Int,
+    val energy: String,
+    val description: String,
+    val customPrice: Int?,
+)
+
+@Entity(tableName = "redemptions")
+data class RedemptionEntity(
+    @PrimaryKey val id: String,
+    val templateId: String?,
+    val name: String,
+    val tier: Int,
+    val energy: String,
+    val price: Int,
+    val redeemedAtMillis: Long,
 )
 
 data class TemplateWithSubtasks(
@@ -120,3 +144,14 @@ internal fun LedgerEntity.toDomain() = LedgerEntry(
 )
 
 internal fun LedgerEntry.toEntity() = LedgerEntity(id, amount, timestamp.toEpochMilliseconds(), reason.name, refId)
+
+internal fun RewardTemplateEntity.toDomain() = RewardTemplate(
+    id, name, RewardTier.fromLevel(tier), Energy.valueOf(energy), description, customPrice,
+)
+
+internal fun RewardTemplate.toEntity() = RewardTemplateEntity(id, name, tier.level, energy.name, description, customPrice)
+
+internal fun RedemptionEntity.toDomain() = Redemption(
+    id, templateId, name, RewardTier.fromLevel(tier), Energy.valueOf(energy), price,
+    Instant.fromEpochMilliseconds(redeemedAtMillis),
+)

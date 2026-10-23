@@ -24,11 +24,15 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.usuallycoding.openadhd.data.AppContainer
 import com.usuallycoding.openadhd.data.InMemoryStore
 import com.usuallycoding.openadhd.ui.components.ThemeChooser
+import com.usuallycoding.openadhd.ui.screens.ShopScreen
 import com.usuallycoding.openadhd.ui.screens.TemplatesScreen
 import com.usuallycoding.openadhd.ui.screens.TodayScreen
+import com.usuallycoding.openadhd.ui.rewards.RewardTemplatesViewModel
+import com.usuallycoding.openadhd.ui.shop.ShopViewModel
 import com.usuallycoding.openadhd.ui.templates.TemplatesViewModel
 import com.usuallycoding.openadhd.ui.theme.AppTheme
 import com.usuallycoding.openadhd.ui.theme.CoinIcon
+import com.usuallycoding.openadhd.ui.theme.ShopIcon
 import com.usuallycoding.openadhd.ui.theme.TemplatesIcon
 import com.usuallycoding.openadhd.ui.theme.ThemeMode
 import com.usuallycoding.openadhd.ui.theme.TodayIcon
@@ -39,6 +43,7 @@ import org.jetbrains.compose.reload.DevelopmentEntryPoint
 private enum class Destination(val label: String, val icon: ImageVector) {
     Today("Today", TodayIcon),
     Templates("Templates", TemplatesIcon),
+    Shop("Shop", ShopIcon),
 }
 
 /** Previews and hot reload use this in-memory container; each platform entry point passes a persistent one. */
@@ -57,6 +62,8 @@ fun App(container: AppContainer) {
 
     val todayViewModel = viewModel { TodayViewModel(container.store, container.clock, dateCheckInterval = container.dateCheckInterval) }
     val templatesViewModel = viewModel { TemplatesViewModel(container.store) }
+    val rewardTemplatesViewModel = viewModel { RewardTemplatesViewModel(container.store) }
+    val shopViewModel = viewModel { ShopViewModel(container.store) }
     val walletViewModel = viewModel { WalletViewModel(container.store) }
     val balance by walletViewModel.balance.collectAsStateWithLifecycle()
 
@@ -96,7 +103,8 @@ fun App(container: AppContainer) {
             val screenModifier = Modifier.padding(innerPadding)
             when (destination) {
                 Destination.Today -> TodayScreen(todayViewModel, screenModifier)
-                Destination.Templates -> TemplatesScreen(templatesViewModel, screenModifier)
+                Destination.Templates -> TemplatesScreen(templatesViewModel, rewardTemplatesViewModel, screenModifier)
+                Destination.Shop -> ShopScreen(shopViewModel, screenModifier)
             }
         }
     }

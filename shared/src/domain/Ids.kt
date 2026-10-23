@@ -38,3 +38,14 @@ internal fun TaskTemplate.toPlannedTask(date: kotlinx.datetime.LocalDate): Plann
         subtasks = subtasks.mapIndexed { index, title -> PlannedSubtask(newId(), title, shares[index]) },
     )
 }
+
+/** Trims text fields, clears the custom price outside tier 5, and rejects invalid input. */
+internal fun RewardTemplate.validated(): RewardTemplate {
+    val problem = RewardRules.validate(name, tier, customPrice)
+    require(problem == null) { "Invalid reward: $problem" }
+    return copy(
+        name = name.trim(),
+        description = description.trim(),
+        customPrice = if (tier == RewardTier.Five) customPrice else null,
+    )
+}

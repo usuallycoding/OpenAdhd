@@ -9,7 +9,7 @@ The `kotlin` (macOS/Linux) and `kotlin.bat` (Windows) scripts in the project roo
 
 ### Data
 
-Task templates (with descriptions and subtasks), daily tasks and the coin ledger are stored locally in a SQLite database (`openadhd.db`) and never leave the device. On desktop it lives in `~/.openadhd/`; on Android it is in the app's database folder, and on iOS in the app's Documents folder.
+Task templates (with descriptions and subtasks), daily tasks, reward templates, purchases and the coin ledger are stored locally in a SQLite database (`openadhd.db`) and never leave the device. On desktop it lives in `~/.openadhd/`; on Android it is in the app's database folder, and on iOS in the app's Documents folder.
 
 ### Running
 

@@ -5,6 +5,7 @@ import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performTextReplacement
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.isToggleable
 import androidx.compose.ui.test.onAllNodesWithText
@@ -15,6 +16,11 @@ import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.runComposeUiTest
 import com.usuallycoding.openadhd.data.AppContainer
 import com.usuallycoding.openadhd.data.InMemoryStore
+import com.usuallycoding.openadhd.domain.Energy
+import com.usuallycoding.openadhd.domain.RewardTier
+import com.usuallycoding.openadhd.domain.Tier
+import kotlinx.coroutines.runBlocking
+import kotlinx.datetime.LocalDate
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.resetMain
@@ -159,5 +165,81 @@ class AppUiTest {
         repeat(10) { onNodeWithText("Add subtask").performScrollTo().performClick() }
         onNodeWithText("Subtasks (10/10)").assertExists()
         onNodeWithText("Add subtask").assertIsNotEnabled()
+    }
+
+    @Test
+    fun `rewards are priced by tier and tier five needs a price above three hundred`() = runComposeUiTest {
+        setContent { App(AppContainer(InMemoryStore(), dateCheckInterval = null)) }
+
+        onNodeWithText("Templates").performClick()
+        onNodeWithText("Rewards").performClick()
+        onNodeWithText("No rewards yet. Tap + to add something to look forward to.").assertExists()
+
+        onNodeWithContentDescription("Add reward").performClick()
+        onNodeWithText("Name").performTextInput("Movie night")
+        onNodeWithText("2").performClick()
+        onNodeWithText("Costs 50 coins").assertExists()
+        onNodeWithText("Save").performClick()
+        onNodeWithText("Tier 2 · Low energy · 50 coins").assertExists()
+
+        onNodeWithContentDescription("Add reward").performClick()
+        onNodeWithText("Name").performTextInput("Headphones")
+        onNodeWithText("5").performClick()
+        onNodeWithText("Save").performClick()
+        onNodeWithText("A price is required for tier 5").assertExists()
+        onNodeWithText("Price (coins)").performTextInput("300")
+        onNodeWithText("Save").performClick()
+        onNodeWithText("A tier 5 price must be larger than 300").assertExists()
+        onNodeWithText("Price (coins)").performTextReplacement("301")
+        onNodeWithText("Save").performClick()
+        onNodeWithText("Tier 5 · Low energy · 301 coins").assertExists()
+    }
+
+    @Test
+    fun `the shop sells affordable rewards after confirming and records the purchase`() = runComposeUiTest {
+        val store = InMemoryStore()
+        runBlocking {
+            store.createReward("Treat", RewardTier.One, Energy.Low)
+            store.createReward("Movie night", RewardTier.Two, Energy.Low)
+            val earner = store.assign(store.create("Big job", Tier.Four, Energy.High), LocalDate(2026, 10, 23))
+            store.completeTask(earner.id)
+        }
+        setContent { App(AppContainer(store, dateCheckInterval = null)) }
+        onNodeWithText("40").assertExists()
+
+        onNodeWithText("Shop").performClick()
+        onNodeWithText("Tier 1 · 20 coins").assertExists()
+        onNodeWithText("Tier 2 · 50 coins").assertExists()
+        onNodeWithText("10 more coins needed").assertExists()
+        onNodeWithContentDescription("Redeem Movie night").assertIsNotEnabled()
+        onNodeWithContentDescription("Redeem Treat").assertIsEnabled()
+
+        onNodeWithText("History").performClick()
+        onNodeWithText("Nothing redeemed yet.").assertExists()
+        onNodeWithText("Rewards").performClick()
+
+        // cancelling spends nothing
+        onNodeWithContentDescription("Redeem Treat").performClick()
+        onNodeWithText("Redeem Treat?").assertExists()
+        onNodeWithText("This costs 20 coins.").assertExists()
+        onNodeWithText("Cancel").performClick()
+        onNodeWithText("40").assertExists()
+
+        // confirming spends the price and records the purchase
+        onNodeWithContentDescription("Redeem Treat").performClick()
+        onNodeWithText("Confirm").performClick()
+        onNodeWithText("20").assertExists()
+        onNodeWithText("30 more coins needed").assertExists()
+
+        onNodeWithText("History").performClick()
+        onNodeWithText("Treat").assertExists()
+        onNodeWithText("-20").assertExists()
+    }
+
+    @Test
+    fun `the shop explains when there are no rewards`() = runComposeUiTest {
+        setContent { App(AppContainer(InMemoryStore(), dateCheckInterval = null)) }
+        onNodeWithText("Shop").performClick()
+        onNodeWithText("The shop is empty. Add rewards on the Templates screen, in the Rewards tab.").assertExists()
     }
 }
