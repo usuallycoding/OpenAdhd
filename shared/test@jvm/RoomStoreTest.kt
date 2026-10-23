@@ -6,6 +6,7 @@ import com.usuallycoding.openadhd.data.room.RoomStore
 import com.usuallycoding.openadhd.data.room.buildOpenAdhdDatabase
 import com.usuallycoding.openadhd.domain.CoinRules
 import com.usuallycoding.openadhd.domain.Energy
+import com.usuallycoding.openadhd.domain.RedemptionSource
 import com.usuallycoding.openadhd.domain.RewardTier
 import com.usuallycoding.openadhd.domain.OpenAdhdStore
 import com.usuallycoding.openadhd.domain.Tier
@@ -17,13 +18,14 @@ import kotlin.io.path.createTempDirectory
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
+import kotlin.random.Random
 import kotlin.time.Clock
 
 /** Runs the shared store contract against a real SQLite database. */
 class RoomStoreTest : StoreContractTest() {
-    override fun newStore(clock: Clock): OpenAdhdStore {
+    override fun newStore(clock: Clock, random: Random): OpenAdhdStore {
         val file = createTempDirectory().resolve("contract.db").toString()
-        return RoomStore(Room.databaseBuilder<OpenAdhdDatabase>(file).buildOpenAdhdDatabase(), clock)
+        return RoomStore(Room.databaseBuilder<OpenAdhdDatabase>(file).buildOpenAdhdDatabase(), clock, random)
     }
 
     @Test
@@ -42,10 +44,13 @@ class RoomStoreTest : StoreContractTest() {
         val treat = first.createReward("Movie night", RewardTier.One, Energy.Low, "With snacks")
         assertTrue(first.redeem(treat.id, "r1"))
         val saved = first.createReward("Headphones", RewardTier.Five, Energy.Low, customPrice = 500)
+        val extraTemplate = first.create("Extra", Tier.Four, Energy.High)
+        assertTrue(first.completeTask(first.assign(extraTemplate, today).id))
+        val rolled = first.mysteryRoll(RewardTier.One, "roll1")!!
         firstDb.close()
 
         val second = RoomStore(Room.databaseBuilder<OpenAdhdDatabase>(file).buildOpenAdhdDatabase(), clock)
-        assertEquals(listOf(simple, big), second.templates.first())
+        assertEquals(listOf(simple, big, extraTemplate), second.templates.first())
 
         val restored = second.entriesFor(today).first().associateBy { it.name }
         assertTrue(restored.getValue("Taxes").isCompleted)
@@ -55,10 +60,18 @@ class RoomStoreTest : StoreContractTest() {
         assertEquals(listOf(false, true, false), restoredBig.subtasks.map { it.isCompleted })
         assertTrue(restoredBig.hasProgress)
         assertTrue(!restoredBig.isCompleted)
-        assertEquals(7, CoinRules.balance(second.entries.first()))
+        assertEquals(27, CoinRules.balance(second.entries.first()))
         assertEquals(listOf(treat, saved), second.rewards.first())
-        val purchase = second.redemptions.first().single()
+        val history = second.redemptions.first()
+        assertEquals(2, history.size)
+        val purchase = history.last()
         assertEquals("Movie night", purchase.name)
         assertEquals(20, purchase.price)
+        assertEquals(RedemptionSource.Purchase, purchase.source)
+        val roll = history.first()
+        assertEquals(rolled.redemption, roll)
+        assertEquals(RedemptionSource.Roll, roll.source)
+        assertEquals(RewardTier.One, roll.rolledTier)
+        assertEquals(20, roll.price)
     }
 }

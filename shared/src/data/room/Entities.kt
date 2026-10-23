@@ -11,6 +11,7 @@ import com.usuallycoding.openadhd.domain.LedgerReason
 import com.usuallycoding.openadhd.domain.PlannedSubtask
 import com.usuallycoding.openadhd.domain.PlannedTask
 import com.usuallycoding.openadhd.domain.Redemption
+import com.usuallycoding.openadhd.domain.RedemptionSource
 import com.usuallycoding.openadhd.domain.RewardTemplate
 import com.usuallycoding.openadhd.domain.RewardTier
 import com.usuallycoding.openadhd.domain.TaskTemplate
@@ -86,6 +87,8 @@ data class RedemptionEntity(
     val energy: String,
     val price: Int,
     val redeemedAtMillis: Long,
+    @ColumnInfo(defaultValue = "'Purchase'") val source: String,
+    val rolledTier: Int?,
 )
 
 data class TemplateWithSubtasks(
@@ -154,4 +157,5 @@ internal fun RewardTemplate.toEntity() = RewardTemplateEntity(id, name, tier.lev
 internal fun RedemptionEntity.toDomain() = Redemption(
     id, templateId, name, RewardTier.fromLevel(tier), Energy.valueOf(energy), price,
     Instant.fromEpochMilliseconds(redeemedAtMillis),
+    RedemptionSource.valueOf(source), rolledTier?.let(RewardTier::fromLevel),
 )

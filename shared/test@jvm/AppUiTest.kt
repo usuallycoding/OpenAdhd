@@ -19,6 +19,7 @@ import com.usuallycoding.openadhd.data.InMemoryStore
 import com.usuallycoding.openadhd.domain.Energy
 import com.usuallycoding.openadhd.domain.RewardTier
 import com.usuallycoding.openadhd.domain.Tier
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import kotlinx.datetime.LocalDate
 import kotlinx.coroutines.Dispatchers
@@ -210,7 +211,8 @@ class AppUiTest {
         onNodeWithText("Shop").performClick()
         onNodeWithText("Tier 1 · 20 coins").assertExists()
         onNodeWithText("Tier 2 · 50 coins").assertExists()
-        onNodeWithText("10 more coins needed").assertExists()
+        // the shortfall is shown on the tier 2 roll and on the reward itself
+        onAllNodesWithText("10 more coins needed").assertCountEquals(2)
         onNodeWithContentDescription("Redeem Movie night").assertIsNotEnabled()
         onNodeWithContentDescription("Redeem Treat").assertIsEnabled()
 
@@ -229,7 +231,7 @@ class AppUiTest {
         onNodeWithContentDescription("Redeem Treat").performClick()
         onNodeWithText("Confirm").performClick()
         onNodeWithText("20").assertExists()
-        onNodeWithText("30 more coins needed").assertExists()
+        onAllNodesWithText("30 more coins needed").assertCountEquals(2)
 
         onNodeWithText("History").performClick()
         onNodeWithText("Treat").assertExists()
@@ -241,5 +243,96 @@ class AppUiTest {
         setContent { App(AppContainer(InMemoryStore(), dateCheckInterval = null)) }
         onNodeWithText("Shop").performClick()
         onNodeWithText("The shop is empty. Add rewards on the Templates screen, in the Rewards tab.").assertExists()
+    }
+
+    // ---- mystery rolls
+
+    private fun rollingStore(random: kotlin.random.Random, vararg extraTasks: Tier): InMemoryStore {
+        val store = InMemoryStore(random = random)
+        runBlocking {
+            store.createReward("Movie night", RewardTier.Two, Energy.Low)
+            store.createReward("Dinner out", RewardTier.Three, Energy.High)
+            for (tier in extraTasks) {
+                val entry = store.assign(store.create("Job ${tier.level}", tier, Energy.High), LocalDate(2026, 10, 23))
+                store.completeTask(entry.id)
+            }
+        }
+        return store
+    }
+
+    @Test
+    fun `a lucky upgrade roll spends the tier price and is revealed and recorded`() = runComposeUiTest {
+        val store = rollingStore(ScriptedRandom(0, 0), Tier.Four, Tier.Three)
+        setContent { App(AppContainer(store, dateCheckInterval = null)) }
+        onNodeWithText("60").assertExists()
+
+        onNodeWithText("Shop").performClick()
+        onNodeWithText("Mystery roll").assertExists()
+        onNodeWithText("Tier 2 roll · 50 coins").assertExists()
+        onNodeWithText("A random tier 2 reward, with a 1 in 6 chance of a tier 3 one").assertExists()
+
+        // cancelling spends nothing
+        onNodeWithContentDescription("Roll tier 2").performClick()
+        onNodeWithText("Roll tier 2?").assertExists()
+        onNodeWithText("Cancel").performClick()
+        onNodeWithText("60").assertExists()
+
+        // confirming rolls: the upgrade is revealed and only the tier 2 price is spent
+        onNodeWithContentDescription("Roll tier 2").performClick()
+        onNodeWithText("Confirm").performClick()
+        onNodeWithText("You got: Dinner out!").assertExists()
+        onNodeWithText("Lucky upgrade! You rolled tier 2 and won a tier 3 reward.").assertExists()
+        onNodeWithText("Close").performClick()
+        onNodeWithText("10").assertExists()
+
+        onNodeWithText("History").performClick()
+        onNodeWithText("Dinner out").assertExists()
+        onNodeWithText("-50").assertExists()
+        onNodeWithText("Mystery roll of tier 2 · Lucky upgrade (tier 3 reward)", substring = true).assertExists()
+    }
+
+    @Test
+    fun `a usual roll reveals the reward without an upgrade message`() = runComposeUiTest {
+        val store = rollingStore(ScriptedRandom(3, 0), Tier.Four, Tier.Three)
+        setContent { App(AppContainer(store, dateCheckInterval = null)) }
+
+        onNodeWithText("Shop").performClick()
+        onNodeWithContentDescription("Roll tier 2").performClick()
+        onNodeWithText("Confirm").performClick()
+        onNodeWithText("You got: Movie night!").assertExists()
+        onNodeWithText("Lucky upgrade!", substring = true).assertDoesNotExist()
+        onNodeWithText("Close").performClick()
+
+        onNodeWithText("History").performClick()
+        onNodeWithText("Mystery roll of tier 2", substring = true).assertExists()
+        onNodeWithText("Lucky upgrade", substring = true).assertDoesNotExist()
+    }
+
+    @Test
+    fun `rolls that cannot be made say why and are disabled`() = runComposeUiTest {
+        val store = rollingStore(ScriptedRandom(), Tier.Three, Tier.Two)
+        setContent { App(AppContainer(store, dateCheckInterval = null)) }
+
+        onNodeWithText("Shop").performClick()
+        onNodeWithText("No tier 1 rewards yet").assertExists()
+        onNodeWithContentDescription("Roll tier 1").assertIsNotEnabled()
+        onAllNodesWithText("20 more coins needed").assertCountEquals(2) // the tier 2 roll and the Movie night reward
+        onNodeWithContentDescription("Roll tier 2").assertIsNotEnabled()
+    }
+
+    @Test
+    fun `earlier purchases stay plain purchases next to rolls in the history`() = runComposeUiTest {
+        val store = rollingStore(ScriptedRandom(3, 0), Tier.Four, Tier.Four, Tier.Four)
+        runBlocking {
+            val reward = store.rewards.first().first { it.name == "Movie night" }
+            store.redeem(reward.id, "buy1")
+            store.mysteryRoll(RewardTier.Two, "roll1")
+        }
+        setContent { App(AppContainer(store, dateCheckInterval = null)) }
+
+        onNodeWithText("Shop").performClick()
+        onNodeWithText("History").performClick()
+        onAllNodesWithText("Mystery roll of tier", substring = true).assertCountEquals(1)
+        onAllNodesWithText("Tier 2 · ", substring = true).assertCountEquals(1)
     }
 }

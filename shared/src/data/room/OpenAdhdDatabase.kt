@@ -20,7 +20,7 @@ import kotlinx.coroutines.Dispatchers
         RewardTemplateEntity::class,
         RedemptionEntity::class,
     ],
-    version = 3,
+    version = 4,
     exportSchema = false,
 )
 @ConstructedBy(OpenAdhdDatabaseConstructor::class)
@@ -75,8 +75,16 @@ val Migration2To3: Migration = object : Migration(2, 3) {
     }
 }
 
+/** Version 4 records how a redemption was obtained. Earlier redemptions become plain purchases. */
+val Migration3To4: Migration = object : Migration(3, 4) {
+    override fun migrate(connection: SQLiteConnection) {
+        connection.execSQL("ALTER TABLE redemptions ADD COLUMN source TEXT NOT NULL DEFAULT 'Purchase'")
+        connection.execSQL("ALTER TABLE redemptions ADD COLUMN rolledTier INTEGER")
+    }
+}
+
 fun RoomDatabase.Builder<OpenAdhdDatabase>.buildOpenAdhdDatabase(): OpenAdhdDatabase =
     setDriver(BundledSQLiteDriver())
         .setQueryCoroutineContext(Dispatchers.Default)
-        .addMigrations(Migration1To2, Migration2To3)
+        .addMigrations(Migration1To2, Migration2To3, Migration3To4)
         .build()

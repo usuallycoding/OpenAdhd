@@ -4,6 +4,7 @@ import com.usuallycoding.openadhd.domain.CoinRules
 import com.usuallycoding.openadhd.domain.Energy
 import com.usuallycoding.openadhd.domain.LedgerReason
 import com.usuallycoding.openadhd.domain.OpenAdhdStore
+import com.usuallycoding.openadhd.domain.RedemptionSource
 import com.usuallycoding.openadhd.domain.RewardTier
 import com.usuallycoding.openadhd.domain.Tier
 import kotlinx.coroutines.flow.first
@@ -13,10 +14,12 @@ import kotlinx.datetime.LocalDate
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.minus
 import kotlinx.datetime.todayIn
+import kotlin.random.Random
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
+import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlin.time.Clock
@@ -29,7 +32,7 @@ class FakeClock(var current: Instant = Instant.parse("2026-10-23T10:00:00Z")) : 
 /** Behavior every [OpenAdhdStore] implementation must have. */
 abstract class StoreContractTest {
     protected val clock = FakeClock()
-    protected abstract fun newStore(clock: Clock): OpenAdhdStore
+    protected abstract fun newStore(clock: Clock, random: Random = Random.Default): OpenAdhdStore
 
     private val today: LocalDate get() = clock.todayIn(TimeZone.UTC)
 
@@ -476,5 +479,135 @@ abstract class StoreContractTest {
         store.redeem(first.id, "a")
         store.redeem(second.id, "b")
         assertEquals(listOf("Second", "First"), store.redemptions.first().map { it.name })
+    }
+
+    // ---- mystery rolls
+
+    @Test
+    fun `a usual roll charges the tier price and records a roll`() = runTest {
+        val store = newStore(clock, ScriptedRandom(3, 0))
+        earn(store, Tier.Four)
+        earn(store, Tier.Three)
+        val movie = store.createReward("Movie night", RewardTier.Two, Energy.Low)
+        store.createReward("Dinner out", RewardTier.Three, Energy.High)
+
+        val result = store.mysteryRoll(RewardTier.Two, "roll1")!!
+
+        assertEquals(movie.id, result.redemption.templateId)
+        assertFalse(result.upgraded)
+        assertEquals(10, CoinRules.balance(store.entries.first()))
+        val spend = store.entries.first().last()
+        assertEquals(-50, spend.amount)
+        assertEquals(LedgerReason.MysteryRoll, spend.reason)
+        assertEquals("roll1", spend.refId)
+        val recorded = store.redemptions.first().single()
+        assertEquals(RedemptionSource.Roll, recorded.source)
+        assertEquals(RewardTier.Two, recorded.rolledTier)
+        assertEquals(RewardTier.Two, recorded.tier)
+        assertEquals(50, recorded.price)
+        assertFalse(recorded.isLuckyUpgrade)
+    }
+
+    @Test
+    fun `a lucky upgrade gives a higher tier reward for the rolled tier price`() = runTest {
+        val store = newStore(clock, ScriptedRandom(0, 0))
+        earn(store, Tier.Four)
+        earn(store, Tier.Three)
+        store.createReward("Movie night", RewardTier.Two, Energy.Low)
+        store.createReward("Dinner out", RewardTier.Three, Energy.High)
+
+        val result = store.mysteryRoll(RewardTier.Two, "roll1")!!
+
+        assertTrue(result.upgraded)
+        assertEquals("Dinner out", result.redemption.name)
+        assertEquals(RewardTier.Three, result.redemption.tier)
+        assertEquals(RewardTier.Two, result.redemption.rolledTier)
+        assertEquals(50, result.redemption.price)
+        assertEquals(10, CoinRules.balance(store.entries.first()))
+        assertTrue(store.redemptions.first().single().isLuckyUpgrade)
+    }
+
+    @Test
+    fun `an upgrade without a higher tier gives a reward from the rolled tier`() = runTest {
+        val store = newStore(clock, ScriptedRandom(0, 0))
+        earn(store, Tier.Four)
+        earn(store, Tier.Three)
+        store.createReward("Movie night", RewardTier.Two, Energy.Low)
+
+        val result = store.mysteryRoll(RewardTier.Two, "roll1")!!
+
+        assertFalse(result.upgraded)
+        assertEquals("Movie night", result.redemption.name)
+        assertEquals(RewardTier.Two, result.redemption.tier)
+    }
+
+    @Test
+    fun `a roll is refused when the balance is short`() = runTest {
+        val store = newStore(clock, ScriptedRandom())
+        earn(store, Tier.Three)
+        store.createReward("Movie night", RewardTier.Two, Energy.Low)
+
+        assertNull(store.mysteryRoll(RewardTier.Two, "roll1"))
+
+        assertEquals(20, CoinRules.balance(store.entries.first()))
+        assertTrue(store.redemptions.first().isEmpty())
+        assertEquals(1, store.entries.first().size)
+    }
+
+    @Test
+    fun `a roll of an empty tier is refused`() = runTest {
+        val store = newStore(clock, ScriptedRandom())
+        earn(store, Tier.Four)
+        earn(store, Tier.Three)
+        store.createReward("Dinner out", RewardTier.Three, Energy.High)
+
+        assertNull(store.mysteryRoll(RewardTier.Two, "roll1"))
+
+        assertEquals(60, CoinRules.balance(store.entries.first()))
+        assertTrue(store.redemptions.first().isEmpty())
+    }
+
+    @Test
+    fun `rolling twice with the same id rolls once`() = runTest {
+        val store = newStore(clock, ScriptedRandom(3, 0))
+        repeat(2) { earn(store, Tier.Four) }
+        store.createReward("Movie night", RewardTier.Two, Energy.Low)
+
+        assertNotNull(store.mysteryRoll(RewardTier.Two, "same"))
+        assertNull(store.mysteryRoll(RewardTier.Two, "same"))
+
+        assertEquals(1, store.redemptions.first().size)
+        assertEquals(30, CoinRules.balance(store.entries.first()))
+    }
+
+    @Test
+    fun `tier four never upgrades and tier five is never rolled or won`() = runTest {
+        val store = newStore(clock, ScriptedRandom(0, 0))
+        repeat(8) { earn(store, Tier.Four) }
+        store.createReward("Weekend away", RewardTier.Four, Energy.High)
+        store.createReward("Headphones", RewardTier.Five, Energy.Low, customPrice = 500)
+
+        val result = store.mysteryRoll(RewardTier.Four, "roll1")!!
+
+        assertFalse(result.upgraded)
+        assertEquals("Weekend away", result.redemption.name)
+        assertEquals(20, CoinRules.balance(store.entries.first()))
+        assertNull(store.mysteryRoll(RewardTier.Five, "roll2"))
+        assertEquals(1, store.redemptions.first().size)
+    }
+
+    @Test
+    fun `a purchase is still recorded as a purchase`() = runTest {
+        val store = newStore(clock, ScriptedRandom(3, 0))
+        repeat(3) { earn(store, Tier.Four) }
+        val reward = store.createReward("Movie night", RewardTier.Two, Energy.Low)
+        assertTrue(store.redeem(reward.id, "buy"))
+        store.mysteryRoll(RewardTier.Two, "roll")
+
+        val newestFirst = store.redemptions.first()
+        assertEquals(listOf(RedemptionSource.Roll, RedemptionSource.Purchase), newestFirst.map { it.source })
+        assertNull(newestFirst.last().rolledTier)
+        assertFalse(newestFirst.last().isLuckyUpgrade)
+        assertEquals(20, CoinRules.balance(store.entries.first()))
     }
 }

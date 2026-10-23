@@ -58,7 +58,7 @@ data class PlannedTask(
         get() = if (subtasks.isEmpty()) completedAt != null else subtasks.any { it.isCompleted }
 }
 
-enum class LedgerReason { TaskCompleted, SubtaskCompleted, RewardRedeemed }
+enum class LedgerReason { TaskCompleted, SubtaskCompleted, RewardRedeemed, MysteryRoll }
 
 data class LedgerEntry(
     val id: String,
@@ -89,7 +89,13 @@ data class RewardTemplate(
     val price: Int get() = RewardRules.price(tier, customPrice)
 }
 
-/** A purchase. Everything is copied from the reward when it is bought, so later edits change nothing here. */
+enum class RedemptionSource { Purchase, Roll }
+
+/**
+ * A purchase or a mystery roll. Everything is copied from the reward when it is obtained, so later edits change
+ * nothing here. [price] is what was paid (the roll price for a roll, not the won reward's own price), and
+ * [rolledTier] is the tier that was rolled, set only for rolls.
+ */
 data class Redemption(
     val id: String,
     val templateId: String?,
@@ -98,4 +104,9 @@ data class Redemption(
     val energy: Energy,
     val price: Int,
     val redeemedAt: Instant,
-)
+    val source: RedemptionSource = RedemptionSource.Purchase,
+    val rolledTier: RewardTier? = null,
+) {
+    /** A roll that gave a reward from a higher tier than the one rolled. */
+    val isLuckyUpgrade: Boolean get() = rolledTier != null && tier.level > rolledTier.level
+}

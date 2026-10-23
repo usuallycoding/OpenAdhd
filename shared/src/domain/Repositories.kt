@@ -83,6 +83,14 @@ interface ShopRepository {
      * call with the same id is a no-op).
      */
     suspend fun redeem(rewardId: String, redemptionId: String = newId()): Boolean
+
+    /**
+     * Rolls for a random reward of [tier] (1 to 4): costs the tier's price and gives a reward from that tier,
+     * or with a 1 in [RollRules.UpgradeOneIn] chance from the next tier up. Records a redemption marked as a
+     * roll and a ledger entry of minus the price as one operation. Returns null, changing nothing, if the
+     * balance is lower than the price, the tier has no rewards, or [redemptionId] already exists.
+     */
+    suspend fun mysteryRoll(tier: RewardTier, redemptionId: String = newId()): RollResult?
 }
 
 /** All repositories behind one object, so completing a task or buying a reward updates its records and the ledger together. */

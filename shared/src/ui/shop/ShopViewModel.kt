@@ -5,6 +5,9 @@ import androidx.lifecycle.viewModelScope
 import com.usuallycoding.openadhd.domain.CoinRules
 import com.usuallycoding.openadhd.domain.OpenAdhdStore
 import com.usuallycoding.openadhd.domain.Redemption
+import com.usuallycoding.openadhd.domain.RewardTier
+import com.usuallycoding.openadhd.domain.RollResult
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
@@ -19,7 +22,15 @@ class ShopViewModel(private val store: OpenAdhdStore) : ViewModel() {
     val shelves: StateFlow<List<ShopShelf>> =
         combine(store.rewards, balance, ::buildShelves).stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
 
-    /** Purchases, newest first. */
+    val rollOptions: StateFlow<List<RollOption>> =
+        combine(store.rewards, balance, ::buildRollOptions).stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
+
+    private val _lastRoll = MutableStateFlow<RollResult?>(null)
+
+    /** The result of the latest roll, shown in the reveal until [dismissRoll] is called. */
+    val lastRoll: StateFlow<RollResult?> = _lastRoll
+
+    /** Purchases and rolls, newest first. */
     val history: StateFlow<List<Redemption>> =
         store.redemptions.stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
 
@@ -29,5 +40,17 @@ class ShopViewModel(private val store: OpenAdhdStore) : ViewModel() {
      */
     fun redeem(rewardId: String, redemptionId: String) {
         viewModelScope.launch { store.redeem(rewardId, redemptionId) }
+    }
+
+    /**
+     * Rolls for a reward of [tier]. The caller creates [rollId] when the confirmation opens, so confirming
+     * twice in a row rolls once. A refused roll leaves [lastRoll] unchanged.
+     */
+    fun roll(tier: RewardTier, rollId: String) {
+        viewModelScope.launch { store.mysteryRoll(tier, rollId)?.let { _lastRoll.value = it } }
+    }
+
+    fun dismissRoll() {
+        _lastRoll.value = null
     }
 }

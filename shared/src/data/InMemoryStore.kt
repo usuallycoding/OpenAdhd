@@ -7,8 +7,11 @@ import com.usuallycoding.openadhd.domain.LedgerReason
 import com.usuallycoding.openadhd.domain.OpenAdhdStore
 import com.usuallycoding.openadhd.domain.PlannedTask
 import com.usuallycoding.openadhd.domain.Redemption
+import com.usuallycoding.openadhd.domain.RedemptionSource
 import com.usuallycoding.openadhd.domain.RewardTemplate
 import com.usuallycoding.openadhd.domain.RewardTier
+import com.usuallycoding.openadhd.domain.RollResult
+import com.usuallycoding.openadhd.domain.RollRules
 import com.usuallycoding.openadhd.domain.TaskTemplate
 import com.usuallycoding.openadhd.domain.Tier
 import com.usuallycoding.openadhd.domain.newId
@@ -19,6 +22,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
 import kotlinx.datetime.LocalDate
+import kotlin.random.Random
 import kotlin.time.Clock
 
 /** The whole persisted state; also the unit a persistent store reads and writes. */
@@ -31,7 +35,7 @@ data class StoreState(
 )
 
 /** Pure state transitions shared by every [OpenAdhdStore] implementation. */
-internal class StoreLogic(private val clock: Clock) {
+internal class StoreLogic(private val clock: Clock, private val random: Random = Random.Default) {
     fun create(
         state: StoreState,
         name: String,
@@ -104,6 +108,27 @@ internal class StoreLogic(private val clock: Clock) {
         return state.copy(redemptions = state.redemptions + redemption, ledger = state.ledger + spend)
     }
 
+    /**
+     * Returns the new state and the roll result, or null when the tier cannot be rolled, the id was used, the
+     * balance is too low, or the tier has no rewards.
+     */
+    fun mysteryRoll(state: StoreState, tier: RewardTier, redemptionId: String): Pair<StoreState, RollResult>? {
+        if (tier !in RollRules.RollableTiers) return null
+        if (state.redemptions.any { it.id == redemptionId }) return null
+        val price = RollRules.price(tier)
+        if (CoinRules.balance(state.ledger) < price) return null
+        val outcome = RollRules.choose(random, tier, state.rewards) ?: return null
+        val now = clock.now()
+        val reward = outcome.reward
+        val redemption = Redemption(
+            redemptionId, reward.id, reward.name, reward.tier, reward.energy, price, now,
+            RedemptionSource.Roll, tier,
+        )
+        val spend = LedgerEntry(newId(), -price, now, LedgerReason.MysteryRoll, redemptionId)
+        val next = state.copy(redemptions = state.redemptions + redemption, ledger = state.ledger + spend)
+        return next to RollResult(redemption, outcome.upgraded)
+    }
+
     /** Returns the new state, or null when the subtask is unknown or already completed. */
     fun completeSubtask(state: StoreState, id: String): StoreState? {
         val task = state.planned.firstOrNull { entry -> entry.subtasks.any { it.id == id } } ?: return null
@@ -124,8 +149,9 @@ internal class StoreLogic(private val clock: Clock) {
 class InMemoryStore(
     clock: Clock = Clock.System,
     initial: StoreState = StoreState(),
+    random: Random = Random.Default,
 ) : OpenAdhdStore {
-    private val logic = StoreLogic(clock)
+    private val logic = StoreLogic(clock, random)
     private val state = MutableStateFlow(initial)
 
     override val templates: Flow<List<TaskTemplate>> = state.map { it.templates }
@@ -193,6 +219,14 @@ class InMemoryStore(
 
     override suspend fun redeem(rewardId: String, redemptionId: String): Boolean =
         transition { logic.redeem(it, rewardId, redemptionId) }
+
+    override suspend fun mysteryRoll(tier: RewardTier, redemptionId: String): RollResult? {
+        while (true) {
+            val before = state.value
+            val (after, result) = logic.mysteryRoll(before, tier, redemptionId) ?: return null
+            if (state.compareAndSet(before, after)) return result
+        }
+    }
 
     override suspend fun completeTask(id: String): Boolean = transition { logic.completeTask(it, id) }
 

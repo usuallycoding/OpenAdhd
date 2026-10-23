@@ -8,6 +8,7 @@ import com.usuallycoding.openadhd.domain.RewardTier
 import com.usuallycoding.openadhd.domain.Tier
 import com.usuallycoding.openadhd.ui.rewards.RewardTemplatesViewModel
 import com.usuallycoding.openadhd.ui.shop.ShopViewModel
+import com.usuallycoding.openadhd.ui.shop.buildRollOptions
 import com.usuallycoding.openadhd.ui.shop.buildShelves
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -146,6 +147,109 @@ class RewardViewModelsTest {
 
         vm.redeem(reward.id, "same")
         vm.redeem(reward.id, "same")
+
+        assertEquals(30, vm.balance.value)
+        assertEquals(1, vm.history.value.size)
+        vm.viewModelScope.cancel()
+    }
+
+    // ---- mystery rolls
+
+    private suspend fun earnOn(target: InMemoryStore, tier: Tier) {
+        val entry = target.assign(target.create("Earn ${tier.level}", tier, Energy.Low), clock.todayIn(TimeZone.UTC))
+        target.completeTask(entry.id)
+    }
+
+    @Test
+    fun `roll options show price affordability and whether an upgrade is possible`() {
+        val rewards = listOf(reward("a", RewardTier.One), reward("b", RewardTier.Two), reward("d", RewardTier.Four))
+        val options = buildRollOptions(rewards, balance = 30).associateBy { it.tier }
+
+        assertEquals(listOf(RewardTier.One, RewardTier.Two, RewardTier.Three, RewardTier.Four), options.keys.toList())
+        assertEquals(listOf(20, 50, 120, 300), options.values.map { it.price })
+
+        val one = options.getValue(RewardTier.One)
+        assertTrue(one.canRoll)
+        assertEquals(RewardTier.Two, one.upgradeTier)
+
+        val two = options.getValue(RewardTier.Two)
+        assertFalse(two.affordable)
+        assertEquals(20, two.coinsNeeded)
+        assertFalse(two.canRoll)
+        assertEquals(null, two.upgradeTier)
+
+        val three = options.getValue(RewardTier.Three)
+        assertFalse(three.hasRewards)
+        assertFalse(three.canRoll)
+        assertEquals(RewardTier.Four, three.upgradeTier)
+
+        assertEquals(null, options.getValue(RewardTier.Four).upgradeTier)
+    }
+
+    @Test
+    fun `rolling spends the price and shows the result until it is dismissed`() = runTest {
+        val rolling = InMemoryStore(clock, random = ScriptedRandom(3, 0))
+        earnOn(rolling, Tier.Four)
+        earnOn(rolling, Tier.Three)
+        rolling.createReward("Movie night", RewardTier.Two, Energy.Low)
+        rolling.createReward("Dinner out", RewardTier.Three, Energy.High)
+        val vm = ShopViewModel(rolling)
+
+        vm.roll(RewardTier.Two, "roll1")
+
+        val result = vm.lastRoll.value!!
+        assertEquals("Movie night", result.redemption.name)
+        assertFalse(result.upgraded)
+        assertEquals(10, vm.balance.value)
+        assertEquals(1, vm.history.value.size)
+
+        vm.dismissRoll()
+        assertEquals(null, vm.lastRoll.value)
+        vm.viewModelScope.cancel()
+    }
+
+    @Test
+    fun `a lucky upgrade is reported in the result`() = runTest {
+        val rolling = InMemoryStore(clock, random = ScriptedRandom(0, 0))
+        earnOn(rolling, Tier.Four)
+        earnOn(rolling, Tier.Three)
+        rolling.createReward("Movie night", RewardTier.Two, Energy.Low)
+        rolling.createReward("Dinner out", RewardTier.Three, Energy.High)
+        val vm = ShopViewModel(rolling)
+
+        vm.roll(RewardTier.Two, "roll1")
+
+        val result = vm.lastRoll.value!!
+        assertTrue(result.upgraded)
+        assertEquals("Dinner out", result.redemption.name)
+        assertEquals(10, vm.balance.value)
+        vm.viewModelScope.cancel()
+    }
+
+    @Test
+    fun `a refused roll leaves no result and spends nothing`() = runTest {
+        val rolling = InMemoryStore(clock, random = ScriptedRandom())
+        earnOn(rolling, Tier.Three)
+        rolling.createReward("Movie night", RewardTier.Two, Energy.Low)
+        val vm = ShopViewModel(rolling)
+
+        vm.roll(RewardTier.Two, "roll1")
+
+        assertEquals(null, vm.lastRoll.value)
+        assertEquals(20, vm.balance.value)
+        assertTrue(vm.history.value.isEmpty())
+        vm.viewModelScope.cancel()
+    }
+
+    @Test
+    fun `confirming a roll twice with the same id rolls once`() = runTest {
+        val rolling = InMemoryStore(clock, random = ScriptedRandom(3, 0))
+        repeat(2) { earnOn(rolling, Tier.Four) }
+        rolling.createReward("Movie night", RewardTier.Two, Energy.Low)
+        val vm = ShopViewModel(rolling)
+
+        vm.roll(RewardTier.Two, "same")
+        vm.roll(RewardTier.Two, "same")
 
         assertEquals(30, vm.balance.value)
         assertEquals(1, vm.history.value.size)

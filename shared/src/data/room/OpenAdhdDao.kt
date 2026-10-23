@@ -6,9 +6,12 @@ import androidx.room.Query
 import androidx.room.Transaction
 import androidx.room.Update
 import com.usuallycoding.openadhd.domain.LedgerReason
+import com.usuallycoding.openadhd.domain.RedemptionSource
 import com.usuallycoding.openadhd.domain.RewardRules
 import com.usuallycoding.openadhd.domain.RewardTier
+import com.usuallycoding.openadhd.domain.RollRules
 import kotlinx.coroutines.flow.Flow
+import kotlin.random.Random
 
 @Dao
 abstract class OpenAdhdDao {
@@ -133,9 +136,45 @@ abstract class OpenAdhdDao {
         val reward = rewardById(rewardId) ?: return false
         val price = RewardRules.price(RewardTier.fromLevel(reward.tier), reward.customPrice)
         if (balance() < price) return false
-        insertRedemption(RedemptionEntity(redemptionId, reward.id, reward.name, reward.tier, reward.energy, price, at))
+        insertRedemption(
+            RedemptionEntity(
+                redemptionId, reward.id, reward.name, reward.tier, reward.energy, price, at,
+                RedemptionSource.Purchase.name, null,
+            ),
+        )
         insertLedger(LedgerEntity(ledgerId, -price, at, LedgerReason.RewardRedeemed.name, redemptionId))
         return true
+    }
+
+    @Query("SELECT * FROM reward_templates ORDER BY rowid")
+    abstract suspend fun allRewards(): List<RewardTemplateEntity>
+
+    /**
+     * Rolls for a reward in one transaction: refused (null) if the tier cannot be rolled, the redemption id is
+     * used, the balance is lower than the roll price, or the tier has no rewards. The balance read, the random
+     * choice and the writes share the transaction, so no other spend can slip in between.
+     */
+    @Transaction
+    open suspend fun mysteryRoll(
+        tier: RewardTier,
+        redemptionId: String,
+        ledgerId: String,
+        at: Long,
+        random: Random,
+    ): RedemptionEntity? {
+        if (tier !in RollRules.RollableTiers) return null
+        if (redemptionCount(redemptionId) > 0) return null
+        val price = RollRules.price(tier)
+        if (balance() < price) return null
+        val outcome = RollRules.choose(random, tier, allRewards().map { it.toDomain() }) ?: return null
+        val reward = outcome.reward
+        val redemption = RedemptionEntity(
+            redemptionId, reward.id, reward.name, reward.tier.level, reward.energy.name, price, at,
+            RedemptionSource.Roll.name, tier.level,
+        )
+        insertRedemption(redemption)
+        insertLedger(LedgerEntity(ledgerId, -price, at, LedgerReason.MysteryRoll.name, redemptionId))
+        return redemption
     }
 
     // ---- completion

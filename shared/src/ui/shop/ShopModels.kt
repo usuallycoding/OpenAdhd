@@ -2,6 +2,7 @@ package com.usuallycoding.openadhd.ui.shop
 
 import com.usuallycoding.openadhd.domain.RewardTemplate
 import com.usuallycoding.openadhd.domain.RewardTier
+import com.usuallycoding.openadhd.domain.RollRules
 
 /** A reward as the shop shows it, given the current balance. */
 data class ShopItem(val reward: RewardTemplate, val affordable: Boolean, val coinsNeeded: Int)
@@ -23,5 +24,31 @@ fun buildShelves(rewards: List<RewardTemplate>, balance: Int): List<ShopShelf> =
             ordered.map { reward ->
                 ShopItem(reward, affordable = balance >= reward.price, coinsNeeded = maxOf(0, reward.price - balance))
             },
+        )
+    }
+
+/** One mystery roll as the shop shows it. [upgradeTier] is set only when the next tier has rewards to upgrade to. */
+data class RollOption(
+    val tier: RewardTier,
+    val price: Int,
+    val affordable: Boolean,
+    val coinsNeeded: Int,
+    val hasRewards: Boolean,
+    val upgradeTier: RewardTier?,
+) {
+    val canRoll: Boolean get() = affordable && hasRewards
+}
+
+/** The four rolls, tiers 1 to 4, given the rewards that exist and the current balance. */
+fun buildRollOptions(rewards: List<RewardTemplate>, balance: Int): List<RollOption> =
+    RollRules.RollableTiers.map { tier ->
+        val price = RollRules.price(tier)
+        RollOption(
+            tier = tier,
+            price = price,
+            affordable = balance >= price,
+            coinsNeeded = maxOf(0, price - balance),
+            hasRewards = rewards.any { it.tier == tier },
+            upgradeTier = RollRules.nextTier(tier)?.takeIf { next -> rewards.any { it.tier == next } },
         )
     }

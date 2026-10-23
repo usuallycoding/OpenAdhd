@@ -32,6 +32,10 @@ Every change to the user's coins SHALL be recorded as a ledger entry with an amo
 - **WHEN** a reward costing 50 coins is redeemed
 - **THEN** a ledger entry of -50 with a reward-redeemed reason referencing that redemption is added
 
+#### Scenario: Mystery roll recorded
+- **WHEN** a tier 2 mystery roll is made
+- **THEN** a ledger entry of -50 with a mystery-roll reason referencing the resulting redemption is added
+
 #### Scenario: History preserved
 - **WHEN** the source template of a ledger entry is deleted
 - **THEN** the ledger entry remains unchanged

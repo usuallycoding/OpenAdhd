@@ -7,7 +7,7 @@ Guarantees that the user's templates, daily entries and coin history stay on the
 ## Requirements
 
 ### Requirement: Data survives restart
-On Android, iOS and desktop, task templates with their descriptions and subtasks, Today entries with their subtask progress, reward templates, redemptions and the coin ledger SHALL be saved on the device and restored when the app is reopened.
+On Android, iOS and desktop, task templates with their descriptions and subtasks, Today entries with their subtask progress, reward templates, redemptions with how each was obtained, and the coin ledger SHALL be saved on the device and restored when the app is reopened.
 
 #### Scenario: Restart keeps data
 - **WHEN** the user creates a template, completes an entry for coins, and restarts the app
@@ -20,6 +20,10 @@ On Android, iOS and desktop, task templates with their descriptions and subtasks
 #### Scenario: Restart keeps rewards and purchases
 - **WHEN** the user creates a reward, redeems it for coins, and restarts the app
 - **THEN** the reward, the redemption in the history and the reduced balance are all present
+
+#### Scenario: Restart keeps rolls
+- **WHEN** the user makes a mystery roll and restarts the app
+- **THEN** the won reward is still in the history, still marked as a mystery roll of the same tier, and the reduced balance is present
 
 ### Requirement: Data stays on the device
 The app SHALL NOT send the user's data to any remote service, and MUST NOT require an account.
@@ -38,3 +42,7 @@ When the app is updated from an earlier version, all templates, Today entries an
 #### Scenario: Upgrade adds an empty shop
 - **WHEN** the app is updated from the version that has no rewards
 - **THEN** the reward list and the redemption history are empty and the balance is unchanged
+
+#### Scenario: Upgrade keeps earlier purchases
+- **WHEN** the app is updated from the version that has the shop but no mystery rolls, and the history holds two purchases
+- **THEN** both purchases are still in the history, shown as purchases rather than rolls, and the balance is unchanged

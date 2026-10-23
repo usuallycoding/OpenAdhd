@@ -7,6 +7,7 @@ import com.usuallycoding.openadhd.domain.PlannedTask
 import com.usuallycoding.openadhd.domain.Redemption
 import com.usuallycoding.openadhd.domain.RewardTemplate
 import com.usuallycoding.openadhd.domain.RewardTier
+import com.usuallycoding.openadhd.domain.RollResult
 import com.usuallycoding.openadhd.domain.TaskTemplate
 import com.usuallycoding.openadhd.domain.Tier
 import com.usuallycoding.openadhd.domain.newId
@@ -15,11 +16,13 @@ import com.usuallycoding.openadhd.domain.validated
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 import kotlinx.datetime.LocalDate
+import kotlin.random.Random
 import kotlin.time.Clock
 
 class RoomStore(
     private val database: OpenAdhdDatabase,
     private val clock: Clock = Clock.System,
+    private val random: Random = Random.Default,
 ) : OpenAdhdStore {
     private val dao = database.dao()
 
@@ -79,6 +82,12 @@ class RoomStore(
 
     override suspend fun redeem(rewardId: String, redemptionId: String): Boolean =
         dao.redeemReward(rewardId, redemptionId, newId(), clock.now().toEpochMilliseconds())
+
+    override suspend fun mysteryRoll(tier: RewardTier, redemptionId: String): RollResult? =
+        dao.mysteryRoll(tier, redemptionId, newId(), clock.now().toEpochMilliseconds(), random)?.let { entity ->
+            val redemption = entity.toDomain()
+            RollResult(redemption, redemption.isLuckyUpgrade)
+        }
 
     override suspend fun completeTask(id: String): Boolean =
         dao.completeTask(id, clock.now().toEpochMilliseconds(), newId())
