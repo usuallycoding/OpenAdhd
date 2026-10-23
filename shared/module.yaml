@@ -4,6 +4,7 @@ product:
 
 dependencies:
   - $compose.runtime
+  - $compose.runtimeSaveable
   - $compose.foundation
   - $compose.material3
   - $compose.ui
