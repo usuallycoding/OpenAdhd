@@ -13,11 +13,26 @@ dependencies:
   - $compose.hotReload.runtimeApi
   - $libs.androidx.lifecycle.viewmodel.compose
   - $libs.androidx.lifecycle.runtime.compose
+  - $libs.kotlinx.coroutines.core
+  - $libs.kotlinx.datetime
+  - androidx.room:room-runtime:2.8.4
+  - androidx.sqlite:sqlite-bundled:2.6.2
+
+test-dependencies:
+  - $libs.kotlinx.coroutines.test
+  - $compose.uiTest
+
+test-dependencies@jvm:
+  - $compose.desktop.currentOs
 
 dependencies@android:
   - $compose.uiTooling
 
 settings:
+  kotlin:
+    ksp:
+      processors:
+        - androidx.room:room-compiler:2.8.4
   compose:
     enabled: true
     resources:

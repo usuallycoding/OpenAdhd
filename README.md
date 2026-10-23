@@ -7,6 +7,10 @@ This is a Kotlin Multiplatform project targeting Android, Desktop (JVM) and iOS,
 
 The `kotlin` (macOS/Linux) and `kotlin.bat` (Windows) scripts in the project root are self-bootstrapping wrappers for the Kotlin Toolchain: they download the pinned toolchain version on first use, so no separate installation is required. Build the whole project with `./kotlin build`.
 
+### Data
+
+Templates, daily tasks and the coin ledger are stored locally in a SQLite database (`openadhd.db`) and never leave the device. On desktop it lives in `~/.openadhd/`; on Android it is in the app's database folder, and on iOS in the app's Documents folder.
+
 ### Running
 
 Use the run configurations provided by the run widget in your IDE's toolbar. You can also run each module from the command line:

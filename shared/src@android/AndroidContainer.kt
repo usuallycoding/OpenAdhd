@@ -1,0 +1,16 @@
+package com.usuallycoding.openadhd.data
+
+import android.content.Context
+import androidx.room.Room
+import com.usuallycoding.openadhd.data.room.OpenAdhdDatabase
+import com.usuallycoding.openadhd.data.room.RoomStore
+import com.usuallycoding.openadhd.data.room.buildOpenAdhdDatabase
+
+fun createAndroidContainer(context: Context): AppContainer {
+    val appContext = context.applicationContext
+    val database = Room.databaseBuilder<OpenAdhdDatabase>(
+        context = appContext,
+        name = appContext.getDatabasePath("openadhd.db").absolutePath,
+    ).buildOpenAdhdDatabase()
+    return AppContainer(RoomStore(database))
+}

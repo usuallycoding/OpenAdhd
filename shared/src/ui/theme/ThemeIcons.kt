@@ -8,7 +8,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.vector.addPathNodes
 import androidx.compose.ui.unit.dp
 
-private fun themeIcon(name: String, block: ImageVector.Builder.() -> Unit): ImageVector =
+internal fun themeIcon(name: String, block: ImageVector.Builder.() -> Unit): ImageVector =
     ImageVector.Builder(
         name = name,
         defaultWidth = 24.dp,
@@ -17,11 +17,11 @@ private fun themeIcon(name: String, block: ImageVector.Builder.() -> Unit): Imag
         viewportHeight = 24f,
     ).apply(block).build()
 
-private fun ImageVector.Builder.filled(pathData: String) {
+internal fun ImageVector.Builder.filled(pathData: String) {
     addPath(addPathNodes(pathData), fill = SolidColor(Color.Black))
 }
 
-private fun ImageVector.Builder.stroked(pathData: String) {
+internal fun ImageVector.Builder.stroked(pathData: String) {
     addPath(
         addPathNodes(pathData),
         stroke = SolidColor(Color.Black),
