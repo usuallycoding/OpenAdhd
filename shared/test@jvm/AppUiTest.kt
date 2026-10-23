@@ -386,4 +386,120 @@ class AppUiTest {
         onNodeWithText("7").assertExists()
         onNodeWithText("Critical", substring = true).assertDoesNotExist()
     }
+
+    // ---- smart randomizer
+
+    private fun randomizerStore(vararg templates: Pair<String, Energy>, withKitchen: Boolean = false): InMemoryStore {
+        val store = InMemoryStore()
+        runBlocking {
+            templates.forEach { (name, energy) -> store.create(name, Tier.Two, energy) }
+            if (withKitchen) {
+                store.create("Clean the kitchen", Tier.Three, Energy.High, "Whole room", listOf("Dishes", "Counters", "Trash"))
+            }
+        }
+        return store
+    }
+
+    private fun randomizerContent(store: InMemoryStore, vararg draws: Int): AppContainer =
+        AppContainer(store, dateCheckInterval = null, random = ScriptedRandom(*draws))
+
+    @Test
+    fun `pick one for me suggests a task and accepting adds it to today`() = runComposeUiTest {
+        // High day over [Dishes (Low, 1), Emails (Medium, 2), Clean the kitchen (High, 4)]: draw 3 lands on the kitchen
+        val store = randomizerStore("Dishes" to Energy.Low, "Emails" to Energy.Medium, withKitchen = true)
+        setContent { App(randomizerContent(store, 3)) }
+
+        onNodeWithText("Pick one for me").performClick()
+        onNodeWithText("How much energy do you have?").assertExists()
+        onNodeWithText("High").performClick()
+
+        onNodeWithText("How about this one?").assertExists()
+        onNodeWithText("Clean the kitchen").assertExists()
+        onNodeWithText("Whole room").assertExists()
+        onNodeWithText("Tier 3 · High energy · 3 subtasks").assertExists()
+        onNodeWithText("20 coins").assertExists()
+        // nothing is added just by suggesting
+        onNodeWithText("Nothing planned for today.").assertExists()
+
+        onNodeWithText("Add to today").performClick()
+
+        onNodeWithText("How about this one?").assertDoesNotExist()
+        onNodeWithText("Clean the kitchen").assertExists()
+        onNodeWithText("Tier 3 · High energy · 0 of 3 done").assertExists()
+        onAllNodesWithText("+7").assertCountEquals(2)
+    }
+
+    @Test
+    fun `another shows different tasks and then says that was everything`() = runComposeUiTest {
+        // Medium day over [Dishes (Low, 2), Emails (Medium, 4)]: draw 0 is Dishes, then only Emails is left
+        val store = randomizerStore("Dishes" to Energy.Low, "Emails" to Energy.Medium, withKitchen = true)
+        setContent { App(randomizerContent(store, 0, 0)) }
+
+        // the dice button is always there, also when Today is empty
+        onNodeWithContentDescription("Pick one for me").assertExists()
+        onNodeWithText("Pick one for me").performClick()
+        onNodeWithText("Medium").performClick()
+        onNodeWithText("Dishes").assertExists()
+
+        onNodeWithText("Another").performClick()
+        onNodeWithText("Emails").assertExists()
+        onNodeWithText("Clean the kitchen").assertDoesNotExist() // needs more energy than Medium
+
+        onNodeWithText("Another").performClick()
+        onNodeWithText("That was everything that fits").assertExists()
+        onNodeWithText("Choose another energy").performClick()
+        onNodeWithText("How much energy do you have?").assertExists()
+    }
+
+    @Test
+    fun `not now leaves today unchanged`() = runComposeUiTest {
+        val store = randomizerStore("Dishes" to Energy.Low)
+        setContent { App(randomizerContent(store, 0)) }
+
+        onNodeWithText("Pick one for me").performClick()
+        onNodeWithText("Low").performClick()
+        onNodeWithText("Dishes").assertExists()
+        onNodeWithText("Not now").performClick()
+
+        onNodeWithText("How about this one?").assertDoesNotExist()
+        onNodeWithText("Nothing planned for today.").assertExists()
+    }
+
+    @Test
+    fun `low energy never offers a task needing more and says when nothing fits`() = runComposeUiTest {
+        val store = randomizerStore("Emails" to Energy.Medium, withKitchen = true)
+        setContent { App(randomizerContent(store)) }
+
+        onNodeWithText("Pick one for me").performClick()
+        onNodeWithText("Low").performClick()
+
+        onNodeWithText("Nothing fits Low energy").assertExists()
+        onNodeWithText("How about this one?").assertDoesNotExist()
+    }
+
+    @Test
+    fun `a task already on today's list is never suggested`() = runComposeUiTest {
+        val store = randomizerStore("Dishes" to Energy.Medium, "Emails" to Energy.Medium)
+        runBlocking {
+            val planned = store.templates.first().first { it.name == "Emails" }
+            store.assign(planned, kotlin.time.Clock.System.todayIn(TimeZone.currentSystemDefault()))
+        }
+        setContent { App(randomizerContent(store, 0)) }
+
+        onNodeWithContentDescription("Pick one for me").performClick()
+        onNodeWithText("Medium").performClick()
+
+        onNodeWithText("How about this one?").assertExists()
+        onAllNodesWithText("Dishes").assertCountEquals(1) // only the suggestion; Emails is on the list already
+    }
+
+    @Test
+    fun `with no task templates it tells the user to create one`() = runComposeUiTest {
+        setContent { App(randomizerContent(InMemoryStore())) }
+
+        onNodeWithText("Pick one for me").performClick()
+
+        onNodeWithText("You have no task templates yet. Create one on the Templates tab first.").assertExists()
+        onNodeWithText("How about this one?").assertDoesNotExist()
+    }
 }

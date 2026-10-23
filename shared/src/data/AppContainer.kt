@@ -5,6 +5,7 @@ import com.usuallycoding.openadhd.data.room.RoomStore
 import com.usuallycoding.openadhd.domain.CriticalHits
 import com.usuallycoding.openadhd.domain.OpenAdhdStore
 import com.usuallycoding.openadhd.ui.today.DefaultDateCheckInterval
+import kotlin.random.Random
 import kotlin.time.Clock
 import kotlin.time.Duration
 
@@ -13,6 +14,7 @@ class AppContainer(
     val store: OpenAdhdStore,
     val clock: Clock = Clock.System,
     val dateCheckInterval: Duration? = DefaultDateCheckInterval,
+    val random: Random = Random.Default,
 )
 
 /**

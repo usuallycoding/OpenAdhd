@@ -4,6 +4,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
@@ -12,12 +13,14 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Checkbox
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.SmallFloatingActionButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -31,6 +34,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import com.usuallycoding.openadhd.domain.CoinRules
 import com.usuallycoding.openadhd.domain.Energy
 import com.usuallycoding.openadhd.domain.PlannedSubtask
 import com.usuallycoding.openadhd.domain.PlannedTask
@@ -38,6 +42,8 @@ import com.usuallycoding.openadhd.domain.TaskTemplate
 import com.usuallycoding.openadhd.domain.Tier
 import com.usuallycoding.openadhd.ui.theme.AddIcon
 import com.usuallycoding.openadhd.ui.theme.DeleteIcon
+import com.usuallycoding.openadhd.ui.theme.DiceIcon
+import com.usuallycoding.openadhd.ui.today.RandomizerState
 import com.usuallycoding.openadhd.ui.today.TodayViewModel
 import kotlinx.datetime.LocalDate
 import kotlin.time.Instant
@@ -46,6 +52,7 @@ import kotlin.time.Instant
 fun TodayScreen(viewModel: TodayViewModel, modifier: Modifier = Modifier) {
     val entries by viewModel.entries.collectAsStateWithLifecycle()
     val templates by viewModel.templates.collectAsStateWithLifecycle()
+    val randomizer by viewModel.randomizer.collectAsStateWithLifecycle()
     TodayContent(
         entries = entries,
         templates = templates,
@@ -53,6 +60,13 @@ fun TodayScreen(viewModel: TodayViewModel, modifier: Modifier = Modifier) {
         onRemove = viewModel::remove,
         onCompleteTask = viewModel::completeTask,
         onCompleteSubtask = viewModel::completeSubtask,
+        randomizer = randomizer,
+        onPickForMe = viewModel::openRandomizer,
+        onChooseEnergy = viewModel::chooseEnergy,
+        onAnother = viewModel::another,
+        onAcceptSuggestion = viewModel::acceptSuggestion,
+        onChooseAnotherEnergy = viewModel::chooseAnotherEnergy,
+        onDismissRandomizer = viewModel::dismissRandomizer,
         modifier = modifier,
     )
 }
@@ -66,6 +80,13 @@ fun TodayContent(
     onCompleteTask: (id: String) -> Unit,
     onCompleteSubtask: (id: String) -> Unit,
     modifier: Modifier = Modifier,
+    randomizer: RandomizerState = RandomizerState.Closed,
+    onPickForMe: () -> Unit = {},
+    onChooseEnergy: (Energy) -> Unit = {},
+    onAnother: () -> Unit = {},
+    onAcceptSuggestion: () -> Unit = {},
+    onChooseAnotherEnergy: () -> Unit = {},
+    onDismissRandomizer: () -> Unit = {},
 ) {
     var picking by remember { mutableStateOf(false) }
 
@@ -78,6 +99,7 @@ fun TodayContent(
             ) {
                 Text("Nothing planned for today.", style = MaterialTheme.typography.bodyLarge)
                 Button(onClick = { picking = true }) { Text("Add a task") }
+                Button(onClick = onPickForMe) { Text("Pick one for me") }
             }
         } else {
             LazyColumn(contentPadding = PaddingValues(bottom = 88.dp)) {
@@ -87,13 +109,28 @@ fun TodayContent(
                 }
             }
         }
-        FloatingActionButton(
-            onClick = { picking = true },
+        Column(
+            horizontalAlignment = Alignment.End,
+            verticalArrangement = Arrangement.spacedBy(12.dp),
             modifier = Modifier.align(Alignment.BottomEnd).padding(16.dp),
         ) {
-            Icon(AddIcon, contentDescription = "Add task to today")
+            SmallFloatingActionButton(onClick = onPickForMe) {
+                Icon(DiceIcon, contentDescription = "Pick one for me")
+            }
+            FloatingActionButton(onClick = { picking = true }) {
+                Icon(AddIcon, contentDescription = "Add task to today")
+            }
         }
     }
+
+    RandomizerDialog(
+        state = randomizer,
+        onChooseEnergy = onChooseEnergy,
+        onAnother = onAnother,
+        onAccept = onAcceptSuggestion,
+        onChooseAnotherEnergy = onChooseAnotherEnergy,
+        onDismiss = onDismissRandomizer,
+    )
 
     if (picking) {
         TemplatePickerDialog(
@@ -168,6 +205,72 @@ private fun PlannedTask.summary(): String {
 }
 
 @Composable
+private fun RandomizerDialog(
+    state: RandomizerState,
+    onChooseEnergy: (Energy) -> Unit,
+    onAnother: () -> Unit,
+    onAccept: () -> Unit,
+    onChooseAnotherEnergy: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    when (state) {
+        RandomizerState.Closed -> Unit
+
+        RandomizerState.NoTemplates -> AlertDialog(
+            onDismissRequest = onDismiss,
+            title = { Text("Pick one for me") },
+            text = { Text("You have no task templates yet. Create one on the Templates tab first.") },
+            confirmButton = { TextButton(onClick = onDismiss) { Text("Close") } },
+        )
+
+        RandomizerState.ChoosingEnergy -> AlertDialog(
+            onDismissRequest = onDismiss,
+            title = { Text("How much energy do you have?") },
+            text = {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Energy.entries.forEach { energy ->
+                        FilterChip(selected = false, onClick = { onChooseEnergy(energy) }, label = { Text(energy.name) })
+                    }
+                }
+            },
+            confirmButton = {},
+            dismissButton = { TextButton(onClick = onDismiss) { Text("Not now") } },
+        )
+
+        is RandomizerState.Suggesting -> AlertDialog(
+            onDismissRequest = onDismiss,
+            title = { Text("How about this one?") },
+            text = {
+                val template = state.template
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text(template.name, style = MaterialTheme.typography.titleMedium)
+                    if (template.description.isNotBlank()) Text(template.description)
+                    Text(template.description())
+                    Text("${CoinRules.baseReward(template.tier)} coins")
+                }
+            },
+            confirmButton = {
+                Row {
+                    TextButton(onClick = onAnother) { Text("Another") }
+                    TextButton(onClick = onAccept) { Text("Add to today") }
+                }
+            },
+            dismissButton = { TextButton(onClick = onDismiss) { Text("Not now") } },
+        )
+
+        is RandomizerState.NothingFits -> AlertDialog(
+            onDismissRequest = onDismiss,
+            title = {
+                Text(if (state.exhausted) "That was everything that fits" else "Nothing fits ${state.energy.name} energy")
+            },
+            text = { Text("Try a different energy, or pick from your list with the + button.") },
+            confirmButton = { TextButton(onClick = onChooseAnotherEnergy) { Text("Choose another energy") } },
+            dismissButton = { TextButton(onClick = onDismiss) { Text("Close") } },
+        )
+    }
+}
+
+@Composable
 private fun TemplatePickerDialog(
     templates: List<TaskTemplate>,
     onPick: (TaskTemplate) -> Unit,
@@ -218,6 +321,10 @@ private fun TodayContentPreview() {
             onRemove = {},
             onCompleteTask = {},
             onCompleteSubtask = {},
+            randomizer = RandomizerState.Suggesting(
+                Energy.Medium,
+                TaskTemplate("t", "Clean the kitchen", Tier.Three, Energy.Medium, "Whole room", listOf("Dishes", "Counters")),
+            ),
         )
     }
 }

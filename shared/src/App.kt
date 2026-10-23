@@ -62,7 +62,7 @@ fun App(container: AppContainer) {
     var themeMode by rememberSaveable { mutableStateOf(ThemeMode.System) }
     var destination by rememberSaveable { mutableStateOf(Destination.Today) }
 
-    val todayViewModel = viewModel { TodayViewModel(container.store, container.clock, dateCheckInterval = container.dateCheckInterval) }
+    val todayViewModel = viewModel { TodayViewModel(container.store, container.clock, dateCheckInterval = container.dateCheckInterval, random = container.random) }
     val templatesViewModel = viewModel { TemplatesViewModel(container.store) }
     val rewardTemplatesViewModel = viewModel { RewardTemplatesViewModel(container.store) }
     val shopViewModel = viewModel { ShopViewModel(container.store) }
