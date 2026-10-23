@@ -3,6 +3,7 @@ package com.usuallycoding.openadhd
 import com.usuallycoding.openadhd.data.InMemoryStore
 import com.usuallycoding.openadhd.domain.Energy
 import com.usuallycoding.openadhd.domain.Tier
+import com.usuallycoding.openadhd.ui.templates.TemplateInputError
 import com.usuallycoding.openadhd.ui.templates.TemplatesViewModel
 import com.usuallycoding.openadhd.ui.today.TodayViewModel
 import com.usuallycoding.openadhd.ui.wallet.WalletViewModel
@@ -78,7 +79,7 @@ class ViewModelsTest {
         today.remove(today.entries.value.first().id)
         assertEquals(1, today.entries.value.size)
 
-        today.complete(today.entries.value.single().id)
+        today.completeTask(today.entries.value.single().id)
         assertTrue(today.entries.value.single().isCompleted)
         assertEquals(20, wallet.balance.value)
         today.viewModelScope.cancel()
@@ -98,6 +99,59 @@ class ViewModelsTest {
 
         assertEquals(LocalDate(2026, 10, 24), today.today.value)
         assertTrue(today.entries.value.isEmpty())
+        today.viewModelScope.cancel()
+    }
+
+    @Test
+    fun `input is validated for name subtask titles and the tier's subtask limit`() {
+        assertEquals(null, TemplatesViewModel.validate("Clean", Tier.One, listOf("Dishes")))
+        assertEquals(TemplateInputError.NameRequired, TemplatesViewModel.validate("  ", Tier.One, emptyList()))
+        assertEquals(TemplateInputError.SubtaskTitleRequired, TemplatesViewModel.validate("Clean", Tier.One, listOf("Dishes", " ")))
+        assertEquals(null, TemplatesViewModel.validate("Clean", Tier.One, List(5) { "Step" }))
+        assertEquals(TemplateInputError.TooManySubtasks, TemplatesViewModel.validate("Clean", Tier.One, List(6) { "Step" }))
+        assertEquals(null, TemplatesViewModel.validate("Clean", Tier.Two, List(6) { "Step" }))
+        assertEquals(null, TemplatesViewModel.validate("Clean", Tier.Four, List(10) { "Step" }))
+        assertEquals(TemplateInputError.TooManySubtasks, TemplatesViewModel.validate("Clean", Tier.Four, List(11) { "Step" }))
+    }
+
+    @Test
+    fun `templates view model saves description and subtasks and ignores invalid ones`() = runTest {
+        val vm = TemplatesViewModel(store)
+        vm.save(null, "Clean", Tier.Three, Energy.Low, "Whole room", listOf("Dishes", "Counters"))
+        val saved = vm.templates.value.single()
+        assertEquals("Whole room", saved.description)
+        assertEquals(listOf("Dishes", "Counters"), saved.subtasks)
+
+        vm.save(saved.id, "Clean", Tier.Three, Energy.Low, "Whole room", listOf("Dishes", ""))
+        vm.save(null, "Too many", Tier.One, Energy.Low, "", List(6) { "Step" })
+        assertEquals(listOf(saved), vm.templates.value)
+    }
+
+    @Test
+    fun `today view model shows partial progress and applies the removal rule`() = runTest {
+        val template = store.create("Clean", Tier.Three, Energy.Low, subtasks = listOf("A", "B", "C"))
+        val today = TodayViewModel(store, clock, TimeZone.UTC)
+        val wallet = WalletViewModel(store)
+
+        today.assign(template)
+        today.assign(template)
+        val (started, untouched) = today.entries.value
+        today.completeSubtask(started.subtasks.first().id)
+
+        assertEquals(7, wallet.balance.value)
+        assertTrue(today.entries.value.first().hasProgress)
+        assertFalse(today.entries.value.first().isCompleted)
+
+        today.remove(started.id)
+        today.remove(untouched.id)
+        assertEquals(listOf(started.id), today.entries.value.map { it.id })
+
+        today.completeTask(started.id)
+        assertEquals(7, wallet.balance.value)
+
+        started.subtasks.drop(1).forEach { today.completeSubtask(it.id) }
+        assertTrue(today.entries.value.single().isCompleted)
+        assertEquals(20, wallet.balance.value)
         today.viewModelScope.cancel()
     }
 }

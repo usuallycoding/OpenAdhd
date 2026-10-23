@@ -32,16 +32,25 @@ class RoomStoreTest : StoreContractTest() {
 
         val firstDb = Room.databaseBuilder<OpenAdhdDatabase>(file).buildOpenAdhdDatabase()
         val first = RoomStore(firstDb, clock)
-        val template = first.create("Taxes", Tier.Three, Energy.High)
-        val entry = first.assign(template, today)
-        assertTrue(first.complete(entry.id))
+        val simple = first.create("Taxes", Tier.Three, Energy.High)
+        val simpleEntry = first.assign(simple, today)
+        assertTrue(first.completeTask(simpleEntry.id))
+        val big = first.create("Clean the kitchen", Tier.Three, Energy.Medium, "Whole room", listOf("Dishes", "Counters", "Trash"))
+        val bigEntry = first.assign(big, today)
+        assertTrue(first.completeSubtask(bigEntry.subtasks[1].id))
         firstDb.close()
 
         val second = RoomStore(Room.databaseBuilder<OpenAdhdDatabase>(file).buildOpenAdhdDatabase(), clock)
-        assertEquals(listOf(template), second.templates.first())
-        val restored = second.entriesFor(today).first().single()
-        assertTrue(restored.isCompleted)
-        assertEquals("Taxes", restored.name)
-        assertEquals(20, CoinRules.balance(second.entries.first()))
+        assertEquals(listOf(simple, big), second.templates.first())
+
+        val restored = second.entriesFor(today).first().associateBy { it.name }
+        assertTrue(restored.getValue("Taxes").isCompleted)
+        val restoredBig = restored.getValue("Clean the kitchen")
+        assertEquals("Whole room", restoredBig.description)
+        assertEquals(listOf("Dishes", "Counters", "Trash"), restoredBig.subtasks.map { it.title })
+        assertEquals(listOf(false, true, false), restoredBig.subtasks.map { it.isCompleted })
+        assertTrue(restoredBig.hasProgress)
+        assertTrue(!restoredBig.isCompleted)
+        assertEquals(27, CoinRules.balance(second.entries.first()))
     }
 }

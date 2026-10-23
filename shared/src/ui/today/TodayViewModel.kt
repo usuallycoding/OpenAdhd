@@ -54,7 +54,12 @@ class TodayViewModel(
         viewModelScope.launch { store.remove(id) }
     }
 
-    fun complete(id: String) {
-        viewModelScope.launch { store.complete(id) }
+    /** Completes an entry that has no subtasks. */
+    fun completeTask(id: String) {
+        viewModelScope.launch { store.completeTask(id) }
+    }
+
+    fun completeSubtask(id: String) {
+        viewModelScope.launch { store.completeSubtask(id) }
     }
 }

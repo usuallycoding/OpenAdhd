@@ -1,6 +1,5 @@
 package com.usuallycoding.openadhd.data
 
-import com.usuallycoding.openadhd.domain.CoinRules
 import com.usuallycoding.openadhd.domain.Energy
 import com.usuallycoding.openadhd.domain.LedgerEntry
 import com.usuallycoding.openadhd.domain.LedgerReason
@@ -9,7 +8,8 @@ import com.usuallycoding.openadhd.domain.PlannedTask
 import com.usuallycoding.openadhd.domain.TaskTemplate
 import com.usuallycoding.openadhd.domain.Tier
 import com.usuallycoding.openadhd.domain.newId
-import com.usuallycoding.openadhd.domain.requireValidName
+import com.usuallycoding.openadhd.domain.toPlannedTask
+import com.usuallycoding.openadhd.domain.validated
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.map
@@ -26,13 +26,20 @@ data class StoreState(
 
 /** Pure state transitions shared by every [OpenAdhdStore] implementation. */
 internal class StoreLogic(private val clock: Clock) {
-    fun create(state: StoreState, name: String, tier: Tier, energy: Energy): Pair<StoreState, TaskTemplate> {
-        val template = TaskTemplate(newId(), requireValidName(name), tier, energy)
+    fun create(
+        state: StoreState,
+        name: String,
+        tier: Tier,
+        energy: Energy,
+        description: String,
+        subtasks: List<String>,
+    ): Pair<StoreState, TaskTemplate> {
+        val template = TaskTemplate(newId(), name, tier, energy, description, subtasks).validated()
         return state.copy(templates = state.templates + template) to template
     }
 
     fun update(state: StoreState, template: TaskTemplate): StoreState {
-        val valid = template.copy(name = requireValidName(template.name))
+        val valid = template.validated()
         return state.copy(templates = state.templates.map { if (it.id == valid.id) valid else it })
     }
 
@@ -40,21 +47,37 @@ internal class StoreLogic(private val clock: Clock) {
         state.copy(templates = state.templates.filterNot { it.id == id })
 
     fun assign(state: StoreState, template: TaskTemplate, date: LocalDate): Pair<StoreState, PlannedTask> {
-        val task = PlannedTask(newId(), date, template.name, template.tier, template.energy, template.id)
+        val task = template.toPlannedTask(date)
         return state.copy(planned = state.planned + task) to task
     }
 
     fun remove(state: StoreState, id: String): StoreState =
-        state.copy(planned = state.planned.filterNot { it.id == id && !it.isCompleted })
+        state.copy(planned = state.planned.filterNot { it.id == id && !it.hasProgress })
 
-    /** Returns the new state, or null when the entry is unknown or already completed. */
-    fun complete(state: StoreState, id: String): StoreState? {
+    /** Returns the new state, or null when the entry is unknown, has subtasks, or is already completed. */
+    fun completeTask(state: StoreState, id: String): StoreState? {
         val task = state.planned.firstOrNull { it.id == id } ?: return null
-        if (task.isCompleted) return null
+        if (task.subtasks.isNotEmpty() || task.isCompleted) return null
         val now = clock.now()
-        val reward = LedgerEntry(newId(), CoinRules.baseReward(task.tier), now, LedgerReason.TaskCompleted, task.id)
+        val reward = LedgerEntry(newId(), task.reward, now, LedgerReason.TaskCompleted, task.id)
         return state.copy(
             planned = state.planned.map { if (it.id == id) it.copy(completedAt = now) else it },
+            ledger = state.ledger + reward,
+        )
+    }
+
+    /** Returns the new state, or null when the subtask is unknown or already completed. */
+    fun completeSubtask(state: StoreState, id: String): StoreState? {
+        val task = state.planned.firstOrNull { entry -> entry.subtasks.any { it.id == id } } ?: return null
+        val subtask = task.subtasks.first { it.id == id }
+        if (subtask.isCompleted) return null
+        val now = clock.now()
+        val reward = LedgerEntry(newId(), subtask.reward, now, LedgerReason.SubtaskCompleted, subtask.id)
+        return state.copy(
+            planned = state.planned.map { entry ->
+                if (entry.id != task.id) entry
+                else entry.copy(subtasks = entry.subtasks.map { if (it.id == id) it.copy(completedAt = now) else it })
+            },
             ledger = state.ledger + reward,
         )
     }
@@ -73,15 +96,24 @@ class InMemoryStore(
     override fun entriesFor(date: LocalDate): Flow<List<PlannedTask>> =
         state.map { s -> s.planned.filter { it.date == date } }
 
-    override suspend fun create(name: String, tier: Tier, energy: Energy): TaskTemplate {
+    override suspend fun create(
+        name: String,
+        tier: Tier,
+        energy: Energy,
+        description: String,
+        subtasks: List<String>,
+    ): TaskTemplate {
+        // Validate before touching the state so invalid input throws to the caller.
+        TaskTemplate("", name, tier, energy, description, subtasks).validated()
         var created: TaskTemplate? = null
-        requireValidName(name)
-        state.update { s -> logic.create(s, name, tier, energy).also { created = it.second }.first }
+        state.update { s ->
+            logic.create(s, name, tier, energy, description, subtasks).also { created = it.second }.first
+        }
         return created!!
     }
 
     override suspend fun update(template: TaskTemplate) {
-        requireValidName(template.name)
+        template.validated()
         state.update { logic.update(it, template) }
     }
 
@@ -95,10 +127,14 @@ class InMemoryStore(
 
     override suspend fun remove(id: String) = state.update { logic.remove(it, id) }
 
-    override suspend fun complete(id: String): Boolean {
+    override suspend fun completeTask(id: String): Boolean = transition { logic.completeTask(it, id) }
+
+    override suspend fun completeSubtask(id: String): Boolean = transition { logic.completeSubtask(it, id) }
+
+    private fun transition(next: (StoreState) -> StoreState?): Boolean {
         while (true) {
             val before = state.value
-            val after = logic.complete(before, id) ?: return false
+            val after = next(before) ?: return false
             if (state.compareAndSet(before, after)) return true
         }
     }

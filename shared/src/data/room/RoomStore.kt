@@ -7,7 +7,8 @@ import com.usuallycoding.openadhd.domain.PlannedTask
 import com.usuallycoding.openadhd.domain.TaskTemplate
 import com.usuallycoding.openadhd.domain.Tier
 import com.usuallycoding.openadhd.domain.newId
-import com.usuallycoding.openadhd.domain.requireValidName
+import com.usuallycoding.openadhd.domain.toPlannedTask
+import com.usuallycoding.openadhd.domain.validated
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 import kotlinx.datetime.LocalDate
@@ -25,26 +26,36 @@ class RoomStore(
     override fun entriesFor(date: LocalDate): Flow<List<PlannedTask>> =
         dao.plannedFor(date.toString()).map { list -> list.map { it.toDomain() } }
 
-    override suspend fun create(name: String, tier: Tier, energy: Energy): TaskTemplate {
-        val template = TaskTemplate(newId(), requireValidName(name), tier, energy)
-        dao.insertTemplate(template.toEntity())
+    override suspend fun create(
+        name: String,
+        tier: Tier,
+        energy: Energy,
+        description: String,
+        subtasks: List<String>,
+    ): TaskTemplate {
+        val template = TaskTemplate(newId(), name, tier, energy, description, subtasks).validated()
+        dao.insertTemplateWithSubtasks(template.toEntity(), template.subtaskEntities())
         return template
     }
 
     override suspend fun update(template: TaskTemplate) {
-        dao.updateTemplate(template.copy(name = requireValidName(template.name)).toEntity())
+        val valid = template.validated()
+        dao.updateTemplateWithSubtasks(valid.toEntity(), valid.subtaskEntities())
     }
 
     override suspend fun delete(id: String) = dao.deleteTemplate(id)
 
     override suspend fun assign(template: TaskTemplate, date: LocalDate): PlannedTask {
-        val task = PlannedTask(newId(), date, template.name, template.tier, template.energy, template.id)
-        dao.insertPlanned(task.toEntity())
+        val task = template.toPlannedTask(date)
+        dao.insertPlannedWithSubtasks(task.toEntity(), task.subtaskEntities())
         return task
     }
 
-    override suspend fun remove(id: String) = dao.removePending(id)
+    override suspend fun remove(id: String) = dao.removePlanned(id)
 
-    override suspend fun complete(id: String): Boolean =
+    override suspend fun completeTask(id: String): Boolean =
         dao.completeTask(id, clock.now().toEpochMilliseconds(), newId())
+
+    override suspend fun completeSubtask(id: String): Boolean =
+        dao.completeSubtask(id, clock.now().toEpochMilliseconds(), newId())
 }

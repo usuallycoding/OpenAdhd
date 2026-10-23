@@ -5,15 +5,16 @@ import androidx.room.Insert
 import androidx.room.Query
 import androidx.room.Transaction
 import androidx.room.Update
-import com.usuallycoding.openadhd.domain.CoinRules
 import com.usuallycoding.openadhd.domain.LedgerReason
-import com.usuallycoding.openadhd.domain.Tier
 import kotlinx.coroutines.flow.Flow
 
 @Dao
 abstract class OpenAdhdDao {
+    // ---- templates
+
+    @Transaction
     @Query("SELECT * FROM templates ORDER BY rowid")
-    abstract fun templates(): Flow<List<TemplateEntity>>
+    abstract fun templates(): Flow<List<TemplateWithSubtasks>>
 
     @Insert
     abstract suspend fun insertTemplate(template: TemplateEntity)
@@ -21,23 +22,68 @@ abstract class OpenAdhdDao {
     @Update
     abstract suspend fun updateTemplate(template: TemplateEntity)
 
-    @Query("DELETE FROM templates WHERE id = :id")
-    abstract suspend fun deleteTemplate(id: String)
+    @Insert
+    abstract suspend fun insertTemplateSubtasks(subtasks: List<TemplateSubtaskEntity>)
 
+    @Query("DELETE FROM template_subtasks WHERE templateId = :templateId")
+    abstract suspend fun deleteTemplateSubtasks(templateId: String)
+
+    @Query("DELETE FROM templates WHERE id = :id")
+    abstract suspend fun deleteTemplateRow(id: String)
+
+    @Transaction
+    open suspend fun insertTemplateWithSubtasks(template: TemplateEntity, subtasks: List<TemplateSubtaskEntity>) {
+        insertTemplate(template)
+        insertTemplateSubtasks(subtasks)
+    }
+
+    @Transaction
+    open suspend fun updateTemplateWithSubtasks(template: TemplateEntity, subtasks: List<TemplateSubtaskEntity>) {
+        updateTemplate(template)
+        deleteTemplateSubtasks(template.id)
+        insertTemplateSubtasks(subtasks)
+    }
+
+    @Transaction
+    open suspend fun deleteTemplate(id: String) {
+        deleteTemplateSubtasks(id)
+        deleteTemplateRow(id)
+    }
+
+    // ---- planned tasks
+
+    @Transaction
     @Query("SELECT * FROM planned_tasks WHERE date = :date ORDER BY rowid")
-    abstract fun plannedFor(date: String): Flow<List<PlannedTaskEntity>>
+    abstract fun plannedFor(date: String): Flow<List<PlannedWithSubtasks>>
 
     @Insert
     abstract suspend fun insertPlanned(task: PlannedTaskEntity)
 
-    @Query("DELETE FROM planned_tasks WHERE id = :id AND completedAtMillis IS NULL")
-    abstract suspend fun removePending(id: String)
+    @Insert
+    abstract suspend fun insertPlannedSubtasks(subtasks: List<PlannedSubtaskEntity>)
 
-    @Query("SELECT * FROM planned_tasks WHERE id = :id")
-    abstract suspend fun plannedById(id: String): PlannedTaskEntity?
+    @Transaction
+    open suspend fun insertPlannedWithSubtasks(task: PlannedTaskEntity, subtasks: List<PlannedSubtaskEntity>) {
+        insertPlanned(task)
+        insertPlannedSubtasks(subtasks)
+    }
 
-    @Query("UPDATE planned_tasks SET completedAtMillis = :at WHERE id = :id AND completedAtMillis IS NULL")
-    abstract suspend fun markCompleted(id: String, at: Long): Int
+    /** Deletes an entry only if nothing in it has been completed; returns how many rows were removed. */
+    @Query(
+        """DELETE FROM planned_tasks WHERE id = :id AND completedAtMillis IS NULL
+           AND NOT EXISTS (SELECT 1 FROM planned_subtasks WHERE plannedTaskId = :id AND completedAtMillis IS NOT NULL)""",
+    )
+    abstract suspend fun deletePlannedIfUntouched(id: String): Int
+
+    @Query("DELETE FROM planned_subtasks WHERE plannedTaskId = :plannedTaskId")
+    abstract suspend fun deletePlannedSubtasks(plannedTaskId: String)
+
+    @Transaction
+    open suspend fun removePlanned(id: String) {
+        if (deletePlannedIfUntouched(id) > 0) deletePlannedSubtasks(id)
+    }
+
+    // ---- ledger
 
     @Query("SELECT * FROM ledger ORDER BY rowid")
     abstract fun ledger(): Flow<List<LedgerEntity>>
@@ -45,13 +91,36 @@ abstract class OpenAdhdDao {
     @Insert
     abstract suspend fun insertLedger(entry: LedgerEntity)
 
-    /** Marks the entry completed and appends its reward in one transaction; false if nothing changed. */
+    // ---- completion
+
+    @Query(
+        """UPDATE planned_tasks SET completedAtMillis = :at WHERE id = :id AND completedAtMillis IS NULL
+           AND NOT EXISTS (SELECT 1 FROM planned_subtasks WHERE plannedTaskId = :id)""",
+    )
+    abstract suspend fun markTaskCompleted(id: String, at: Long): Int
+
+    @Query("SELECT reward FROM planned_tasks WHERE id = :id")
+    abstract suspend fun taskReward(id: String): Int
+
+    @Query("UPDATE planned_subtasks SET completedAtMillis = :at WHERE id = :id AND completedAtMillis IS NULL")
+    abstract suspend fun markSubtaskCompleted(id: String, at: Long): Int
+
+    @Query("SELECT reward FROM planned_subtasks WHERE id = :id")
+    abstract suspend fun subtaskReward(id: String): Int
+
+    /** Marks a subtask-less task completed and appends its reward in one transaction; false if nothing changed. */
     @Transaction
     open suspend fun completeTask(id: String, at: Long, ledgerId: String): Boolean {
-        val task = plannedById(id) ?: return false
-        if (markCompleted(id, at) == 0) return false
-        val reward = CoinRules.baseReward(Tier.fromLevel(task.tier))
-        insertLedger(LedgerEntity(ledgerId, reward, at, LedgerReason.TaskCompleted.name, id))
+        if (markTaskCompleted(id, at) == 0) return false
+        insertLedger(LedgerEntity(ledgerId, taskReward(id), at, LedgerReason.TaskCompleted.name, id))
+        return true
+    }
+
+    /** Marks a subtask completed and appends its share in one transaction; false if nothing changed. */
+    @Transaction
+    open suspend fun completeSubtask(id: String, at: Long, ledgerId: String): Boolean {
+        if (markSubtaskCompleted(id, at) == 0) return false
+        insertLedger(LedgerEntity(ledgerId, subtaskReward(id), at, LedgerReason.SubtaskCompleted.name, id))
         return true
     }
 }

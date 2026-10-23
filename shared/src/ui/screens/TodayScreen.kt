@@ -31,16 +31,16 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import com.usuallycoding.openadhd.domain.CoinRules
 import com.usuallycoding.openadhd.domain.Energy
+import com.usuallycoding.openadhd.domain.PlannedSubtask
 import com.usuallycoding.openadhd.domain.PlannedTask
-import com.usuallycoding.openadhd.domain.Tier
-import kotlinx.datetime.LocalDate
-import kotlin.time.Instant
 import com.usuallycoding.openadhd.domain.TaskTemplate
-import com.usuallycoding.openadhd.ui.today.TodayViewModel
+import com.usuallycoding.openadhd.domain.Tier
 import com.usuallycoding.openadhd.ui.theme.AddIcon
 import com.usuallycoding.openadhd.ui.theme.DeleteIcon
+import com.usuallycoding.openadhd.ui.today.TodayViewModel
+import kotlinx.datetime.LocalDate
+import kotlin.time.Instant
 
 @Composable
 fun TodayScreen(viewModel: TodayViewModel, modifier: Modifier = Modifier) {
@@ -51,7 +51,8 @@ fun TodayScreen(viewModel: TodayViewModel, modifier: Modifier = Modifier) {
         templates = templates,
         onAssign = viewModel::assign,
         onRemove = viewModel::remove,
-        onComplete = viewModel::complete,
+        onCompleteTask = viewModel::completeTask,
+        onCompleteSubtask = viewModel::completeSubtask,
         modifier = modifier,
     )
 }
@@ -62,7 +63,8 @@ fun TodayContent(
     templates: List<TaskTemplate>,
     onAssign: (TaskTemplate) -> Unit,
     onRemove: (id: String) -> Unit,
-    onComplete: (id: String) -> Unit,
+    onCompleteTask: (id: String) -> Unit,
+    onCompleteSubtask: (id: String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     var picking by remember { mutableStateOf(false) }
@@ -80,32 +82,7 @@ fun TodayContent(
         } else {
             LazyColumn(contentPadding = PaddingValues(bottom = 88.dp)) {
                 items(entries, key = { it.id }) { entry ->
-                    ListItem(
-                        leadingContent = {
-                            Checkbox(
-                                checked = entry.isCompleted,
-                                enabled = !entry.isCompleted,
-                                onCheckedChange = { onComplete(entry.id) },
-                            )
-                        },
-                        headlineContent = {
-                            Text(
-                                entry.name,
-                                textDecoration = if (entry.isCompleted) TextDecoration.LineThrough else null,
-                            )
-                        },
-                        supportingContent = {
-                            Text(
-                                "Tier ${entry.tier.level} · ${entry.energy.name} energy · " +
-                                    "+${CoinRules.baseReward(entry.tier)} coins",
-                            )
-                        },
-                        trailingContent = if (entry.isCompleted) null else ({
-                            IconButton(onClick = { onRemove(entry.id) }) {
-                                Icon(DeleteIcon, contentDescription = "Remove ${entry.name} from today")
-                            }
-                        }),
-                    )
+                    EntryItem(entry, onRemove, onCompleteTask, onCompleteSubtask)
                     HorizontalDivider()
                 }
             }
@@ -124,6 +101,69 @@ fun TodayContent(
             onPick = { onAssign(it); picking = false },
             onDismiss = { picking = false },
         )
+    }
+}
+
+@Composable
+private fun EntryItem(
+    entry: PlannedTask,
+    onRemove: (String) -> Unit,
+    onCompleteTask: (String) -> Unit,
+    onCompleteSubtask: (String) -> Unit,
+) {
+    val hasSubtasks = entry.subtasks.isNotEmpty()
+    ListItem(
+        leadingContent = if (hasSubtasks) null else ({
+            Checkbox(
+                checked = entry.isCompleted,
+                enabled = !entry.isCompleted,
+                onCheckedChange = { onCompleteTask(entry.id) },
+            )
+        }),
+        headlineContent = {
+            Text(entry.name, textDecoration = if (entry.isCompleted) TextDecoration.LineThrough else null)
+        },
+        supportingContent = {
+            Column {
+                if (entry.description.isNotBlank()) Text(entry.description)
+                Text(entry.summary())
+            }
+        },
+        trailingContent = if (entry.hasProgress) null else ({
+            IconButton(onClick = { onRemove(entry.id) }) {
+                Icon(DeleteIcon, contentDescription = "Remove ${entry.name} from today")
+            }
+        }),
+    )
+    entry.subtasks.forEach { subtask ->
+        SubtaskItem(subtask, onComplete = { onCompleteSubtask(subtask.id) })
+    }
+}
+
+@Composable
+private fun SubtaskItem(subtask: PlannedSubtask, onComplete: () -> Unit) {
+    ListItem(
+        leadingContent = {
+            Checkbox(
+                checked = subtask.isCompleted,
+                enabled = !subtask.isCompleted,
+                onCheckedChange = { onComplete() },
+            )
+        },
+        headlineContent = {
+            Text(subtask.title, textDecoration = if (subtask.isCompleted) TextDecoration.LineThrough else null)
+        },
+        trailingContent = { Text("+${subtask.reward}") },
+        modifier = Modifier.padding(start = 24.dp),
+    )
+}
+
+private fun PlannedTask.summary(): String {
+    val base = "Tier ${tier.level} · ${energy.name} energy"
+    return if (subtasks.isEmpty()) {
+        "$base · +$reward coins"
+    } else {
+        "$base · ${subtasks.count { it.isCompleted }} of ${subtasks.size} done"
     }
 }
 
@@ -163,12 +203,21 @@ private fun TodayContentPreview() {
         TodayContent(
             entries = listOf(
                 PlannedTask("1", date, "Reply to emails", Tier.Two, Energy.Medium, null, Instant.fromEpochSeconds(0)),
-                PlannedTask("2", date, "File taxes", Tier.Four, Energy.High, null),
+                PlannedTask(
+                    "2", date, "Clean the kitchen", Tier.Three, Energy.Medium, null,
+                    description = "Whole room", reward = 20,
+                    subtasks = listOf(
+                        PlannedSubtask("a", "Dishes", 7, Instant.fromEpochSeconds(0)),
+                        PlannedSubtask("b", "Wipe counters", 7),
+                        PlannedSubtask("c", "Take out trash", 6),
+                    ),
+                ),
             ),
             templates = emptyList(),
             onAssign = {},
             onRemove = {},
-            onComplete = {},
+            onCompleteTask = {},
+            onCompleteSubtask = {},
         )
     }
 }
