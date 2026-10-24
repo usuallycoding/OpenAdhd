@@ -1,5 +1,6 @@
 package com.usuallycoding.openadhd.ui.shop
 
+import com.usuallycoding.openadhd.domain.CoinRules
 import com.usuallycoding.openadhd.domain.RewardTemplate
 import com.usuallycoding.openadhd.domain.RewardTier
 import com.usuallycoding.openadhd.domain.RollRules
@@ -22,7 +23,7 @@ fun buildShelves(rewards: List<RewardTemplate>, balance: Int): List<ShopShelf> =
         ShopShelf(
             tier,
             ordered.map { reward ->
-                ShopItem(reward, affordable = balance >= reward.price, coinsNeeded = maxOf(0, reward.price - balance))
+                ShopItem(reward, affordable = CoinRules.canPay(balance, reward.price), coinsNeeded = CoinRules.coinsNeeded(balance, reward.price))
             },
         )
     }
@@ -46,8 +47,8 @@ fun buildRollOptions(rewards: List<RewardTemplate>, balance: Int): List<RollOpti
         RollOption(
             tier = tier,
             price = price,
-            affordable = balance >= price,
-            coinsNeeded = maxOf(0, price - balance),
+            affordable = CoinRules.canPay(balance, price),
+            coinsNeeded = CoinRules.coinsNeeded(balance, price),
             hasRewards = rewards.any { it.tier == tier },
             upgradeTier = RollRules.nextTier(tier)?.takeIf { next -> rewards.any { it.tier == next } },
         )

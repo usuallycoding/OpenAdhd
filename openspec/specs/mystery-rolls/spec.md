@@ -14,8 +14,8 @@ The Shop SHALL offer a mystery roll for each of the tiers 1 to 4, priced like th
 - **THEN** it shows a mystery roll for tiers 1, 2, 3 and 4 with prices 20, 50, 120 and 300
 
 #### Scenario: Unavailable rolls
-- **WHEN** the balance is 30 and tier 3 has no rewards
-- **THEN** the tier 2 roll shows that 20 more coins are needed, the tier 3 roll shows that the tier has no rewards, and neither can be rolled
+- **WHEN** the balance is -480 and tier 3 has no rewards
+- **THEN** the tier 2 roll shows that 30 more coins are needed, the tier 3 roll shows that the tier has no rewards, and neither can be rolled
 
 ### Requirement: Roll outcome
 A roll of a tier SHALL give one reward chosen at random, with equal chance for each reward, from that tier. With a 1 in 6 chance it SHALL instead give a reward chosen at random from the next tier up, if that tier has rewards. A tier 4 roll MUST NOT upgrade, and a roll MUST NOT give a reward from a lower tier than the one rolled.
@@ -37,7 +37,7 @@ A roll of a tier SHALL give one reward chosen at random, with equal chance for e
 - **THEN** the reward given is always one of the tier 4 rewards
 
 ### Requirement: Cost of a roll
-A roll SHALL deduct the price of the rolled tier from the balance, whichever reward is given, and MUST be refused, with no change to the balance, the ledger or the history, when the balance is lower than that price or the rolled tier has no rewards.
+A roll SHALL deduct the price of the rolled tier from the balance, whichever reward is given, and MUST be refused, with no change to the balance, the ledger or the history, when the balance after paying would be lower than the debt limit of minus 500 coins or the rolled tier has no rewards.
 
 #### Scenario: Successful roll
 - **WHEN** the balance is 80 and the user rolls tier 2
@@ -48,12 +48,16 @@ A roll SHALL deduct the price of the rolled tier from the balance, whichever rew
 - **THEN** only the tier 2 price of 50 coins is deducted
 
 #### Scenario: Not enough coins
-- **WHEN** the balance is 30 and a tier 2 roll is attempted
+- **WHEN** the balance is -480 and a tier 2 roll is attempted
 - **THEN** nothing is spent and no reward is given
 
 #### Scenario: Empty tier
 - **WHEN** a tier has no rewards and a roll of it is attempted
 - **THEN** nothing is spent and no reward is given
+
+#### Scenario: Rolling on credit
+- **WHEN** the balance is 30 and a tier 2 roll is attempted
+- **THEN** the roll is made, a reward is given and the balance is -20
 
 ### Requirement: Confirming a roll
 The app SHALL ask for confirmation, showing the rolled tier and its price, before spending coins on a roll, and a single confirmation MUST roll exactly once.
@@ -83,3 +87,14 @@ The reward won SHALL be recorded as a redemption with its name, tier and energy 
 #### Scenario: Roll recorded
 - **WHEN** the user rolls tier 2 and wins "Movie night"
 - **THEN** the redemption history has an entry for "Movie night" with a price paid of 50 that is marked as a mystery roll of tier 2
+
+### Requirement: Rolling into debt
+When a roll would take the balance below zero, its confirmation SHALL say how many coins in debt the roll leaves the user.
+
+#### Scenario: Confirmation mentions the debt
+- **WHEN** the balance is 30 and the user opens the confirmation for a tier 2 roll
+- **THEN** the confirmation says the roll puts the user 20 coins in debt
+
+#### Scenario: No debt, no warning
+- **WHEN** the balance is 80 and the user opens the confirmation for a tier 2 roll
+- **THEN** the confirmation says nothing about debt

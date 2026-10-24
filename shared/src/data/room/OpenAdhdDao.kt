@@ -7,6 +7,7 @@ import androidx.room.Transaction
 import androidx.room.Update
 import com.usuallycoding.openadhd.domain.CompletionResult
 import com.usuallycoding.openadhd.domain.CriticalHits
+import com.usuallycoding.openadhd.domain.CoinRules
 import com.usuallycoding.openadhd.domain.CriticalRules
 import com.usuallycoding.openadhd.domain.LedgerReason
 import com.usuallycoding.openadhd.domain.RedemptionSource
@@ -191,7 +192,7 @@ abstract class OpenAdhdDao {
 
     /**
      * Buys a reward in one transaction: refused (false) if the redemption id is already used, the reward is
-     * unknown, or the balance is lower than the price. SQLite has a single writer, so the balance read and
+     * unknown, or paying would pass the debt limit. SQLite has a single writer, so the balance read and
      * the writes cannot interleave with another spend.
      */
     @Transaction
@@ -199,7 +200,7 @@ abstract class OpenAdhdDao {
         if (redemptionCount(redemptionId) > 0) return false
         val reward = rewardById(rewardId) ?: return false
         val price = RewardRules.price(RewardTier.fromLevel(reward.tier), reward.customPrice)
-        if (balance() < price) return false
+        if (!CoinRules.canPay(balance(), price)) return false
         insertRedemption(
             RedemptionEntity(
                 redemptionId, reward.id, reward.name, reward.tier, reward.energy, price, at,
@@ -215,7 +216,7 @@ abstract class OpenAdhdDao {
 
     /**
      * Rolls for a reward in one transaction: refused (null) if the tier cannot be rolled, the redemption id is
-     * used, the balance is lower than the roll price, or the tier has no rewards. The balance read, the random
+     * used, paying would pass the debt limit, or the tier has no rewards. The balance read, the random
      * choice and the writes share the transaction, so no other spend can slip in between.
      */
     @Transaction
@@ -229,7 +230,7 @@ abstract class OpenAdhdDao {
         if (tier !in RollRules.RollableTiers) return null
         if (redemptionCount(redemptionId) > 0) return null
         val price = RollRules.price(tier)
-        if (balance() < price) return null
+        if (!CoinRules.canPay(balance(), price)) return null
         val outcome = RollRules.choose(random, tier, allRewards().map { it.toDomain() }) ?: return null
         val reward = outcome.reward
         val redemption = RedemptionEntity(

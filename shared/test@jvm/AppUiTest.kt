@@ -263,9 +263,9 @@ class AppUiTest {
         onNodeWithText("Shop").performClick()
         onNodeWithText("Tier 1 · 20 coins").assertExists()
         onNodeWithText("Tier 2 · 50 coins").assertExists()
-        // the shortfall is shown on the tier 2 roll and on the reward itself
-        onAllNodesWithText("10 more coins needed").assertCountEquals(2)
-        onNodeWithContentDescription("Redeem Movie night").assertIsNotEnabled()
+        // 40 coins do not cover the 50-coin reward, but it can be bought on credit, so nothing is blocked
+        onAllNodesWithText("more coins needed", substring = true).assertCountEquals(0)
+        onNodeWithContentDescription("Redeem Movie night").assertIsEnabled()
         onNodeWithContentDescription("Redeem Treat").assertIsEnabled()
 
         onNodeWithText("History").performClick()
@@ -283,7 +283,6 @@ class AppUiTest {
         onNodeWithContentDescription("Redeem Treat").performClick()
         onNodeWithText("Confirm").performClick()
         onNodeWithText("20").assertExists()
-        onAllNodesWithText("30 more coins needed").assertCountEquals(2)
 
         onNodeWithText("History").performClick()
         onNodeWithText("Treat").assertExists()
@@ -361,15 +360,16 @@ class AppUiTest {
     }
 
     @Test
-    fun `rolls that cannot be made say why and are disabled`() = runComposeUiTest {
+    fun `a roll of an empty tier says why and is disabled while one that can borrow is enabled`() = runComposeUiTest {
         val store = rollingStore(ScriptedRandom(), Tier.Three, Tier.Two)
         setContent { App(AppContainer(store, dateCheckInterval = null)) }
 
         onNodeWithText("Shop").performClick()
         onNodeWithText("No tier 1 rewards yet").assertExists()
         onNodeWithContentDescription("Roll tier 1").assertIsNotEnabled()
-        onAllNodesWithText("20 more coins needed").assertCountEquals(2) // the tier 2 roll and the Movie night reward
-        onNodeWithContentDescription("Roll tier 2").assertIsNotEnabled()
+        // 30 coins are not enough for the 50-coin tier 2 roll, but the debt limit lets the user borrow the rest
+        onAllNodesWithText("more coins needed", substring = true).assertCountEquals(0)
+        onNodeWithContentDescription("Roll tier 2").assertIsEnabled()
     }
 
     @Test
@@ -905,7 +905,7 @@ class AppUiTest {
     }
 
     @Test
-    fun `unchecking spent coins shows a negative balance and blocks spending`() = runComposeUiTest {
+    fun `unchecking spent coins shows a negative balance and the shop still lets the user borrow`() = runComposeUiTest {
         val clock = FakeClock()
         val store = uncheckStore(clock, "Taxes")
         runBlocking { store.createReward("Treat", RewardTier.One, Energy.Low) }
@@ -920,6 +920,77 @@ class AppUiTest {
 
         onNodeWithText("-20").assertExists()
         onNodeWithText("Shop").performClick()
-        onNodeWithContentDescription("Redeem Treat").assertIsNotEnabled()
+        onNodeWithContentDescription("Redeem Treat").assertIsEnabled()
+    }
+
+    // ---- dopamine loans
+
+    private fun loanStore(random: kotlin.random.Random = kotlin.random.Random.Default): InMemoryStore {
+        val store = InMemoryStore(random = random)
+        runBlocking {
+            store.createReward("Treat", RewardTier.One, Energy.Low)
+            store.createReward("Movie night", RewardTier.Two, Energy.Low)
+            val earner = store.assign(store.create("Taxes", Tier.Three, Energy.High), LocalDate(2026, 10, 23))
+            store.completeTask(earner.id)
+        }
+        return store
+    }
+
+    @Test
+    fun `buying on credit names the debt in the confirmation and leaves a negative balance`() = runComposeUiTest {
+        setContent { App(AppContainer(loanStore(), dateCheckInterval = null)) }
+        onNodeWithText("Shop").performClick()
+
+        onNodeWithContentDescription("Redeem Movie night").performClick()
+        onNodeWithText("Redeem Movie night?").assertExists()
+        onNodeWithText("This costs 50 coins. This puts you 30 coins in debt.").assertExists()
+        onNodeWithText("Confirm").performClick()
+
+        onNodeWithText("-30").assertExists()
+        onNodeWithText("History").performClick()
+        onNodeWithText("Movie night").assertExists()
+    }
+
+    @Test
+    fun `a purchase that stays in credit says nothing about debt`() = runComposeUiTest {
+        setContent { App(AppContainer(loanStore(), dateCheckInterval = null)) }
+        onNodeWithText("Shop").performClick()
+
+        onNodeWithContentDescription("Redeem Treat").performClick()
+        onNodeWithText("This costs 20 coins.").assertExists()
+        onNodeWithText("in debt", substring = true).assertDoesNotExist()
+    }
+
+    @Test
+    fun `more coins needed appears only past the debt limit`() = runComposeUiTest {
+        val store = loanStore()
+        runBlocking {
+            // 20 earned, then a 480-coin gift: the balance is -460, so the 50-coin reward would end at -510
+            val gift = store.createReward("Gift", RewardTier.Five, Energy.Low, customPrice = 480)
+            store.redeem(gift.id, "gift")
+        }
+        setContent { App(AppContainer(store, dateCheckInterval = null)) }
+        onNodeWithText("Shop").performClick()
+
+        onNodeWithText("-460").assertExists()
+        onNodeWithContentDescription("Redeem Treat").assertIsEnabled()
+        onNodeWithContentDescription("Redeem Movie night").assertIsNotEnabled()
+        onNodeWithContentDescription("Roll tier 2").assertIsNotEnabled()
+        // the reward and the tier 2 roll both need 10 more
+        onAllNodesWithText("10 more coins needed").assertCountEquals(2)
+    }
+
+    @Test
+    fun `rolling on credit names the debt and spends the price`() = runComposeUiTest {
+        setContent { App(AppContainer(loanStore(ScriptedRandom(0, 0)), dateCheckInterval = null)) }
+        onNodeWithText("Shop").performClick()
+
+        onNodeWithContentDescription("Roll tier 2").performClick()
+        onNodeWithText("Roll tier 2?").assertExists()
+        onNodeWithText("This puts you 30 coins in debt.", substring = true).assertExists()
+        onNodeWithText("Confirm").performClick()
+        onNodeWithText("Close").performClick()
+
+        onNodeWithText("-30").assertExists()
     }
 }

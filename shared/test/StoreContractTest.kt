@@ -387,10 +387,11 @@ abstract class StoreContractTest {
     }
 
     @Test
-    fun `redeeming is refused when the balance is short`() = runTest {
+    fun `redeeming past the debt limit is refused and changes nothing`() = runTest {
         val store = newStore(clock)
         earn(store, Tier.Three)
-        val reward = store.createReward("Movie night", RewardTier.Two, Energy.Low)
+        // 20 - 521 = -501, one coin past the limit
+        val reward = store.createReward("Gift", RewardTier.Five, Energy.Low, customPrice = 521)
 
         assertFalse(store.redeem(reward.id, "r1"))
 
@@ -400,16 +401,43 @@ abstract class StoreContractTest {
     }
 
     @Test
-    fun `the whole balance can be spent and no more`() = runTest {
+    fun `a reward can be redeemed on credit and earning pays the debt back`() = runTest {
+        val store = newStore(clock)
+        earn(store, Tier.Three)
+        val reward = store.createReward("Movie night", RewardTier.Two, Energy.Low)
+
+        assertTrue(store.redeem(reward.id, "r1"))
+
+        assertEquals(-30, CoinRules.balance(store.entries.first()))
+        assertEquals(listOf(50), store.redemptions.first().map { it.price })
+        assertEquals(listOf(20, -50), store.entries.first().map { it.amount })
+        earn(store, Tier.Four)
+        assertEquals(10, CoinRules.balance(store.entries.first()))
+    }
+
+    @Test
+    fun `a purchase that lands exactly on the debt limit is allowed`() = runTest {
+        val store = newStore(clock)
+        earn(store, Tier.Three)
+        val reward = store.createReward("Gift", RewardTier.Five, Energy.Low, customPrice = 520)
+
+        assertTrue(store.redeem(reward.id, "exact"))
+
+        assertEquals(-500, CoinRules.balance(store.entries.first()))
+        // anything more is refused
+        val small = store.createReward("Treat", RewardTier.One, Energy.Low)
+        assertFalse(store.redeem(small.id, "more"))
+        assertEquals(-500, CoinRules.balance(store.entries.first()))
+    }
+
+    @Test
+    fun `the whole balance can be spent`() = runTest {
         val store = newStore(clock)
         earn(store, Tier.Four)
         earn(store, Tier.Three)
         earn(store, Tier.One)
         val reward = store.createReward("Dinner out", RewardTier.Three, Energy.High)
         earn(store, Tier.Four)
-        assertEquals(105, CoinRules.balance(store.entries.first()))
-        assertFalse(store.redeem(reward.id, "short"))
-
         earn(store, Tier.Two)
         earn(store, Tier.One)
         assertEquals(120, CoinRules.balance(store.entries.first()))
@@ -548,16 +576,33 @@ abstract class StoreContractTest {
     }
 
     @Test
-    fun `a roll is refused when the balance is short`() = runTest {
+    fun `a roll past the debt limit is refused and changes nothing`() = runTest {
         val store = newStore(clock, ScriptedRandom())
         earn(store, Tier.Three)
         store.createReward("Movie night", RewardTier.Two, Energy.Low)
+        // 20 - 480 = -460, so a 50-coin roll would end at -510
+        val gift = store.createReward("Gift", RewardTier.Five, Energy.Low, customPrice = 480)
+        assertTrue(store.redeem(gift.id, "gift"))
 
         assertNull(store.mysteryRoll(RewardTier.Two, "roll1"))
 
-        assertEquals(20, CoinRules.balance(store.entries.first()))
-        assertTrue(store.redemptions.first().isEmpty())
-        assertEquals(1, store.entries.first().size)
+        assertEquals(-460, CoinRules.balance(store.entries.first()))
+        assertEquals(1, store.redemptions.first().size)
+        assertEquals(2, store.entries.first().size)
+    }
+
+    @Test
+    fun `a roll can be made on credit`() = runTest {
+        val store = newStore(clock, ScriptedRandom(0, 0))
+        earn(store, Tier.Three)
+        store.createReward("Movie night", RewardTier.Two, Energy.Low)
+
+        val result = store.mysteryRoll(RewardTier.Two, "roll1")
+
+        assertNotNull(result)
+        assertEquals(-30, CoinRules.balance(store.entries.first()))
+        assertEquals(listOf(20, -50), store.entries.first().map { it.amount })
+        assertEquals(LedgerReason.MysteryRoll, store.entries.first().last().reason)
     }
 
     @Test
@@ -925,20 +970,22 @@ abstract class StoreContractTest {
     }
 
     @Test
-    fun `the balance can go negative and spending is then refused`() = runTest {
+    fun `unchecking can take the balance below the debt limit and spending is then refused`() = runTest {
         val store = newStore(clock)
         val reward = store.createReward("Treat", RewardTier.One, Energy.Low)
+        val gift = store.createReward("Gift", RewardTier.Five, Energy.Low, customPrice = 520)
         val entry = store.assign(store.create("Taxes", Tier.Three, Energy.High), today)
         store.completeTask(entry.id)
-        assertTrue(store.redeem(reward.id))
-        assertEquals(0, CoinRules.balance(store.entries.first()))
+        assertTrue(store.redeem(gift.id))
+        assertEquals(-500, CoinRules.balance(store.entries.first()))
 
+        // a correction is not a spend, so it is allowed to go past the limit
         store.uncompleteTask(entry.id)
 
-        assertEquals(-20, CoinRules.balance(store.entries.first()))
+        assertEquals(-520, CoinRules.balance(store.entries.first()))
         assertFalse(store.redeem(reward.id))
         assertNull(store.mysteryRoll(RewardTier.One))
-        assertEquals(-20, CoinRules.balance(store.entries.first()))
+        assertEquals(-520, CoinRules.balance(store.entries.first()))
     }
 
     @Test

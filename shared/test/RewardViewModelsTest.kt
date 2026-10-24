@@ -105,24 +105,29 @@ class RewardViewModelsTest {
     }
 
     @Test
-    fun `affordability shows how many coins are still needed`() {
-        val items = buildShelves(listOf(reward("r", RewardTier.Two)), balance = 30).single().items
-        assertFalse(items.single().affordable)
-        assertEquals(20, items.single().coinsNeeded)
+    fun `affordability counts the debt limit and shows how many coins are still needed`() {
+        val rewards = listOf(reward("r", RewardTier.Two))
+        fun item(balance: Int) = buildShelves(rewards, balance).single().items.single()
 
-        val exact = buildShelves(listOf(reward("r", RewardTier.Two)), balance = 50).single().items.single()
-        assertTrue(exact.affordable)
-        assertEquals(0, exact.coinsNeeded)
+        // 50 coins with only 30: affordable by borrowing, nothing more is needed
+        assertTrue(item(30).affordable)
+        assertEquals(0, item(30).coinsNeeded)
+        assertTrue(item(50).affordable)
+        // exactly at the limit (-450 - 50 = -500) is still fine, one coin beyond is not
+        assertTrue(item(-450).affordable)
+        assertFalse(item(-451).affordable)
+        assertEquals(1, item(-451).coinsNeeded)
+        assertEquals(30, item(-480).coinsNeeded)
     }
 
     // ---- shop
 
     @Test
-    fun `shop view model redeems records history and refuses to overdraw`() = runTest {
+    fun `shop view model redeems records history and refuses to pass the debt limit`() = runTest {
         earn(Tier.Four)
         earn(Tier.Four)
         val cheap = store.createReward("Movie night", RewardTier.Two, Energy.Low)
-        val dear = store.createReward("Dinner out", RewardTier.Three, Energy.High)
+        val dear = store.createReward("Dinner out", RewardTier.Five, Energy.High, customPrice = 700)
         val vm = ShopViewModel(store)
 
         assertEquals(80, vm.balance.value)
@@ -131,7 +136,8 @@ class RewardViewModelsTest {
         vm.redeem(cheap.id, "r1")
         assertEquals(30, vm.balance.value)
         assertEquals(listOf("Movie night"), vm.history.value.map { it.name })
-        assertEquals(false, vm.shelves.value.flatMap { it.items }.any { it.affordable && it.reward.id == cheap.id })
+        // 30 coins no longer cover the 50-coin reward, but it can be bought again on credit
+        assertEquals(true, vm.shelves.value.flatMap { it.items }.any { it.affordable && it.reward.id == cheap.id })
 
         vm.redeem(dear.id, "r2")
         assertEquals(30, vm.balance.value)
@@ -163,7 +169,7 @@ class RewardViewModelsTest {
     @Test
     fun `roll options show price affordability and whether an upgrade is possible`() {
         val rewards = listOf(reward("a", RewardTier.One), reward("b", RewardTier.Two), reward("d", RewardTier.Four))
-        val options = buildRollOptions(rewards, balance = 30).associateBy { it.tier }
+        val options = buildRollOptions(rewards, balance = -480).associateBy { it.tier }
 
         assertEquals(listOf(RewardTier.One, RewardTier.Two, RewardTier.Three, RewardTier.Four), options.keys.toList())
         assertEquals(listOf(20, 50, 120, 300), options.values.map { it.price })
@@ -174,7 +180,7 @@ class RewardViewModelsTest {
 
         val two = options.getValue(RewardTier.Two)
         assertFalse(two.affordable)
-        assertEquals(20, two.coinsNeeded)
+        assertEquals(30, two.coinsNeeded)
         assertFalse(two.canRoll)
         assertEquals(null, two.upgradeTier)
 
@@ -184,6 +190,18 @@ class RewardViewModelsTest {
         assertEquals(RewardTier.Four, three.upgradeTier)
 
         assertEquals(null, options.getValue(RewardTier.Four).upgradeTier)
+    }
+
+    @Test
+    fun `roll options can borrow up to the debt limit`() {
+        val rewards = listOf(reward("b", RewardTier.Two))
+        fun two(balance: Int) = buildRollOptions(rewards, balance).first { it.tier == RewardTier.Two }
+
+        assertTrue(two(30).canRoll)
+        assertEquals(0, two(30).coinsNeeded)
+        assertTrue(two(-450).canRoll)
+        assertFalse(two(-451).canRoll)
+        assertEquals(1, two(-451).coinsNeeded)
     }
 
     @Test
@@ -231,13 +249,16 @@ class RewardViewModelsTest {
         val rolling = InMemoryStore(clock, random = ScriptedRandom())
         earnOn(rolling, Tier.Three)
         rolling.createReward("Movie night", RewardTier.Two, Energy.Low)
+        // a 480-coin gift takes the balance to -460, so a 50-coin roll would pass the -500 limit
+        val gift = rolling.createReward("Gift", RewardTier.Five, Energy.High, customPrice = 480)
+        assertTrue(rolling.redeem(gift.id, "gift"))
         val vm = ShopViewModel(rolling)
 
         vm.roll(RewardTier.Two, "roll1")
 
         assertEquals(null, vm.lastRoll.value)
-        assertEquals(20, vm.balance.value)
-        assertTrue(vm.history.value.isEmpty())
+        assertEquals(-460, vm.balance.value)
+        assertEquals(listOf("Gift"), vm.history.value.map { it.name })
         vm.viewModelScope.cancel()
     }
 

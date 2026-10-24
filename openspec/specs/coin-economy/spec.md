@@ -69,7 +69,7 @@ The coin balance SHALL equal the sum of all ledger entry amounts, earnings, spen
 
 #### Scenario: Spending while negative
 - **WHEN** the balance is -20 and a spend of 5 is attempted
-- **THEN** the spend is refused and nothing is recorded
+- **THEN** the spend is recorded and the balance is -25
 
 ### Requirement: Reward pool split across subtasks
 The pool of an entry with subtasks SHALL be divided among its subtasks in order: each gets the pool divided by the number of subtasks, rounded down, and the leftover coins go one each to the first subtasks. Because a task never has more subtasks than its pool, every subtask is worth at least 1 coin and the shares add up exactly to the pool. Shares MUST be fixed when the entry is assigned.
@@ -94,17 +94,6 @@ The pool of an entry with subtasks SHALL be divided among its subtasks in order:
 - **WHEN** a template's subtasks or tier are edited after an entry was created from it
 - **THEN** the existing entry's subtask shares do not change
 
-### Requirement: Spending cannot overdraw the balance
-A spend SHALL be refused, with no change to the ledger or the balance, when its amount is larger than the current balance.
-
-#### Scenario: Overdraw refused
-- **WHEN** the balance is 30 and a spend of 50 is attempted
-- **THEN** nothing is recorded and the balance stays 30
-
-#### Scenario: Spend the whole balance
-- **WHEN** the balance is 50 and a spend of 50 is attempted
-- **THEN** the spend is recorded and the balance is 0
-
 ### Requirement: Undoing a completion takes back what it paid
 Unchecking a completed task or subtask SHALL add one ledger entry whose amount is minus the net total already recorded for that task or subtask (its reward and any critical-hit bonus, less earlier undos). Unchecking an item whose net total is zero MUST NOT add an entry.
 
@@ -123,3 +112,37 @@ Unchecking a completed task or subtask SHALL add one ledger entry whose amount i
 #### Scenario: Nothing to take back
 - **WHEN** an item is unchecked that has no recorded payout
 - **THEN** no ledger entry is added
+
+### Requirement: Spending may borrow up to the debt limit
+A spend SHALL be allowed when the balance after it would be no lower than minus 500 coins, and refused, with no change to the ledger or the balance, when it would take the balance lower. There MUST be no interest, fee or due date: coins earned later simply raise the balance.
+
+#### Scenario: Borrowing
+- **WHEN** the balance is 30 and a spend of 50 is attempted
+- **THEN** the spend is recorded and the balance is -20
+
+#### Scenario: Exactly at the limit
+- **WHEN** the balance is -450 and a spend of 50 is attempted
+- **THEN** the spend is recorded and the balance is -500
+
+#### Scenario: Beyond the limit
+- **WHEN** the balance is -480 and a spend of 50 is attempted
+- **THEN** nothing is recorded and the balance stays -480
+
+#### Scenario: Earning pays the debt
+- **WHEN** the balance is -20 and the user completes a 20-coin task
+- **THEN** the balance is 0 and no other entry is needed
+
+#### Scenario: Correction below the limit
+- **WHEN** the balance is -490 and the user unchecks a completed 20-coin task
+- **THEN** the balance becomes -510, and a further spend is refused until earnings bring it back within the limit
+
+### Requirement: Debt is visible
+While the balance is below zero, the top bar SHALL show it in a warning colour.
+
+#### Scenario: In debt
+- **WHEN** the balance is -20
+- **THEN** the top bar shows -20 in the error colour
+
+#### Scenario: Back in credit
+- **WHEN** the balance is 0 or more
+- **THEN** the top bar uses its usual colour

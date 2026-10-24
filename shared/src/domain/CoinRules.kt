@@ -28,4 +28,16 @@ object CoinRules {
     }
 
     fun balance(entries: List<LedgerEntry>): Int = entries.sumOf { it.amount }
+
+    /** How far below zero a purchase may take the balance. Undoing a completion is a correction and ignores it. */
+    const val DebtLimit = 500
+
+    /** Whether [price] can be paid from [balance]: the balance after paying is not lower than minus [DebtLimit]. */
+    fun canPay(balance: Int, price: Int): Boolean = balance - price >= -DebtLimit
+
+    /** How many more coins are needed before [price] can be paid, counting the room the debt limit gives. */
+    fun coinsNeeded(balance: Int, price: Int): Int = maxOf(0, price - balance - DebtLimit)
+
+    /** The debt a purchase of [price] leaves, or 0 when the balance stays at zero or above. */
+    fun debtAfter(balance: Int, price: Int): Int = maxOf(0, price - balance)
 }

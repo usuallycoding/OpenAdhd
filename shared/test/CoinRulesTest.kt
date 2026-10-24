@@ -7,6 +7,7 @@ import com.usuallycoding.openadhd.domain.Tier
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 import kotlin.time.Instant
 
@@ -91,5 +92,34 @@ class CoinRulesTest {
     @Test
     fun `a pool cannot be split into zero parts`() {
         assertFailsWith<IllegalArgumentException> { CoinRules.splitPool(10, 0) }
+    }
+
+    @Test
+    fun `a price can be paid while the balance after paying stays within the debt limit`() {
+        assertEquals(500, CoinRules.DebtLimit)
+        assertTrue(CoinRules.canPay(balance = 100, price = 50))
+        assertTrue(CoinRules.canPay(balance = 30, price = 50))
+        assertTrue(CoinRules.canPay(balance = 0, price = 500))
+        assertTrue(CoinRules.canPay(balance = -450, price = 50))
+        assertFalse(CoinRules.canPay(balance = -451, price = 50))
+        assertFalse(CoinRules.canPay(balance = 0, price = 501))
+        assertFalse(CoinRules.canPay(balance = -600, price = 1))
+    }
+
+    @Test
+    fun `coins needed counts the room the debt limit gives`() {
+        assertEquals(0, CoinRules.coinsNeeded(balance = 30, price = 50))
+        assertEquals(0, CoinRules.coinsNeeded(balance = -450, price = 50))
+        assertEquals(1, CoinRules.coinsNeeded(balance = -451, price = 50))
+        assertEquals(30, CoinRules.coinsNeeded(balance = -480, price = 50))
+        assertEquals(401, CoinRules.coinsNeeded(balance = 0, price = 901))
+    }
+
+    @Test
+    fun `debt after a purchase is only what goes below zero`() {
+        assertEquals(0, CoinRules.debtAfter(balance = 80, price = 50))
+        assertEquals(0, CoinRules.debtAfter(balance = 50, price = 50))
+        assertEquals(20, CoinRules.debtAfter(balance = 30, price = 50))
+        assertEquals(70, CoinRules.debtAfter(balance = -20, price = 50))
     }
 }

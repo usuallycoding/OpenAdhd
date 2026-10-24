@@ -99,7 +99,7 @@ interface ShopRepository {
     /**
      * Buys a reward: records a redemption that freezes its name and price, and appends a ledger entry of
      * minus the price, as one operation. Returns false, changing nothing, if the reward is unknown, the
-     * balance is lower than the price, or a redemption with [redemptionId] already exists (so a repeated
+     * payment would pass the debt limit ([CoinRules.DebtLimit]), or a redemption with [redemptionId] already exists (so a repeated
      * call with the same id is a no-op).
      */
     suspend fun redeem(rewardId: String, redemptionId: String = newId()): Boolean
@@ -108,7 +108,7 @@ interface ShopRepository {
      * Rolls for a random reward of [tier] (1 to 4): costs the tier's price and gives a reward from that tier,
      * or with a 1 in [RollRules.UpgradeOneIn] chance from the next tier up. Records a redemption marked as a
      * roll and a ledger entry of minus the price as one operation. Returns null, changing nothing, if the
-     * balance is lower than the price, the tier has no rewards, or [redemptionId] already exists.
+     * payment would pass the debt limit, the tier has no rewards, or [redemptionId] already exists.
      */
     suspend fun mysteryRoll(tier: RewardTier, redemptionId: String = newId()): RollResult?
 }

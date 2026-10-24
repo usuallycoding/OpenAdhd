@@ -158,12 +158,12 @@ internal class StoreLogic(
     fun deleteReward(state: StoreState, id: String): StoreState =
         state.copy(rewards = state.rewards.filterNot { it.id == id })
 
-    /** Returns the new state, or null when the reward is unknown, the balance is too low, or the id was used. */
+    /** Returns the new state, or null when the reward is unknown, the purchase would pass the debt limit, or the id was used. */
     fun redeem(state: StoreState, rewardId: String, redemptionId: String): StoreState? {
         if (state.redemptions.any { it.id == redemptionId }) return null
         val reward = state.rewards.firstOrNull { it.id == rewardId } ?: return null
         val price = reward.price
-        if (CoinRules.balance(state.ledger) < price) return null
+        if (!CoinRules.canPay(CoinRules.balance(state.ledger), price)) return null
         val now = clock.now()
         val redemption = Redemption(redemptionId, reward.id, reward.name, reward.tier, reward.energy, price, now)
         val spend = LedgerEntry(newId(), -price, now, LedgerReason.RewardRedeemed, redemptionId)
@@ -178,7 +178,7 @@ internal class StoreLogic(
         if (tier !in RollRules.RollableTiers) return null
         if (state.redemptions.any { it.id == redemptionId }) return null
         val price = RollRules.price(tier)
-        if (CoinRules.balance(state.ledger) < price) return null
+        if (!CoinRules.canPay(CoinRules.balance(state.ledger), price)) return null
         val outcome = RollRules.choose(random, tier, state.rewards) ?: return null
         val now = clock.now()
         val reward = outcome.reward

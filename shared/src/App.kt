@@ -20,6 +20,7 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
@@ -170,6 +171,12 @@ private class ReorderToggle(val on: Boolean, val canReorder: Boolean, val onChan
 private fun BalanceChip(balance: Int) {
     Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(horizontal = 4.dp)) {
         Icon(CoinIcon, contentDescription = "Dopamine coins")
-        Text("$balance", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(start = 4.dp))
+        // A balance below zero is a debt, so it is shown in the error colour.
+        Text(
+            "$balance",
+            style = MaterialTheme.typography.titleMedium,
+            color = if (balance < 0) MaterialTheme.colorScheme.error else Color.Unspecified,
+            modifier = Modifier.padding(start = 4.dp),
+        )
     }
 }

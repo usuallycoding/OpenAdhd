@@ -37,6 +37,7 @@ import com.usuallycoding.openadhd.domain.Energy
 import com.usuallycoding.openadhd.domain.Redemption
 import com.usuallycoding.openadhd.domain.RedemptionSource
 import com.usuallycoding.openadhd.domain.RewardRules
+import com.usuallycoding.openadhd.domain.CoinRules
 import com.usuallycoding.openadhd.domain.RewardTemplate
 import com.usuallycoding.openadhd.domain.RewardTier
 import com.usuallycoding.openadhd.domain.RollResult
@@ -62,6 +63,7 @@ fun ShopScreen(
     val history by viewModel.history.collectAsStateWithLifecycle()
     val rollOptions by viewModel.rollOptions.collectAsStateWithLifecycle()
     val lastRoll by viewModel.lastRoll.collectAsStateWithLifecycle()
+    val balance by viewModel.balance.collectAsStateWithLifecycle()
     ShopContent(
         shelves = shelves,
         history = history,
@@ -72,6 +74,7 @@ fun ShopScreen(
         onDismissRoll = viewModel::dismissRoll,
         modifier = modifier,
         pagerState = pagerState,
+        balance = balance,
     )
 }
 
@@ -86,6 +89,7 @@ fun ShopContent(
     onDismissRoll: () -> Unit,
     modifier: Modifier = Modifier,
     pagerState: PagerState = rememberPagerState { 2 },
+    balance: Int = 0,
 ) {
     val scope = rememberCoroutineScope()
     Column(modifier) {
@@ -102,7 +106,7 @@ fun ShopContent(
             )
         }
         HorizontalPager(state = pagerState, modifier = Modifier.fillMaxSize()) { page ->
-            if (page == 0) ShelvesList(shelves, rollOptions, onRedeem, onRoll) else HistoryList(history)
+            if (page == 0) ShelvesList(shelves, rollOptions, balance, onRedeem, onRoll) else HistoryList(history)
         }
     }
 
@@ -113,6 +117,7 @@ fun ShopContent(
 private fun ShelvesList(
     shelves: List<ShopShelf>,
     rollOptions: List<RollOption>,
+    balance: Int,
     onRedeem: (String, String) -> Unit,
     onRoll: (RewardTier, String) -> Unit,
 ) {
@@ -147,6 +152,7 @@ private fun ShelvesList(
     confirming?.let { reward ->
         ConfirmRedeemDialog(
             reward = reward,
+            balance = balance,
             onConfirm = { redemptionId ->
                 onRedeem(reward.id, redemptionId)
                 confirming = null
@@ -157,6 +163,7 @@ private fun ShelvesList(
     rolling?.let { option ->
         ConfirmRollDialog(
             option = option,
+            balance = balance,
             onConfirm = { rollId ->
                 onRoll(option.tier, rollId)
                 rolling = null
@@ -236,27 +243,41 @@ private fun RollOption.oddsText(): String {
     return "$base, with a 1 in ${RollRules.UpgradeOneIn} chance of a tier ${upgrade.level} one"
 }
 
+/** The extra confirmation line when a purchase leaves the user in debt; nothing when it does not. */
+private fun debtNote(debt: Int): String =
+    if (debt <= 0) "" else " This puts you ${if (debt == 1) "1 coin" else "$debt coins"} in debt."
+
 @Composable
-private fun ConfirmRedeemDialog(reward: RewardTemplate, onConfirm: (redemptionId: String) -> Unit, onDismiss: () -> Unit) {
+private fun ConfirmRedeemDialog(
+    reward: RewardTemplate,
+    balance: Int,
+    onConfirm: (redemptionId: String) -> Unit,
+    onDismiss: () -> Unit,
+) {
     // One id per opening of the dialog: confirming twice in a row can only ever record one purchase.
     val redemptionId = remember { newId() }
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("Redeem ${reward.name}?") },
-        text = { Text("This costs ${reward.price} coins.") },
+        text = { Text("This costs ${reward.price} coins.${debtNote(CoinRules.debtAfter(balance, reward.price))}") },
         confirmButton = { TextButton(onClick = { onConfirm(redemptionId) }) { Text("Confirm") } },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
     )
 }
 
 @Composable
-private fun ConfirmRollDialog(option: RollOption, onConfirm: (rollId: String) -> Unit, onDismiss: () -> Unit) {
+private fun ConfirmRollDialog(
+    option: RollOption,
+    balance: Int,
+    onConfirm: (rollId: String) -> Unit,
+    onDismiss: () -> Unit,
+) {
     // One id per opening of the dialog: confirming twice in a row can only ever roll once.
     val rollId = remember { newId() }
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("Roll tier ${option.tier.level}?") },
-        text = { Text("This costs ${option.price} coins. ${option.oddsText()}.") },
+        text = { Text("This costs ${option.price} coins. ${option.oddsText()}.${debtNote(CoinRules.debtAfter(balance, option.price))}") },
         confirmButton = { TextButton(onClick = { onConfirm(rollId) }) { Text("Confirm") } },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
     )
