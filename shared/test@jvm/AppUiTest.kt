@@ -25,6 +25,7 @@ import com.usuallycoding.openadhd.data.AppContainer
 import com.usuallycoding.openadhd.data.InMemoryStore
 import com.usuallycoding.openadhd.domain.Energy
 import com.usuallycoding.openadhd.domain.RewardTier
+import com.usuallycoding.openadhd.domain.SettingKey
 import com.usuallycoding.openadhd.domain.Tier
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
@@ -511,6 +512,53 @@ class AppUiTest {
         onNodeWithText("Pick one for me").assertDoesNotExist()
         onNodeWithContentDescription("Pick one for me").performClick()
         onNodeWithText("There is nothing left to pick today. Add a task with the + button.").assertExists()
+    }
+
+    // ---- compact coin amounts
+
+    @Test
+    fun `a large balance is shown in the compact form and small rewards as they are`() = runComposeUiTest {
+        val store = InMemoryStore()
+        runBlocking {
+            store.saveSetting(SettingKey.PayoutTier4, "800")
+            val today = kotlin.time.Clock.System.todayIn(TimeZone.currentSystemDefault())
+            listOf("First", "Second").forEach { store.assign(store.create(it, Tier.Four, Energy.Low), today) }
+            store.entriesFor(today).first().forEach { store.completeTask(it.id) }
+        }
+        setContent { App(AppContainer(store, dateCheckInterval = null)) }
+
+        onNodeWithText("1.6k").assertExists() // the top bar balance of 1600
+        onAllNodesWithText("Tier 4 · Low energy · +800 coins", substring = true).assertCountEquals(2)
+    }
+
+    @Test
+    fun `a debt is shown in the compact form with its sign`() = runComposeUiTest {
+        val store = InMemoryStore()
+        runBlocking {
+            store.saveSetting(SettingKey.DebtLimit, "5000")
+            val gift = store.createReward("Gift", RewardTier.Five, Energy.Low, customPrice = 1500)
+            store.redeem(gift.id, "gift")
+        }
+        setContent { App(AppContainer(store, dateCheckInterval = null)) }
+
+        onNodeWithText("-1.5k").assertExists()
+    }
+
+    @Test
+    fun `shop and rewards show prices compactly while editing stays exact`() = runComposeUiTest {
+        val store = InMemoryStore()
+        runBlocking { store.createReward("Holiday", RewardTier.Five, Energy.Low, customPrice = 3250) }
+        setContent { App(AppContainer(store, dateCheckInterval = null)) }
+
+        onNodeWithText("Shop").performClick()
+        onNodeWithText("3.2k coins · Low energy").assertExists()
+        onNodeWithText("2.7k more coins needed").assertExists() // 3250 less the 500 coins of debt allowed
+
+        onNodeWithText("Templates").performClick()
+        onNodeWithText("Rewards").performClick()
+        onNodeWithText("Tier 5 · Low energy · 3.2k coins").assertExists()
+        onNodeWithContentDescription("Edit Holiday").performClick()
+        onNodeWithText("3250").assertExists()
     }
 
     // ---- collapse and expand

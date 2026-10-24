@@ -55,6 +55,7 @@ import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import com.usuallycoding.openadhd.domain.formatCoins
 import com.usuallycoding.openadhd.domain.ReminderRules
 import com.usuallycoding.openadhd.domain.Energy
 import com.usuallycoding.openadhd.domain.PlannedSubtask
@@ -372,7 +373,7 @@ private fun SubtaskItem(subtask: PlannedSubtask, readOnly: Boolean, onToggle: ()
         headlineContent = {
             Text(subtask.title, textDecoration = if (subtask.isCompleted) TextDecoration.LineThrough else null)
         },
-        trailingContent = { Text("+${subtask.reward}") },
+        trailingContent = { Text("+${formatCoins(subtask.reward)}") },
         modifier = Modifier.padding(start = 24.dp),
     )
 }
@@ -380,7 +381,7 @@ private fun SubtaskItem(subtask: PlannedSubtask, readOnly: Boolean, onToggle: ()
 internal fun PlannedTask.summary(timeZone: TimeZone): String {
     val base = "Tier ${tier.level} · ${energy.name} energy"
     val progress = if (subtasks.isEmpty()) {
-        "$base · +$reward coins"
+        "$base · +${formatCoins(reward)} coins"
     } else {
         "$base · ${subtasks.count { it.isCompleted }} of ${subtasks.size} done"
     }

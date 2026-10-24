@@ -32,6 +32,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.usuallycoding.openadhd.domain.formatCoins
 import com.usuallycoding.openadhd.domain.Energy
 import com.usuallycoding.openadhd.domain.RewardInputError
 import com.usuallycoding.openadhd.domain.RewardRules
@@ -216,7 +217,7 @@ private fun RewardDialog(
                 modifier = Modifier.fillMaxWidth(),
             )
         } else {
-            Text("Costs ${RewardRules.price(tier, null, rules)} coins", style = MaterialTheme.typography.bodyMedium)
+            Text("Costs ${formatCoins(RewardRules.price(tier, null, rules))} coins", style = MaterialTheme.typography.bodyMedium)
         }
         Text("Energy it takes", style = MaterialTheme.typography.labelLarge)
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -231,7 +232,7 @@ private fun RewardDialog(
     }
 }
 
-internal fun RewardTemplate.summary() = "Tier ${tier.level} · ${energy.name} energy · $price coins"
+internal fun RewardTemplate.summary() = "Tier ${tier.level} · ${energy.name} energy · ${formatCoins(price)} coins"
 
 @Preview
 @Composable

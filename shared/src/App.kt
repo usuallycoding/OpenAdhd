@@ -26,6 +26,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.usuallycoding.openadhd.domain.formatCoins
 import com.usuallycoding.openadhd.data.AppContainer
 import com.usuallycoding.openadhd.data.InMemoryStore
 import com.usuallycoding.openadhd.domain.ReminderCoordinator
@@ -123,7 +124,7 @@ fun App(container: AppContainer) {
     LaunchedEffect(todayViewModel) {
         // Each critical hit gets a short message; showSnackbar waits its turn, so quick hits queue up instead of overlapping.
         todayViewModel.criticalHits.collect { hit ->
-            snackbarHostState.showSnackbar("Critical hit! +${hit.bonus} bonus coins")
+            snackbarHostState.showSnackbar("Critical hit! +${formatCoins(hit.bonus)} bonus coins")
         }
     }
 
@@ -134,7 +135,7 @@ fun App(container: AppContainer) {
 
     LaunchedEffect(todayViewModel) {
         todayViewModel.undone.collect { undone ->
-            val coins = if (undone.coins == 1) "1 coin" else "${undone.coins} coins"
+            val coins = if (undone.coins == 1) "1 coin" else "${formatCoins(undone.coins)} coins"
             snackbarHostState.showSnackbar(if (undone.coins == 0) "Undone" else "Undone, -$coins")
         }
     }
@@ -195,7 +196,7 @@ private fun BalanceChip(balance: Int) {
         Icon(CoinIcon, contentDescription = "Dopamine coins")
         // A balance below zero is a debt, so it is shown in the error colour.
         Text(
-            "$balance",
+            formatCoins(balance),
             style = MaterialTheme.typography.titleMedium,
             color = if (balance < 0) MaterialTheme.colorScheme.error else Color.Unspecified,
             modifier = Modifier.padding(start = 4.dp),

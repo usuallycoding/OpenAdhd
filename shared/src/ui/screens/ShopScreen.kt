@@ -33,6 +33,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.usuallycoding.openadhd.domain.formatCoins
 import com.usuallycoding.openadhd.domain.Energy
 import com.usuallycoding.openadhd.domain.Redemption
 import com.usuallycoding.openadhd.domain.RedemptionSource
@@ -208,10 +209,10 @@ private fun ShopRow(item: ShopItem, onRedeem: () -> Unit) {
         supportingContent = {
             Column {
                 if (reward.description.isNotBlank()) Text(reward.description)
-                Text("${reward.price} coins · ${reward.energy.name} energy")
+                Text("${formatCoins(reward.price)} coins · ${reward.energy.name} energy")
                 if (!item.affordable) {
                     Text(
-                        "${item.coinsNeeded} more coins needed",
+                        "${formatCoins(item.coinsNeeded)} more coins needed",
                         color = MaterialTheme.colorScheme.error,
                         style = MaterialTheme.typography.bodySmall,
                     )
@@ -231,12 +232,12 @@ private fun ShopRow(item: ShopItem, onRedeem: () -> Unit) {
 @Composable
 private fun RollRow(option: RollOption, onRoll: () -> Unit) {
     ListItem(
-        headlineContent = { Text("Tier ${option.tier.level} roll · ${option.price} coins") },
+        headlineContent = { Text("Tier ${option.tier.level} roll · ${formatCoins(option.price)} coins") },
         supportingContent = {
             when {
                 !option.hasRewards -> Text("No tier ${option.tier.level} rewards yet")
                 !option.affordable -> Text(
-                    "${option.coinsNeeded} more coins needed",
+                    "${formatCoins(option.coinsNeeded)} more coins needed",
                     color = MaterialTheme.colorScheme.error,
                     style = MaterialTheme.typography.bodySmall,
                 )
@@ -262,7 +263,7 @@ private fun RollOption.oddsText(upgradeOneIn: Int): String {
 
 /** The extra confirmation line when a purchase leaves the user in debt; nothing when it does not. */
 private fun debtNote(debt: Int): String =
-    if (debt <= 0) "" else " This puts you ${if (debt == 1) "1 coin" else "$debt coins"} in debt."
+    if (debt <= 0) "" else " This puts you ${if (debt == 1) "1 coin" else "${formatCoins(debt)} coins"} in debt."
 
 @Composable
 private fun ConfirmRedeemDialog(
@@ -276,7 +277,7 @@ private fun ConfirmRedeemDialog(
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("Redeem ${reward.name}?") },
-        text = { Text("This costs ${reward.price} coins.${debtNote(CoinRules.debtAfter(balance, reward.price))}") },
+        text = { Text("This costs ${formatCoins(reward.price)} coins.${debtNote(CoinRules.debtAfter(balance, reward.price))}") },
         confirmButton = { TextButton(onClick = { onConfirm(redemptionId) }) { Text("Confirm") } },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
     )
@@ -294,7 +295,7 @@ private fun ConfirmRollDialog(
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("Roll tier ${option.tier.level}?") },
-        text = { Text("This costs ${option.price} coins. ${option.oddsText(LocalGameRules.current.upgradeOneIn)}.${debtNote(CoinRules.debtAfter(balance, option.price))}") },
+        text = { Text("This costs ${formatCoins(option.price)} coins. ${option.oddsText(LocalGameRules.current.upgradeOneIn)}.${debtNote(CoinRules.debtAfter(balance, option.price))}") },
         confirmButton = { TextButton(onClick = { onConfirm(rollId) }) { Text("Confirm") } },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
     )
@@ -317,7 +318,7 @@ private fun RollRevealDialog(result: RollResult, onDismiss: () -> Unit) {
                 } else {
                     Text("A tier ${won.tier.level} reward.")
                 }
-                Text("It cost ${won.price} coins.", modifier = Modifier.padding(top = 8.dp))
+                Text("It cost ${formatCoins(won.price)} coins.", modifier = Modifier.padding(top = 8.dp))
             }
         },
         confirmButton = { TextButton(onClick = onDismiss) { Text("Close") } },
@@ -363,7 +364,7 @@ private fun HistoryList(
                                 Text(purchase.historyNote())
                             }
                         },
-                        trailingContent = { Text("-${purchase.price}") },
+                        trailingContent = { Text("-${formatCoins(purchase.price)}") },
                     )
                     HorizontalDivider()
                 }
@@ -381,7 +382,7 @@ private fun Redemption.historyNote(): String {
 }
 
 private fun ShopShelf.title(rules: GameRules): String =
-    if (tier == RewardTier.Five) "Tier 5 · your own price" else "Tier ${tier.level} · ${RewardRules.fixedPrice(tier, rules)} coins"
+    if (tier == RewardTier.Five) "Tier 5 · your own price" else "Tier ${tier.level} · ${RewardRules.fixedPrice(tier, rules)?.let(::formatCoins)} coins"
 
 private fun formatTime(instant: Instant): String {
     val local = instant.toLocalDateTime(TimeZone.currentSystemDefault())

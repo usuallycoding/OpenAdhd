@@ -34,6 +34,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.usuallycoding.openadhd.domain.formatCoins
 import com.usuallycoding.openadhd.domain.SettingKey
 import com.usuallycoding.openadhd.domain.ThemeMode
 import com.usuallycoding.openadhd.ui.components.FormSheet
@@ -187,7 +188,7 @@ private fun DataDialogs(dialog: DataDialog, viewModel: SettingsViewModel) {
                     Text(count(summary.rewardTemplates, "reward template", "reward templates"))
                     Text(count(summary.todayEntries, "Today entry", "Today entries"))
                     Text(count(summary.redemptions, "redemption", "redemptions"))
-                    Text("Balance: ${summary.balance} coins")
+                    Text("Balance: ${formatCoins(summary.balance)} coins")
                     Text(
                         "Everything now in the app will be replaced.",
                         modifier = Modifier.padding(top = 8.dp),
