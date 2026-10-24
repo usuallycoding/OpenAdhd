@@ -60,6 +60,33 @@ class SettingsViewModelTest {
     }
 
     @Test
+    fun `the theme shows its label as value and default`() = runTest {
+        val vm = SettingsViewModel(store)
+        assertEquals("Follow system theme", vm.row(SettingKey.Theme).valueLabel)
+        assertEquals("Follow system theme", vm.row(SettingKey.Theme).defaultLabel)
+
+        var result: String? = "unset"
+        vm.save(SettingKey.Theme, "Dark") { result = it }
+        assertNull(result)
+        assertEquals("Dark", vm.row(SettingKey.Theme).valueLabel)
+        assertEquals("Follow system theme", vm.row(SettingKey.Theme).defaultLabel)
+        assertFalse(vm.row(SettingKey.Theme).isDefault)
+
+        vm.restore(SettingKey.Theme)
+        assertEquals("Follow system theme", vm.row(SettingKey.Theme).valueLabel)
+        assertTrue(vm.row(SettingKey.Theme).isDefault)
+        vm.viewModelScope.cancel()
+    }
+
+    @Test
+    fun `the appearance group comes first and holds only the theme`() = runTest {
+        val vm = SettingsViewModel(store)
+        assertEquals(SettingGroup.Appearance, vm.sections.value.first().group)
+        assertEquals(listOf(SettingKey.Theme), vm.sections.value.first().rows.map { it.key })
+        vm.viewModelScope.cancel()
+    }
+
+    @Test
     fun `a refused value reports why and changes nothing`() = runTest {
         val vm = SettingsViewModel(store)
         var result: String? = null

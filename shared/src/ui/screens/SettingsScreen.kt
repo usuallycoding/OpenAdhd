@@ -1,6 +1,7 @@
 package com.usuallycoding.openadhd.ui.screens
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -11,7 +12,9 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
 import androidx.compose.material3.ListItem
+import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
@@ -24,16 +27,22 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.usuallycoding.openadhd.domain.SettingKey
+import com.usuallycoding.openadhd.domain.ThemeMode
 import com.usuallycoding.openadhd.ui.components.FormSheet
 import com.usuallycoding.openadhd.ui.settings.DataDialog
 import com.usuallycoding.openadhd.ui.settings.SettingRow
 import com.usuallycoding.openadhd.ui.settings.SettingsViewModel
+import com.usuallycoding.openadhd.ui.theme.DarkThemeIcon
+import com.usuallycoding.openadhd.ui.theme.LightThemeIcon
+import com.usuallycoding.openadhd.ui.theme.SystemThemeIcon
 
 @Composable
 fun SettingsScreen(viewModel: SettingsViewModel, modifier: Modifier = Modifier) {
@@ -94,6 +103,14 @@ fun SettingsScreen(viewModel: SettingsViewModel, modifier: Modifier = Modifier) 
     dataDialog?.let { DataDialogs(it, viewModel) }
 
     editing?.let { row ->
+        if (row.key == SettingKey.Theme) {
+            ThemeSheet(
+                current = row.value,
+                onChoose = { mode -> viewModel.save(SettingKey.Theme, mode.name) { editing = null } },
+                onDismiss = { editing = null },
+            )
+            return@let
+        }
         SettingDialog(
             row = row,
             onDismiss = { editing = null },
@@ -202,5 +219,36 @@ private fun DataDialogs(dialog: DataDialog, viewModel: SettingsViewModel) {
             },
             dismissButton = { TextButton(onClick = viewModel::dismissDialog) { Text("Cancel") } },
         )
+    }
+}
+
+/** Icon and label of each theme option; the label comes from [ThemeMode.label]. */
+private fun ThemeMode.icon() = when (this) {
+    ThemeMode.System -> SystemThemeIcon
+    ThemeMode.Light -> LightThemeIcon
+    ThemeMode.Dark -> DarkThemeIcon
+}
+
+/** The three theme options in a bottom sheet, the current one highlighted; choosing one applies it and closes the sheet. */
+@Composable
+private fun ThemeSheet(current: String, onChoose: (ThemeMode) -> Unit, onDismiss: () -> Unit) {
+    FormSheet(
+        title = SettingKey.Theme.label,
+        onDismiss = onDismiss,
+        footer = { requestClose -> TextButton(onClick = requestClose) { Text("Close") } },
+    ) {
+        ThemeMode.entries.forEach { mode ->
+            val selected = mode.name == current
+            ListItem(
+                leadingContent = { Icon(mode.icon(), contentDescription = null) },
+                headlineContent = { Text(mode.label) },
+                colors = ListItemDefaults.colors(
+                    containerColor = if (selected) MaterialTheme.colorScheme.secondaryContainer else Color.Transparent,
+                ),
+                modifier = Modifier
+                    .testTag("theme-option-${mode.name}")
+                    .selectable(selected = selected, role = Role.RadioButton, onClick = { onChoose(mode) }),
+            )
+        }
     }
 }

@@ -31,7 +31,6 @@ import com.usuallycoding.openadhd.data.InMemoryStore
 import com.usuallycoding.openadhd.domain.ReminderCoordinator
 import com.usuallycoding.openadhd.domain.Settings
 import com.usuallycoding.openadhd.ui.LocalGameRules
-import com.usuallycoding.openadhd.ui.components.ThemeChooser
 import com.usuallycoding.openadhd.ui.screens.SettingsScreen
 import com.usuallycoding.openadhd.ui.screens.ShopScreen
 import com.usuallycoding.openadhd.ui.screens.TemplatesScreen
@@ -47,7 +46,6 @@ import com.usuallycoding.openadhd.ui.theme.ReorderIcon
 import com.usuallycoding.openadhd.ui.theme.SettingsIcon
 import com.usuallycoding.openadhd.ui.theme.ShopIcon
 import com.usuallycoding.openadhd.ui.theme.TemplatesIcon
-import com.usuallycoding.openadhd.ui.theme.ThemeMode
 import com.usuallycoding.openadhd.ui.theme.TodayIcon
 import com.usuallycoding.openadhd.ui.history.HistoryViewModel
 import com.usuallycoding.openadhd.ui.today.TodayViewModel
@@ -72,7 +70,6 @@ fun App() {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun App(container: AppContainer) {
-    var themeMode by rememberSaveable { mutableStateOf(ThemeMode.System) }
     var destination by rememberSaveable { mutableStateOf(Destination.Today) }
 
     val todayViewModel = viewModel { TodayViewModel(container.store, container.clock, dateCheckInterval = container.dateCheckInterval, random = container.random, reminders = container.reminders) }
@@ -84,7 +81,7 @@ fun App(container: AppContainer) {
     val walletViewModel = viewModel { WalletViewModel(container.store) }
     val settingsViewModel = viewModel { SettingsViewModel(container.store, container.files, container.clock) }
     val balance by walletViewModel.balance.collectAsStateWithLifecycle()
-    val settings by container.store.settings.collectAsStateWithLifecycle(Settings.Default)
+    val settings by container.store.settings.collectAsStateWithLifecycle(container.initialSettings)
 
     // Keeps the platform's notifications equal to the reminders in the store, for as long as the app is shown.
     LaunchedEffect(container) {
@@ -143,7 +140,7 @@ fun App(container: AppContainer) {
     }
 
     CompositionLocalProvider(LocalGameRules provides settings.rules) {
-    AppTheme(themeMode) {
+    AppTheme(settings.themeMode) {
         Scaffold(
             modifier = Modifier.fillMaxSize(),
             snackbarHost = { SnackbarHost(snackbarHostState) },
@@ -157,10 +154,6 @@ fun App(container: AppContainer) {
                             }
                         }
                         BalanceChip(balance)
-                        ThemeChooser(
-                            selected = themeMode,
-                            onSelected = { themeMode = it },
-                        )
                     },
                     colors = TopAppBarDefaults.topAppBarColors(
                         containerColor = MaterialTheme.colorScheme.primaryContainer,

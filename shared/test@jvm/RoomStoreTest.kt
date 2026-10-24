@@ -93,6 +93,7 @@ class RoomStoreTest : StoreContractTest() {
         assertNull(first.saveSetting(SettingKey.Name, "Sam"))
         assertNull(first.saveSetting(SettingKey.PriceTier2, "60"))
         first.restoreSetting(SettingKey.PriceTier2)
+        assertNull(first.saveSetting(SettingKey.Theme, "Dark"))
         firstDb.close()
 
         val second = RoomStore(Room.databaseBuilder<OpenAdhdDatabase>(file).buildOpenAdhdDatabase(), clock)
@@ -100,6 +101,7 @@ class RoomStoreTest : StoreContractTest() {
         assertEquals(200, settings.rules.debtLimit)
         assertEquals("Sam", settings.name)
         assertEquals(50, settings.rules.rewardPrices[1])
+        assertEquals(com.usuallycoding.openadhd.domain.ThemeMode.Dark, settings.themeMode)
     }
 
     @Test

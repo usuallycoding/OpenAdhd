@@ -12,6 +12,7 @@ import com.usuallycoding.openadhd.domain.RewardTier
 import com.usuallycoding.openadhd.domain.SettingKey
 import com.usuallycoding.openadhd.domain.Settings
 import com.usuallycoding.openadhd.domain.StoreState
+import com.usuallycoding.openadhd.domain.ThemeMode
 import com.usuallycoding.openadhd.domain.Tier
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
@@ -1544,5 +1545,47 @@ abstract class StoreContractTest {
         val target = newStore(clock)
         target.importData(source.exportData())
         assertEquals(reminder, target.entriesFor(today).first().single().reminder)
+    }
+
+    // ---- theme
+
+    @Test
+    fun `a saved theme is kept and restoring or saving the default clears it`() = runTest {
+        val store = newStore(clock)
+        assertEquals(ThemeMode.System, store.settings.first().themeMode)
+
+        assertNull(store.saveSetting(SettingKey.Theme, "Dark"))
+        assertEquals(ThemeMode.Dark, store.settings.first().themeMode)
+        assertEquals(mapOf("theme" to "Dark"), store.exportData().overrides)
+
+        store.restoreSetting(SettingKey.Theme)
+        assertEquals(ThemeMode.System, store.settings.first().themeMode)
+        assertTrue(store.exportData().overrides.isEmpty())
+
+        assertNull(store.saveSetting(SettingKey.Theme, "Light"))
+        assertNull(store.saveSetting(SettingKey.Theme, "System"))
+        assertTrue(store.exportData().overrides.isEmpty())
+    }
+
+    @Test
+    fun `a theme that is not an option is refused`() = runTest {
+        val store = newStore(clock)
+        assertEquals("Choose one of the options", store.saveSetting(SettingKey.Theme, "Purple"))
+        assertEquals(ThemeMode.System, store.settings.first().themeMode)
+    }
+
+    @Test
+    fun `the theme travels in a backup and is reset by deleting all data`() = runTest {
+        val source = newStore(clock)
+        assertNull(source.saveSetting(SettingKey.Theme, "Light"))
+        val data = source.exportData()
+
+        val target = newStore(clock)
+        assertNull(target.saveSetting(SettingKey.Theme, "Dark"))
+        target.importData(data)
+        assertEquals(ThemeMode.Light, target.settings.first().themeMode)
+
+        target.deleteAllData()
+        assertEquals(ThemeMode.System, target.settings.first().themeMode)
     }
 }

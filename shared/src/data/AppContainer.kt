@@ -6,8 +6,11 @@ import com.usuallycoding.openadhd.domain.CriticalHits
 import com.usuallycoding.openadhd.domain.OpenAdhdStore
 import com.usuallycoding.openadhd.domain.ReminderScheduler
 import com.usuallycoding.openadhd.ui.today.DefaultDateCheckInterval
+import com.usuallycoding.openadhd.domain.Settings
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.runBlocking
 import kotlin.random.Random
 import kotlin.time.Clock
 import kotlin.time.Duration
@@ -24,6 +27,11 @@ class AppContainer(
     val reminders: ReminderScheduler? = null,
     /** Reminders to show inside the app, where the platform has no system notification to show them with (the desktop fallback). */
     val reminderNotices: SharedFlow<String> = MutableSharedFlow(),
+    /**
+     * The saved settings, read once while the container is built, before any screen is drawn. The first frame
+     * then already has the saved theme and name instead of the defaults.
+     */
+    val initialSettings: Settings = runBlocking { store.settings.first() },
 )
 
 /**

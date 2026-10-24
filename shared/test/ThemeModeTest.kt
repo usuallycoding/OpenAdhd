@@ -1,6 +1,6 @@
 package com.usuallycoding.openadhd
 
-import com.usuallycoding.openadhd.ui.theme.ThemeMode
+import com.usuallycoding.openadhd.domain.ThemeMode
 import kotlin.test.Test
 import kotlin.test.assertEquals
 

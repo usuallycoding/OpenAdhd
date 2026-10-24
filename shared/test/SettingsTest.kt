@@ -7,6 +7,7 @@ import com.usuallycoding.openadhd.domain.RewardTier
 import com.usuallycoding.openadhd.domain.SettingCheck
 import com.usuallycoding.openadhd.domain.SettingKey
 import com.usuallycoding.openadhd.domain.Settings
+import com.usuallycoding.openadhd.domain.ThemeMode
 import com.usuallycoding.openadhd.domain.TaskTemplate
 import com.usuallycoding.openadhd.domain.Tier
 import com.usuallycoding.openadhd.domain.checkSetting
@@ -79,6 +80,44 @@ class SettingsTest {
         assertEquals(GameRules.Default, settings.rules)
         assertEquals(mapOf("reminder_stop_hour" to "18"), settings.overrides)
         assertEquals(22, Settings.fromOverrides(mapOf("reminder_stop_hour" to "30")).reminderStopHour)
+    }
+
+    @Test
+    fun `the theme defaults to following the system and each mode can be chosen`() {
+        assertEquals(ThemeMode.System, defaults.themeMode)
+        assertEquals("System", defaults.text(SettingKey.Theme))
+        for (mode in ThemeMode.entries) {
+            assertEquals(mode, accepted(SettingKey.Theme, mode.name).themeMode)
+        }
+        assertEquals(ThemeMode.Dark, accepted(SettingKey.Theme, " Dark ").themeMode)
+        assertEquals(GameRules.Default, accepted(SettingKey.Theme, "Dark").rules)
+    }
+
+    @Test
+    fun `a theme that is not one of the options is refused`() {
+        assertEquals("Choose one of the options", refusal(SettingKey.Theme, "Purple"))
+        assertEquals("Choose one of the options", refusal(SettingKey.Theme, ""))
+        assertEquals("Choose one of the options", refusal(SettingKey.Theme, "dark"))
+    }
+
+    @Test
+    fun `a saved theme is read back and an unknown stored one falls back to the system`() {
+        val dark = Settings.fromOverrides(mapOf("theme" to "Dark"))
+        assertEquals(ThemeMode.Dark, dark.themeMode)
+        assertEquals(mapOf("theme" to "Dark"), dark.overrides)
+        assertEquals(ThemeMode.System, Settings.fromOverrides(mapOf("theme" to "Neon")).themeMode)
+        assertEquals(emptyMap(), Settings.Default.overrides)
+    }
+
+    @Test
+    fun `the theme setting is a choice in the first group`() {
+        assertEquals(com.usuallycoding.openadhd.domain.SettingGroup.Appearance, SettingKey.Theme.group)
+        assertEquals(com.usuallycoding.openadhd.domain.SettingGroup.Appearance, com.usuallycoding.openadhd.domain.SettingGroup.entries.first())
+        assertTrue(SettingKey.Theme.isChoice)
+        assertFalse(SettingKey.Theme.isText)
+        assertFalse(SettingKey.Name.isChoice)
+        assertTrue(SettingKey.Name.isText)
+        assertEquals(listOf("System", "Light", "Dark"), SettingKey.Theme.choices)
     }
 
     @Test

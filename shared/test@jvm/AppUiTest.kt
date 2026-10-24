@@ -80,14 +80,6 @@ class AppUiTest {
     }
 
     @Test
-    fun `theme chooser switches the selected mode`() = runComposeUiTest {
-        setContent { App(AppContainer(InMemoryStore(), dateCheckInterval = null)) }
-        onNodeWithContentDescription("Theme: Follow system theme").performClick()
-        onNodeWithText("Dark").performClick()
-        onNodeWithContentDescription("Theme: Dark").assertExists()
-    }
-
-    @Test
     fun `a task with a description and subtasks pays per subtask`() = runComposeUiTest {
         setContent { App(AppContainer(InMemoryStore(), dateCheckInterval = null)) }
 

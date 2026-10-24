@@ -237,4 +237,13 @@ class BackupJsonTest {
         val message = refusal(tampered("\"reminderRepeatMinutes\": 30", "\"reminderRepeatMinutes\": 0"))
         assertEquals("A reminder repeats at an invalid interval (0).", message)
     }
+
+    @Test
+    fun `the theme round trips as a setting and an unknown one is ignored`() {
+        val dark = StoreState(overrides = mapOf("theme" to "Dark"))
+        assertEquals(mapOf("theme" to "Dark"), valid(BackupJson.encode(dark, at)).state.overrides)
+
+        val text = BackupJson.encode(StoreState(), at).replace("\"settings\": {}", "\"settings\": {\"theme\": \"Neon\"}")
+        assertEquals(emptyMap(), valid(text).state.overrides)
+    }
 }

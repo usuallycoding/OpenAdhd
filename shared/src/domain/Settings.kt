@@ -41,6 +41,7 @@ data class Settings(
     val rules: GameRules = GameRules.Default,
     /** The hour of the day, 1 to 23, at which reminders stop for the day. */
     val reminderStopHour: Int = 22,
+    val themeMode: ThemeMode = ThemeMode.System,
 ) {
     /** The title of the top bar. */
     val title: String get() = if (name.isBlank()) "OpenAdhd" else "$name's OpenAdhd"
@@ -68,11 +69,13 @@ data class Settings(
         SettingKey.CriticalMultiplier -> rules.criticalMultiplier.toString()
         SettingKey.UpgradeOneIn -> rules.upgradeOneIn.toString()
         SettingKey.ReminderStopHour -> reminderStopHour.toString()
+        SettingKey.Theme -> themeMode.name
     }
 
     /** These settings with [key] set to [value], which must already be valid (a number for every key but the name). */
     fun with(key: SettingKey, value: String): Settings {
         if (key == SettingKey.Name) return copy(name = value)
+        if (key == SettingKey.Theme) return copy(themeMode = ThemeMode.valueOf(value))
         val number = value.toInt()
         if (key == SettingKey.ReminderStopHour) return copy(reminderStopHour = number)
         fun <T> List<T>.set(index: Int, item: T) = toMutableList().also { it[index] = item }
@@ -91,7 +94,7 @@ data class Settings(
                 SettingKey.CriticalOneIn -> rules.copy(criticalOneIn = number)
                 SettingKey.CriticalMultiplier -> rules.copy(criticalMultiplier = number)
                 SettingKey.UpgradeOneIn -> rules.copy(upgradeOneIn = number)
-                SettingKey.Name, SettingKey.ReminderStopHour -> rules
+                SettingKey.Name, SettingKey.ReminderStopHour, SettingKey.Theme -> rules
             },
         )
     }
@@ -112,16 +115,21 @@ data class Settings(
 }
 
 enum class SettingGroup(val label: String) {
-    Profile("Profile"), Coins("Coins"), Subtasks("Subtasks"), Shop("Shop"), Luck("Luck"), Reminders("Reminders")
+    Appearance("Appearance"), Profile("Profile"), Coins("Coins"), Subtasks("Subtasks"), Shop("Shop"), Luck("Luck"), Reminders("Reminders")
 }
 
-/** One editable setting. [storageKey] is the key of its row in the database; [range] is null for the name. */
+/**
+ * One editable setting. [storageKey] is the key of its row in the database. A setting is a number with a [range],
+ * a choice among [choices] (stored as text), or, when it has neither, free text (the name).
+ */
 enum class SettingKey(
     val storageKey: String,
     val label: String,
     val group: SettingGroup,
     val range: IntRange?,
+    val choices: List<String>? = null,
 ) {
+    Theme("theme", "Theme", SettingGroup.Appearance, null, ThemeMode.entries.map { it.name }),
     Name("name", "Your name", SettingGroup.Profile, null),
     DebtLimit("debt_limit", "Debt limit", SettingGroup.Coins, 0..100_000),
     PayoutTier1("task_payout_1", "Tier 1 task pays", SettingGroup.Coins, 1..1000),
@@ -138,10 +146,19 @@ enum class SettingKey(
     UpgradeOneIn("upgrade_one_in", "Roll upgrade chance, 1 in", SettingGroup.Luck, 2..1000),
     ReminderStopHour("reminder_stop_hour", "Stop reminders at", SettingGroup.Reminders, 1..23);
 
-    val isText: Boolean get() = range == null
+    val isChoice: Boolean get() = choices != null
 
-    /** What is wrong with [text] on its own (not a number, out of range, name too long), or null. */
+    val isText: Boolean get() = range == null && choices == null
+
+    /** [text], a stored value of this setting, as the user reads it: a choice shows its label, an empty name "Not set". */
+    fun display(text: String): String = when (this) {
+        Theme -> ThemeMode.entries.firstOrNull { it.name == text }?.label ?: text
+        else -> text.ifEmpty { "Not set" }
+    }
+
+    /** What is wrong with [text] on its own (not a number, not a choice, out of range, name too long), or null. */
     fun problemWith(text: String): String? {
+        if (choices != null) return if (text.trim() in choices) null else "Choose one of the options"
         val range = range ?: return if (text.trim().length > MaxNameLength) "The name can be at most $MaxNameLength characters" else null
         val number = text.trim().toIntOrNull() ?: return "Enter a whole number"
         return if (number in range) null else "$label must be between ${range.first} and ${range.last}"

@@ -26,6 +26,10 @@ Two scripts leave their results in `dist/` (ignored by git):
 - macOS: `scripts/package-mac.sh` builds `OpenAdhd.app` and `OpenAdhd.dmg`, with its own Java runtime. It needs a JDK 25 or newer with `jpackage`: it uses `JAVA_HOME` if that is one, otherwise the JDK the Kotlin toolchain downloaded. The app is not signed, so the first time, right-click it and choose Open. Your data stays in `~/.openadhd/` when you replace the app.
 - Android: `scripts/package-android.sh` builds `OpenAdhd.apk` and checks its signature. It is the debug build, signed with the debug key in `~/.android/debug.keystore`. Install it with `adb install -r dist/OpenAdhd.apk`, or copy it to the phone. Build it on the same Mac every time: an APK signed with a different key will not install over the old one.
 
+### Appearance
+
+The theme (Follow system theme, Light or Dark) is chosen in Settings under Appearance and is remembered the next time the app starts. It is a normal setting, so it can be restored to its default, it is part of a backup, and Delete all data resets it.
+
 ### Reminders
 
 On Today, a task that is not done yet has a "..." button. Its sheet lets you set one reminder for the task and delete it (while nothing in it is done):

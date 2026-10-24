@@ -28,10 +28,10 @@ import kotlinx.coroutines.launch
 data class SettingRow(val key: SettingKey, val value: String, val default: String) {
     val isDefault: Boolean get() = value == default
 
-    /** The value for display; an empty name reads "Not set". */
-    val valueLabel: String get() = value.ifEmpty { "Not set" }
+    /** The value for display: a choice shows its label, and an empty name reads "Not set". */
+    val valueLabel: String get() = key.display(value)
 
-    val defaultLabel: String get() = default.ifEmpty { "Not set" }
+    val defaultLabel: String get() = key.display(default)
 }
 
 /** The settings of one group, in order. */

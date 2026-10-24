@@ -7,10 +7,14 @@ Defines how the app decides whether to render in light or dark appearance, based
 ## Requirements
 
 ### Requirement: Theme mode options
-The app SHALL support three theme modes: System, Light and Dark. The default on every launch MUST be System.
+The app SHALL support three theme modes: System, Light and Dark. The default on a fresh install, and after the theme is restored or all data is deleted, MUST be System.
 
 #### Scenario: Fresh launch
-- **WHEN** the app starts
+- **WHEN** the app starts for the first time
+- **THEN** the theme mode is System
+
+#### Scenario: After deleting all data
+- **WHEN** the user has chosen Dark and then deletes all data
 - **THEN** the theme mode is System
 
 ### Requirement: Appearance follows the theme mode
@@ -39,9 +43,17 @@ On Android 12 or newer the app SHALL use the system's dynamic color scheme, in t
 - **WHEN** the app runs on desktop, iOS, or Android older than 12
 - **THEN** colors come from the app's light or dark scheme
 
-### Requirement: Theme choice is not persisted
-The selected theme mode SHALL be kept only for the running app session.
+### Requirement: Theme choice is kept
+The selected theme mode SHALL be kept between launches, as the Theme setting in Settings, and SHALL be part of a backup like every other setting.
 
 #### Scenario: Restart
 - **WHEN** the user selects Dark and restarts the app
-- **THEN** the mode is System again
+- **THEN** the mode is Dark again
+
+#### Scenario: Restored
+- **WHEN** the user restores the Theme setting and restarts the app
+- **THEN** the mode is System
+
+#### Scenario: In a backup
+- **WHEN** the theme is Light, the user exports a backup, deletes all data and imports the backup
+- **THEN** the mode is Light again

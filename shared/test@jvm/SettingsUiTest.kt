@@ -171,4 +171,22 @@ class SettingsUiTest {
         waitForIdle()
         onNodeWithText("Alex's OpenAdhd").assertExists()
     }
+
+    @Test
+    fun `the top bar has no theme control`() = runComposeUiTest {
+        setContent { App(AppContainer(InMemoryStore(), dateCheckInterval = null)) }
+        onNodeWithContentDescription("Theme: Follow system theme").assertDoesNotExist()
+        onNodeWithContentDescription("Theme: Light").assertDoesNotExist()
+        onNodeWithContentDescription("Theme: Dark").assertDoesNotExist()
+        onNodeWithText("OpenAdhd").assertExists()
+    }
+
+    @Test
+    fun `a saved name is in the top bar on the very first screen`() = runComposeUiTest {
+        val store = InMemoryStore().also { runBlocking { it.saveSetting(SettingKey.Name, "Sam") } }
+        setContent { App(AppContainer(store, dateCheckInterval = null)) }
+        // no waiting: the title must not start as "OpenAdhd" and change afterwards
+        onNodeWithText("Sam's OpenAdhd").assertExists()
+        onNodeWithText("OpenAdhd").assertDoesNotExist()
+    }
 }
