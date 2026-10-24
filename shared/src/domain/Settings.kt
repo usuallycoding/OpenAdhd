@@ -40,6 +40,12 @@ data class Settings(val name: String = "", val rules: GameRules = GameRules.Defa
     /** The title of the top bar. */
     val title: String get() = if (name.isBlank()) "OpenAdhd" else "$name's OpenAdhd"
 
+    /** The settings that differ from their defaults, as storage key to text: what is stored and what a backup holds. */
+    val overrides: Map<String, String>
+        get() = SettingKey.entries
+            .filter { text(it) != Default.text(it) }
+            .associate { it.storageKey to text(it) }
+
     /** The value of [key] as the text the Settings form shows. */
     fun text(key: SettingKey): String = when (key) {
         SettingKey.Name -> name

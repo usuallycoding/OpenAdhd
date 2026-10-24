@@ -131,8 +131,22 @@ interface SettingsRepository {
     suspend fun restoreSetting(key: SettingKey)
 }
 
+interface DataRepository {
+    /** Everything the app holds, in the order the app shows it. */
+    suspend fun exportData(): StoreState
+
+    /**
+     * Replaces everything with [data] as one operation: nothing of the old data is kept or merged, and a failure
+     * leaves the old data as it was. The data is assumed to have been validated (see the backup format).
+     */
+    suspend fun importData(data: StoreState)
+
+    /** Removes everything, settings included, so the store is as when new. */
+    suspend fun deleteAllData()
+}
+
 /** All repositories behind one object, so completing a task or buying a reward updates its records and the ledger together. */
-interface OpenAdhdStore : TemplateRepository, PlannerRepository, LedgerRepository, RewardRepository, ShopRepository, SettingsRepository
+interface OpenAdhdStore : TemplateRepository, PlannerRepository, LedgerRepository, RewardRepository, ShopRepository, SettingsRepository, DataRepository
 
 /**
  * This list reordered to follow [ids]: items named in [ids] come first in that order, unknown ids are ignored,

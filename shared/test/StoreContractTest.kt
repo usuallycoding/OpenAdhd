@@ -10,6 +10,7 @@ import com.usuallycoding.openadhd.domain.RedemptionSource
 import com.usuallycoding.openadhd.domain.RewardTier
 import com.usuallycoding.openadhd.domain.SettingKey
 import com.usuallycoding.openadhd.domain.Settings
+import com.usuallycoding.openadhd.domain.StoreState
 import com.usuallycoding.openadhd.domain.Tier
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
@@ -1312,5 +1313,137 @@ abstract class StoreContractTest {
 
         assertEquals(-300, CoinRules.balance(store.entries.first()))
         assertFalse(store.redeem(tea.id, "t"))
+    }
+
+    // ---- backup: export, import, delete all
+
+    /** Fills a store with a bit of everything: both lists reordered, two days, progress, purchases, a roll and settings. */
+    private suspend fun populate(store: OpenAdhdStore) {
+        val day1 = today.minus(1, DateTimeUnit.DAY)
+        val clean = store.create("Clean", Tier.Three, Energy.Low, "Whole flat", listOf("Dishes", "Floor", "Trash"))
+        val taxes = store.create("Taxes", Tier.Four, Energy.High)
+        val walk = store.create("Walk", Tier.One, Energy.Low)
+        store.reorderTemplates(listOf(taxes.id, walk.id, clean.id))
+
+        val cleanEntry = store.assign(clean, day1)
+        store.completeSubtask(cleanEntry.subtasks[0].id)
+        store.completeSubtask(cleanEntry.subtasks[2].id)
+        val walkEntry = store.assign(walk, day1)
+        store.assign(taxes, day1)
+        store.completeTask(walkEntry.id)
+        store.reorderEntries(day1, listOf(cleanEntry.id, store.entriesFor(day1).first().last().id))
+        val todayEntry = store.assign(taxes, today)
+        store.completeTask(todayEntry.id)
+        store.assign(clean, today)
+
+        val tea = store.createReward("Tea", RewardTier.One, Energy.Low, "Green")
+        store.createReward("Dinner", RewardTier.Two, Energy.Medium)
+        store.createReward("Weekend", RewardTier.Five, Energy.High, "Away", customPrice = 800)
+        store.reorderRewards(store.rewards.first().map { it.id }.reversed())
+        check(store.redeem(tea.id, "purchase-1"))
+        checkNotNull(store.mysteryRoll(RewardTier.One, "roll-1"))
+
+        check(store.saveSetting(SettingKey.DebtLimit, "300") == null)
+        check(store.saveSetting(SettingKey.Name, "Sam") == null)
+    }
+
+    @Test
+    fun `an exported store imports into a new store as the same state`() = runTest {
+        val source = newStore(clock, ScriptedRandom(3, 0))
+        populate(source)
+        val data = source.exportData()
+
+        val target = newStore(clock)
+        target.importData(data)
+
+        assertEquals(data, target.exportData())
+        assertEquals(source.templates.first(), target.templates.first())
+        assertEquals(source.rewards.first(), target.rewards.first())
+        assertEquals(source.entries.first(), target.entries.first())
+        assertEquals(source.redemptions.first(), target.redemptions.first())
+        assertEquals(source.settings.first(), target.settings.first())
+        assertEquals(source.entriesFor(today).first(), target.entriesFor(today).first())
+        assertEquals(source.entriesFor(today.minus(1, DateTimeUnit.DAY)).first(), target.entriesFor(today.minus(1, DateTimeUnit.DAY)).first())
+        assertEquals(CoinRules.balance(source.entries.first()), CoinRules.balance(target.entries.first()))
+    }
+
+    @Test
+    fun `an export has every list in the order the app shows it`() = runTest {
+        val store = newStore(clock, ScriptedRandom(3, 0))
+        populate(store)
+        val data = store.exportData()
+
+        assertEquals(store.templates.first(), data.templates)
+        assertEquals(listOf("Taxes", "Walk", "Clean"), data.templates.map { it.name })
+        assertEquals(store.rewards.first(), data.rewards)
+        assertEquals(store.redemptions.first().reversed(), data.redemptions)
+        assertEquals(store.entries.first(), data.ledger)
+        assertEquals(listOf("Sam"), listOf(data.settings.name))
+        assertEquals(mapOf("debt_limit" to "300", "name" to "Sam"), data.overrides)
+    }
+
+    @Test
+    fun `importing replaces everything and keeps nothing of the old data`() = runTest {
+        val source = newStore(clock, ScriptedRandom(3, 0))
+        populate(source)
+        val data = source.exportData()
+
+        val target = newStore(clock)
+        target.create("Old template", Tier.Two, Energy.Low)
+        target.createReward("Old reward", RewardTier.Three, Energy.Low)
+        target.assign(target.templates.first().first(), today)
+        assertNull(target.saveSetting(SettingKey.UpgradeOneIn, "4"))
+
+        target.importData(data)
+
+        assertEquals(data, target.exportData())
+        assertTrue(target.templates.first().none { it.name == "Old template" })
+        assertTrue(target.rewards.first().none { it.name == "Old reward" })
+        assertEquals(6, target.settings.first().rules.upgradeOneIn)
+    }
+
+    @Test
+    fun `an imported store keeps working and new items still go first`() = runTest {
+        val source = newStore(clock, ScriptedRandom(3, 0))
+        populate(source)
+        val target = newStore(clock)
+        target.importData(source.exportData())
+
+        target.create("Newest", Tier.One, Energy.Low)
+        assertEquals(listOf("Newest", "Taxes", "Walk", "Clean"), target.templates.first().map { it.name })
+
+        val entry = target.entriesFor(today).first().first { !it.isCompleted }
+        assertNotNull(target.completeSubtask(entry.subtasks.first().id))
+        assertEquals(1, target.entriesFor(today).first().first { it.id == entry.id }.subtasks.count { it.isCompleted })
+    }
+
+    @Test
+    fun `importing an empty state clears the store`() = runTest {
+        val store = newStore(clock, ScriptedRandom(3, 0))
+        populate(store)
+        store.importData(StoreState())
+        assertEquals(StoreState(), store.exportData())
+        assertEquals(Settings.Default, store.settings.first())
+    }
+
+    @Test
+    fun `deleting all data leaves a store as new`() = runTest {
+        val store = newStore(clock, ScriptedRandom(3, 0))
+        populate(store)
+
+        store.deleteAllData()
+
+        assertEquals(StoreState(), store.exportData())
+        assertTrue(store.templates.first().isEmpty())
+        assertTrue(store.rewards.first().isEmpty())
+        assertTrue(store.entries.first().isEmpty())
+        assertTrue(store.redemptions.first().isEmpty())
+        assertTrue(store.entriesFor(today).first().isEmpty())
+        assertEquals(Settings.Default, store.settings.first())
+        assertEquals(0, CoinRules.balance(store.entries.first()))
+        // and it works again from scratch
+        val template = store.create("Fresh", Tier.One, Energy.Low)
+        assertNotNull(store.completeTask(store.assign(template, today).id))
+        assertEquals(5, CoinRules.balance(store.entries.first()))
     }
 }

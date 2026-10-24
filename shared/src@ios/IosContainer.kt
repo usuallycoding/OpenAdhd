@@ -9,7 +9,7 @@ import platform.Foundation.NSFileManager
 import platform.Foundation.NSUserDomainMask
 
 @OptIn(ExperimentalForeignApi::class)
-fun createIosContainer(): AppContainer {
+fun createIosContainer(files: DataFiles? = IosDataFiles()): AppContainer {
     val documents = NSFileManager.defaultManager.URLForDirectory(
         directory = NSDocumentDirectory,
         inDomain = NSUserDomainMask,
@@ -19,5 +19,5 @@ fun createIosContainer(): AppContainer {
     )
     val path = requireNotNull(documents?.path) { "Documents directory unavailable" } + "/openadhd.db"
     val database = Room.databaseBuilder<OpenAdhdDatabase>(name = path).buildOpenAdhdDatabase()
-    return createContainer(database)
+    return createContainer(database, files)
 }

@@ -30,6 +30,8 @@ dependencies@android:
 
 settings:
   kotlin:
+    serialization:
+      format: json
     ksp:
       processors:
         - androidx.room:room-compiler:2.8.4

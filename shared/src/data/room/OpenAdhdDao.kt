@@ -17,6 +17,7 @@ import com.usuallycoding.openadhd.domain.LedgerReason
 import com.usuallycoding.openadhd.domain.RedemptionSource
 import com.usuallycoding.openadhd.domain.RewardRules
 import com.usuallycoding.openadhd.domain.RewardTier
+import com.usuallycoding.openadhd.domain.StoreState
 import com.usuallycoding.openadhd.domain.RollRules
 import com.usuallycoding.openadhd.domain.reorderedBy
 import kotlinx.coroutines.flow.Flow
@@ -24,6 +25,108 @@ import kotlin.random.Random
 
 @Dao
 abstract class OpenAdhdDao {
+    // ---- backup
+
+    @Insert
+    abstract suspend fun insertTemplateRows(templates: List<TemplateEntity>)
+
+    @Insert
+    abstract suspend fun insertPlannedRows(tasks: List<PlannedTaskEntity>)
+
+    @Insert
+    abstract suspend fun insertLedgerRows(entries: List<LedgerEntity>)
+
+    @Insert
+    abstract suspend fun insertRewardRows(rewards: List<RewardTemplateEntity>)
+
+    @Insert
+    abstract suspend fun insertRedemptionRows(redemptions: List<RedemptionEntity>)
+
+    @Transaction
+    @Query("SELECT * FROM planned_tasks ORDER BY date, position, rowid")
+    abstract suspend fun plannedOnce(): List<PlannedWithSubtasks>
+
+    @Query("SELECT * FROM ledger ORDER BY rowid")
+    abstract suspend fun ledgerOnce(): List<LedgerEntity>
+
+    @Query("SELECT * FROM redemptions ORDER BY rowid")
+    abstract suspend fun redemptionsOnce(): List<RedemptionEntity>
+
+    @Query("DELETE FROM templates")
+    abstract suspend fun deleteAllTemplates()
+
+    @Query("DELETE FROM template_subtasks")
+    abstract suspend fun deleteAllTemplateSubtasks()
+
+    @Query("DELETE FROM planned_tasks")
+    abstract suspend fun deleteAllPlanned()
+
+    @Query("DELETE FROM planned_subtasks")
+    abstract suspend fun deleteAllPlannedSubtasks()
+
+    @Query("DELETE FROM ledger")
+    abstract suspend fun deleteAllLedger()
+
+    @Query("DELETE FROM reward_templates")
+    abstract suspend fun deleteAllRewards()
+
+    @Query("DELETE FROM redemptions")
+    abstract suspend fun deleteAllRedemptions()
+
+    @Query("DELETE FROM settings")
+    abstract suspend fun deleteAllSettings()
+
+    /** Everything the app holds, read in one transaction, with every list in the order the app shows it. */
+    @Transaction
+    open suspend fun exportAll(): StoreState {
+        val settings = currentSettings()
+        return StoreState(
+            templates = templatesOnce().map { it.toDomain() },
+            planned = plannedOnce().map { it.toDomain() },
+            ledger = ledgerOnce().map { it.toDomain() },
+            rewards = allRewards().map { it.toDomain(settings.rules) },
+            redemptions = redemptionsOnce().map { it.toDomain() },
+            overrides = settings.overrides,
+        )
+    }
+
+    /** Removes every row of every table. */
+    @Transaction
+    open suspend fun clearAll() {
+        deleteAllTemplateSubtasks()
+        deleteAllTemplates()
+        deleteAllPlannedSubtasks()
+        deleteAllPlanned()
+        deleteAllLedger()
+        deleteAllRewards()
+        deleteAllRedemptions()
+        deleteAllSettings()
+    }
+
+    /**
+     * Replaces everything with [data] in one transaction, so a failure leaves the old data. Positions are
+     * renumbered from the order of each list (per day for Today entries).
+     */
+    @Transaction
+    open suspend fun replaceAll(data: StoreState) {
+        clearAll()
+        insertTemplateRows(data.templates.mapIndexed { index, template -> template.toEntity().copy(position = index) })
+        insertTemplateSubtasks(data.templates.flatMap { it.subtaskEntities() })
+        val countPerDay = mutableMapOf<String, Int>()
+        insertPlannedRows(
+            data.planned.map { task ->
+                val position = countPerDay[task.date.toString()] ?: 0
+                countPerDay[task.date.toString()] = position + 1
+                task.toEntity().copy(position = position)
+            },
+        )
+        insertPlannedSubtasks(data.planned.flatMap { it.subtaskEntities() })
+        insertLedgerRows(data.ledger.map { it.toEntity() })
+        insertRewardRows(data.rewards.mapIndexed { index, reward -> reward.toEntity().copy(position = index) })
+        insertRedemptionRows(data.redemptions.map { it.toEntity() })
+        data.settings.overrides.forEach { (key, value) -> upsertSetting(key, value) }
+    }
+
     // ---- settings
 
     @Query("SELECT * FROM settings")

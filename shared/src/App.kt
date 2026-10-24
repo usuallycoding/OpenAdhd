@@ -81,7 +81,7 @@ fun App(container: AppContainer) {
     val shopViewModel = viewModel { ShopViewModel(container.store) }
     val rewardHistoryViewModel = viewModel { RewardHistoryViewModel(container.store, todayViewModel.today) }
     val walletViewModel = viewModel { WalletViewModel(container.store) }
-    val settingsViewModel = viewModel { SettingsViewModel(container.store) }
+    val settingsViewModel = viewModel { SettingsViewModel(container.store, container.files, container.clock) }
     val balance by walletViewModel.balance.collectAsStateWithLifecycle()
     val settings by container.store.settings.collectAsStateWithLifecycle(Settings.Default)
 

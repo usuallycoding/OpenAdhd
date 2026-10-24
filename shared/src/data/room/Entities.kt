@@ -169,6 +169,11 @@ internal fun RewardTemplateEntity.toDomain(rules: GameRules = GameRules.Default)
 
 internal fun RewardTemplate.toEntity() = RewardTemplateEntity(id, name, tier.level, energy.name, description, customPrice)
 
+internal fun Redemption.toEntity() = RedemptionEntity(
+    id, templateId, name, tier.level, energy.name, price, redeemedAt.toEpochMilliseconds(),
+    source.name, rolledTier?.level, description,
+)
+
 internal fun RedemptionEntity.toDomain() = Redemption(
     id, templateId, name, RewardTier.fromLevel(tier), Energy.valueOf(energy), price,
     Instant.fromEpochMilliseconds(redeemedAtMillis),

@@ -11,6 +11,7 @@ import com.usuallycoding.openadhd.domain.RewardTemplate
 import com.usuallycoding.openadhd.domain.RewardTier
 import com.usuallycoding.openadhd.domain.RollResult
 import com.usuallycoding.openadhd.domain.SettingKey
+import com.usuallycoding.openadhd.domain.StoreState
 import com.usuallycoding.openadhd.domain.Settings
 import com.usuallycoding.openadhd.domain.TaskTemplate
 import com.usuallycoding.openadhd.domain.Tier
@@ -106,6 +107,12 @@ class RoomStore(
             val redemption = entity.toDomain()
             RollResult(redemption, redemption.isLuckyUpgrade)
         }
+
+    override suspend fun exportData(): StoreState = dao.exportAll()
+
+    override suspend fun importData(data: StoreState) = dao.replaceAll(data)
+
+    override suspend fun deleteAllData() = dao.clearAll()
 
     override suspend fun saveSetting(key: SettingKey, text: String): String? = dao.saveSetting(key, text)
 

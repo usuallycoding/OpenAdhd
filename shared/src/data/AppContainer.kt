@@ -15,11 +15,13 @@ class AppContainer(
     val clock: Clock = Clock.System,
     val dateCheckInterval: Duration? = DefaultDateCheckInterval,
     val random: Random = Random.Default,
+    /** Saving and opening backup files, or null where the platform has no file dialog. */
+    val files: DataFiles? = null,
 )
 
 /**
  * The real app's wiring, shared by every platform entry point: a Room-backed store with critical hits switched on.
  * Stores default to no critical hits, so this is the one place that turns them on for the running app.
  */
-fun createContainer(database: OpenAdhdDatabase): AppContainer =
-    AppContainer(RoomStore(database, criticalHits = CriticalHits.Standard))
+fun createContainer(database: OpenAdhdDatabase, files: DataFiles? = null): AppContainer =
+    AppContainer(RoomStore(database, criticalHits = CriticalHits.Standard), files = files)

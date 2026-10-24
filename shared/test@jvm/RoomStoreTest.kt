@@ -53,6 +53,38 @@ class RoomStoreTest : StoreContractTest() {
     }
 
     @Test
+    fun `an imported backup and a deletion survive a restart`() = runTest {
+        val sourceFile = createTempDirectory().resolve("source.db").toString()
+        val sourceDb = Room.databaseBuilder<OpenAdhdDatabase>(sourceFile).buildOpenAdhdDatabase()
+        val source = RoomStore(sourceDb, clock)
+        val today = clock.todayIn(TimeZone.UTC)
+        val template = source.create("Clean", Tier.Three, Energy.Low, subtasks = listOf("A", "B"))
+        source.create("Second", Tier.One, Energy.Low)
+        val entry = source.assign(template, today)
+        source.completeSubtask(entry.subtasks[1].id)
+        source.createReward("Tea", RewardTier.One, Energy.Low)
+        assertNull(source.saveSetting(SettingKey.Name, "Sam"))
+        val data = source.exportData()
+        sourceDb.close()
+
+        val file = createTempDirectory().resolve("target.db").toString()
+        val firstDb = Room.databaseBuilder<OpenAdhdDatabase>(file).buildOpenAdhdDatabase()
+        val first = RoomStore(firstDb, clock)
+        first.create("Old", Tier.Two, Energy.Low)
+        first.importData(data)
+        firstDb.close()
+
+        val secondDb = Room.databaseBuilder<OpenAdhdDatabase>(file).buildOpenAdhdDatabase()
+        val second = RoomStore(secondDb, clock)
+        assertEquals(data, second.exportData())
+        second.deleteAllData()
+        secondDb.close()
+
+        val third = RoomStore(Room.databaseBuilder<OpenAdhdDatabase>(file).buildOpenAdhdDatabase(), clock)
+        assertEquals(com.usuallycoding.openadhd.domain.StoreState(), third.exportData())
+    }
+
+    @Test
     fun `settings survive a restart and a restored one is gone`() = runTest {
         val file = createTempDirectory().resolve("settings.db").toString()
         val firstDb = Room.databaseBuilder<OpenAdhdDatabase>(file).buildOpenAdhdDatabase()

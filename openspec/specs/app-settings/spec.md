@@ -7,7 +7,7 @@ Lets the user tune the numbers that make up the game, such as the debt limit, co
 ## Requirements
 
 ### Requirement: Settings tab
-The app SHALL have a Settings destination in the bottom bar, after Shop, that lists every setting grouped as Profile, Coins, Subtasks, Shop and Luck. Each setting SHALL show its name, its current value and its default.
+The app SHALL have a Settings destination in the bottom bar, after Shop, that lists every setting grouped as Profile, Coins, Subtasks, Shop and Luck, followed by a Data section. Each setting SHALL show its name, its current value and its default.
 
 #### Scenario: Opening Settings
 - **WHEN** the user taps Settings in the bottom bar
@@ -20,6 +20,10 @@ The app SHALL have a Settings destination in the bottom bar, after Shop, that li
 #### Scenario: No reorder control
 - **WHEN** the Settings destination is shown
 - **THEN** the top bar offers no Reorder control
+
+#### Scenario: Data section last
+- **WHEN** the user scrolls to the end of the Settings list
+- **THEN** the Data section is shown after the Luck group
 
 ### Requirement: Settings and their defaults
 The settings and their defaults SHALL be: name, empty; debt limit, 500 coins; subtask ceiling, 10; the coins paid by task tiers 1 to 4, 5, 10, 20 and 40; the Shop price of reward tiers 1 to 4, 20, 50, 120 and 300; critical hit chance, 1 in 8; critical hit multiplier, 2; roll upgrade chance, 1 in 6.

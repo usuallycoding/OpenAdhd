@@ -14,6 +14,7 @@ import com.usuallycoding.openadhd.domain.RedemptionSource
 import com.usuallycoding.openadhd.domain.GameRules
 import com.usuallycoding.openadhd.domain.RewardTemplate
 import com.usuallycoding.openadhd.domain.RewardTier
+import com.usuallycoding.openadhd.domain.StoreState
 import com.usuallycoding.openadhd.domain.RollResult
 import com.usuallycoding.openadhd.domain.SettingCheck
 import com.usuallycoding.openadhd.domain.SettingKey
@@ -34,20 +35,6 @@ import kotlinx.coroutines.flow.update
 import kotlinx.datetime.LocalDate
 import kotlin.random.Random
 import kotlin.time.Clock
-
-/** The whole persisted state; also the unit a persistent store reads and writes. */
-data class StoreState(
-    val templates: List<TaskTemplate> = emptyList(),
-    val planned: List<PlannedTask> = emptyList(),
-    val ledger: List<LedgerEntry> = emptyList(),
-    val rewards: List<RewardTemplate> = emptyList(),
-    val redemptions: List<Redemption> = emptyList(),
-    /** The settings the user changed: storage key to text. Anything missing has its default. */
-    val overrides: Map<String, String> = emptyMap(),
-) {
-    val settings: Settings get() = Settings.fromOverrides(overrides)
-    val rules: GameRules get() = settings.rules
-}
 
 /** Pure state transitions shared by every [OpenAdhdStore] implementation. */
 internal class StoreLogic(
@@ -335,6 +322,19 @@ class InMemoryStore(
             val (after, result) = logic.mysteryRoll(before, tier, redemptionId) ?: return null
             if (state.compareAndSet(before, after)) return result
         }
+    }
+
+    override suspend fun exportData(): StoreState {
+        val current = state.value
+        return current.copy(rewards = current.rewards.map { it.priced(current.rules) }, overrides = current.settings.overrides)
+    }
+
+    override suspend fun importData(data: StoreState) {
+        state.value = data.copy(overrides = data.settings.overrides)
+    }
+
+    override suspend fun deleteAllData() {
+        state.value = StoreState()
     }
 
     override suspend fun saveSetting(key: SettingKey, text: String): String? {
