@@ -5,6 +5,11 @@ import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.swipeRight
+import androidx.compose.ui.test.swipeLeft
+import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.onRoot
+import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.performTextReplacement
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.isToggleable
@@ -196,6 +201,45 @@ class AppUiTest {
         onNodeWithText("Price (coins)").performTextReplacement("301")
         onNodeWithText("Save").performClick()
         onNodeWithText("Tier 5 · Low energy · 301 coins").assertExists()
+    }
+
+    @Test
+    fun `cancelling a form sheet discards what was typed`() = runComposeUiTest {
+        setContent { App(AppContainer(InMemoryStore(), dateCheckInterval = null)) }
+
+        onNodeWithText("Templates").performClick()
+        onNodeWithContentDescription("Add template").performClick()
+        onNodeWithText("Name").performTextInput("Never saved")
+        onNodeWithText("Cancel").performClick()
+        waitForIdle()
+        onNodeWithText("Never saved").assertDoesNotExist()
+        onNodeWithText("No templates yet. Tap + to create your first task.").assertExists()
+
+        onNodeWithText("Rewards").performClick()
+        onNodeWithContentDescription("Add reward").performClick()
+        onNodeWithText("Name").performTextInput("Also never saved")
+        onNodeWithText("Cancel").performClick()
+        waitForIdle()
+        onNodeWithText("Also never saved").assertDoesNotExist()
+        onNodeWithText("No rewards yet. Tap + to add something to look forward to.").assertExists()
+    }
+
+    @Test
+    fun `a tall task form with ten subtasks still lets you reach Save`() = runComposeUiTest {
+        setContent { App(AppContainer(InMemoryStore(), dateCheckInterval = null)) }
+
+        onNodeWithText("Templates").performClick()
+        onNodeWithContentDescription("Add template").performClick()
+        onNodeWithText("Name").performTextInput("Big job")
+        onNodeWithText("4").performClick()
+        repeat(10) { onNodeWithText("Add subtask").performScrollTo().performClick() }
+        onNodeWithText("Subtasks (10/10)").assertExists()
+        onNodeWithText("Add subtask").performScrollTo().assertIsNotEnabled()
+        for (i in 1..10) onNodeWithText("Subtask $i").performScrollTo().performTextInput("Step $i")
+        onNodeWithText("Save").assertExists().performClick()
+        waitForIdle()
+        onNodeWithText("Big job").assertExists()
+        onNodeWithText("Tier 4 · Medium energy · 10 subtasks").assertExists()
     }
 
     @Test
@@ -501,5 +545,139 @@ class AppUiTest {
 
         onNodeWithText("You have no task templates yet. Create one on the Templates tab first.").assertExists()
         onNodeWithText("How about this one?").assertDoesNotExist()
+    }
+
+    // ---- collapse and expand
+
+    @Test
+    fun `tapping an entry hides and shows its subtasks and keeps its progress visible`() = runComposeUiTest {
+        val store = critStore(subtasks = listOf("Dishes", "Counters", "Trash"))
+        setContent { App(AppContainer(store, dateCheckInterval = null)) }
+        onNodeWithText("Dishes").assertExists()
+        onNodeWithText("Tier 3 · Low energy · 0 of 3 done").assertExists()
+
+        onNodeWithText("Clean").performClick()
+        onNodeWithText("Dishes").assertDoesNotExist()
+        onNodeWithText("Trash").assertDoesNotExist()
+        onNodeWithText("Clean").assertExists()
+        onNodeWithText("Tier 3 · Low energy · 0 of 3 done").assertExists()
+
+        onNodeWithText("Clean").performClick()
+        onNodeWithText("Dishes").assertExists()
+        onNodeWithText("Trash").assertExists()
+    }
+
+    @Test
+    fun `an entry without subtasks ignores the tap and still completes with its checkbox`() = runComposeUiTest {
+        val store = critStore(false)
+        setContent { App(AppContainer(store, dateCheckInterval = null)) }
+
+        onNodeWithText("Taxes").performClick()
+        onNodeWithText("Tier 3 · Low energy · +20 coins", substring = true).assertExists()
+
+        onNode(isToggleable()).performClick()
+        onNodeWithText("20").assertExists()
+    }
+
+    @Test
+    fun `a collapsed entry stays collapsed after visiting another screen`() = runComposeUiTest {
+        val store = critStore(subtasks = listOf("Dishes", "Counters", "Trash"))
+        setContent { App(AppContainer(store, dateCheckInterval = null)) }
+
+        onNodeWithText("Clean").performClick()
+        onNodeWithText("Dishes").assertDoesNotExist()
+
+        onNodeWithText("Shop").performClick()
+        onNodeWithText("Today").performClick()
+
+        onNodeWithText("Clean").assertExists()
+        onNodeWithText("Dishes").assertDoesNotExist()
+    }
+
+    // ---- swipeable and remembered tabs
+
+    private fun androidx.compose.ui.test.ComposeUiTest.swipeContentLeft() = onRoot().performTouchInput { swipeLeft() }
+
+    private fun androidx.compose.ui.test.ComposeUiTest.swipeContentRight() = onRoot().performTouchInput { swipeRight() }
+
+    @Test
+    fun `swiping changes the tab on Templates and the tab row follows`() = runComposeUiTest {
+        setContent { App(AppContainer(InMemoryStore(), dateCheckInterval = null)) }
+        onNodeWithText("Templates").performClick()
+        onNodeWithText("Tasks").assertIsSelected()
+        onNodeWithText("No templates yet. Tap + to create your first task.").assertExists()
+
+        swipeContentLeft()
+        onNodeWithText("Rewards").assertIsSelected()
+        onNodeWithText("No rewards yet. Tap + to add something to look forward to.").assertExists()
+
+        swipeContentRight()
+        onNodeWithText("Tasks").assertIsSelected()
+        onNodeWithText("No templates yet. Tap + to create your first task.").assertExists()
+    }
+
+    @Test
+    fun `swiping past the first or last tab changes nothing`() = runComposeUiTest {
+        setContent { App(AppContainer(InMemoryStore(), dateCheckInterval = null)) }
+        onNodeWithText("Templates").performClick()
+
+        swipeContentRight()
+        onNodeWithText("Tasks").assertIsSelected()
+
+        swipeContentLeft()
+        swipeContentLeft()
+        onNodeWithText("Rewards").assertIsSelected()
+    }
+
+    @Test
+    fun `swiping changes the tab on the Shop`() = runComposeUiTest {
+        setContent { App(AppContainer(InMemoryStore(), dateCheckInterval = null)) }
+        onNodeWithText("Shop").performClick()
+        onNodeWithText("Rewards").assertIsSelected()
+
+        swipeContentLeft()
+        onNodeWithText("History").assertIsSelected()
+        onNodeWithText("Nothing redeemed yet.").assertExists()
+
+        swipeContentRight()
+        onNodeWithText("Rewards").assertIsSelected()
+    }
+
+    @Test
+    fun `tapping a tab shows it`() = runComposeUiTest {
+        setContent { App(AppContainer(InMemoryStore(), dateCheckInterval = null)) }
+        onNodeWithText("Shop").performClick()
+
+        onNodeWithText("History").performClick()
+
+        onNodeWithText("History").assertIsSelected()
+        onNodeWithText("Nothing redeemed yet.").assertExists()
+    }
+
+    @Test
+    fun `each screen remembers its own tab after visiting another screen`() = runComposeUiTest {
+        setContent { App(AppContainer(InMemoryStore(), dateCheckInterval = null)) }
+
+        onNodeWithText("Templates").performClick()
+        onNodeWithText("Rewards").performClick()
+        onNodeWithText("Shop").performClick()
+        onNodeWithText("History").performClick()
+        onNodeWithText("Today").performClick()
+
+        onNodeWithText("Templates").performClick()
+        onNodeWithText("Rewards").assertIsSelected()
+        onNodeWithText("Shop").performClick()
+        onNodeWithText("History").assertIsSelected()
+    }
+
+    @Test
+    fun `a screen that was never changed starts on its first tab`() = runComposeUiTest {
+        setContent { App(AppContainer(InMemoryStore(), dateCheckInterval = null)) }
+        onNodeWithText("Shop").performClick()
+        onNodeWithText("History").performClick()
+
+        onNodeWithText("Templates").performClick()
+
+        onNodeWithText("Tasks").assertIsSelected()
     }
 }

@@ -49,3 +49,8 @@ val DiceIcon: ImageVector by lazy {
         )
     }
 }
+
+/** A downward chevron; rotated to point right when something is collapsed. */
+val ChevronIcon: ImageVector by lazy {
+    themeIcon("Chevron") { stroked("M6,9l6,6l6,-6") }
+}

@@ -10,10 +10,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.HorizontalDivider
@@ -41,6 +38,7 @@ import com.usuallycoding.openadhd.domain.RewardRules
 import com.usuallycoding.openadhd.domain.RewardTemplate
 import com.usuallycoding.openadhd.domain.RewardTier
 import com.usuallycoding.openadhd.ui.rewards.RewardTemplatesViewModel
+import com.usuallycoding.openadhd.ui.components.FormSheet
 import com.usuallycoding.openadhd.ui.theme.AddIcon
 import com.usuallycoding.openadhd.ui.theme.DeleteIcon
 import com.usuallycoding.openadhd.ui.theme.EditIcon
@@ -113,7 +111,6 @@ fun RewardsContent(
             onDismiss = { editing = null },
             onConfirm = { name, tier, energy, description, customPrice ->
                 onSave(reward.id.ifEmpty { null }, name, tier, energy, description, customPrice)
-                editing = null
             },
         )
     }
@@ -132,85 +129,84 @@ private fun RewardDialog(
     var priceText by remember { mutableStateOf(initial.customPrice?.toString() ?: "") }
     var error by remember { mutableStateOf<RewardInputError?>(null) }
 
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(if (initial.id.isEmpty()) "New reward" else "Edit reward") },
-        text = {
-            Column(
-                verticalArrangement = Arrangement.spacedBy(12.dp),
-                modifier = Modifier.verticalScroll(rememberScrollState()),
-            ) {
-                OutlinedTextField(
-                    value = name,
-                    onValueChange = { name = it; error = null },
-                    label = { Text("Name") },
-                    singleLine = true,
-                    isError = error == RewardInputError.NameRequired,
-                    supportingText = if (error == RewardInputError.NameRequired) ({ Text("A name is required") }) else null,
-                    modifier = Modifier.fillMaxWidth(),
-                )
-                OutlinedTextField(
-                    value = description,
-                    onValueChange = { description = it },
-                    label = { Text("Description (optional)") },
-                    minLines = 2,
-                    maxLines = 4,
-                    modifier = Modifier.fillMaxWidth(),
-                )
-                Text("Tier", style = MaterialTheme.typography.labelLarge)
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    RewardTier.entries.forEach { option ->
-                        FilterChip(
-                            selected = option == tier,
-                            onClick = { tier = option; error = null },
-                            label = { Text("${option.level}") },
-                        )
-                    }
-                }
-                if (tier == RewardTier.Five) {
-                    OutlinedTextField(
-                        value = priceText,
-                        onValueChange = { priceText = it.filter(Char::isDigit); error = null },
-                        label = { Text("Price (coins)") },
-                        singleLine = true,
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                        isError = error == RewardInputError.PriceRequired || error == RewardInputError.PriceTooLow,
-                        supportingText = {
-                            Text(
-                                when (error) {
-                                    RewardInputError.PriceRequired -> "A price is required for tier 5"
-                                    RewardInputError.PriceTooLow ->
-                                        "A tier 5 price must be larger than ${RewardRules.TopFixedPrice}"
-                                    else -> "Must be larger than ${RewardRules.TopFixedPrice}"
-                                },
-                            )
-                        },
-                        modifier = Modifier.fillMaxWidth(),
-                    )
-                } else {
-                    Text("Costs ${RewardRules.price(tier, null)} coins", style = MaterialTheme.typography.bodyMedium)
-                }
-                Text("Energy it takes", style = MaterialTheme.typography.labelLarge)
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Energy.entries.forEach { option ->
-                        FilterChip(
-                            selected = option == energy,
-                            onClick = { energy = option },
-                            label = { Text(option.name) },
-                        )
-                    }
-                }
-            }
-        },
-        confirmButton = {
+    FormSheet(
+        title = if (initial.id.isEmpty()) "New reward" else "Edit reward",
+        onDismiss = onDismiss,
+        footer = { requestClose ->
+            TextButton(onClick = requestClose) { Text("Cancel") }
             TextButton(onClick = {
                 val customPrice = if (tier == RewardTier.Five) priceText.toIntOrNull() else null
                 val problem = RewardTemplatesViewModel.validate(name, tier, customPrice)
-                if (problem == null) onConfirm(name, tier, energy, description, customPrice) else error = problem
+                if (problem == null) {
+                    onConfirm(name, tier, energy, description, customPrice)
+                    requestClose()
+                } else {
+                    error = problem
+                }
             }) { Text("Save") }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
-    )
+    ) {
+        OutlinedTextField(
+            value = name,
+            onValueChange = { name = it; error = null },
+            label = { Text("Name") },
+            singleLine = true,
+            isError = error == RewardInputError.NameRequired,
+            supportingText = if (error == RewardInputError.NameRequired) ({ Text("A name is required") }) else null,
+            modifier = Modifier.fillMaxWidth(),
+        )
+        OutlinedTextField(
+            value = description,
+            onValueChange = { description = it },
+            label = { Text("Description (optional)") },
+            minLines = 2,
+            maxLines = 4,
+            modifier = Modifier.fillMaxWidth(),
+        )
+        Text("Tier", style = MaterialTheme.typography.labelLarge)
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            RewardTier.entries.forEach { option ->
+                FilterChip(
+                    selected = option == tier,
+                    onClick = { tier = option; error = null },
+                    label = { Text("${option.level}") },
+                )
+            }
+        }
+        if (tier == RewardTier.Five) {
+            OutlinedTextField(
+                value = priceText,
+                onValueChange = { priceText = it.filter(Char::isDigit); error = null },
+                label = { Text("Price (coins)") },
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                isError = error == RewardInputError.PriceRequired || error == RewardInputError.PriceTooLow,
+                supportingText = {
+                    Text(
+                        when (error) {
+                            RewardInputError.PriceRequired -> "A price is required for tier 5"
+                            RewardInputError.PriceTooLow ->
+                                "A tier 5 price must be larger than ${RewardRules.TopFixedPrice}"
+                            else -> "Must be larger than ${RewardRules.TopFixedPrice}"
+                        },
+                    )
+                },
+                modifier = Modifier.fillMaxWidth(),
+            )
+        } else {
+            Text("Costs ${RewardRules.price(tier, null)} coins", style = MaterialTheme.typography.bodyMedium)
+        }
+        Text("Energy it takes", style = MaterialTheme.typography.labelLarge)
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Energy.entries.forEach { option ->
+                FilterChip(
+                    selected = option == energy,
+                    onClick = { energy = option },
+                    label = { Text(option.name) },
+                )
+            }
+        }
+    }
 }
 
 internal fun RewardTemplate.summary() = "Tier ${tier.level} · ${energy.name} energy · $price coins"

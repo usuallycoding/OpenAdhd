@@ -1,6 +1,8 @@
 package com.usuallycoding.openadhd.ui.screens
 
 import androidx.compose.foundation.clickable
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -31,6 +33,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
@@ -40,7 +45,9 @@ import com.usuallycoding.openadhd.domain.PlannedSubtask
 import com.usuallycoding.openadhd.domain.PlannedTask
 import com.usuallycoding.openadhd.domain.TaskTemplate
 import com.usuallycoding.openadhd.domain.Tier
+import com.usuallycoding.openadhd.ui.components.FormSheet
 import com.usuallycoding.openadhd.ui.theme.AddIcon
+import com.usuallycoding.openadhd.ui.theme.ChevronIcon
 import com.usuallycoding.openadhd.ui.theme.DeleteIcon
 import com.usuallycoding.openadhd.ui.theme.DiceIcon
 import com.usuallycoding.openadhd.ui.today.RandomizerState
@@ -53,6 +60,7 @@ fun TodayScreen(viewModel: TodayViewModel, modifier: Modifier = Modifier) {
     val entries by viewModel.entries.collectAsStateWithLifecycle()
     val templates by viewModel.templates.collectAsStateWithLifecycle()
     val randomizer by viewModel.randomizer.collectAsStateWithLifecycle()
+    val collapsed by viewModel.collapsedEntryIds.collectAsStateWithLifecycle()
     TodayContent(
         entries = entries,
         templates = templates,
@@ -60,6 +68,8 @@ fun TodayScreen(viewModel: TodayViewModel, modifier: Modifier = Modifier) {
         onRemove = viewModel::remove,
         onCompleteTask = viewModel::completeTask,
         onCompleteSubtask = viewModel::completeSubtask,
+        collapsedEntryIds = collapsed,
+        onToggleCollapsed = viewModel::toggleCollapsed,
         randomizer = randomizer,
         onPickForMe = viewModel::openRandomizer,
         onChooseEnergy = viewModel::chooseEnergy,
@@ -80,6 +90,8 @@ fun TodayContent(
     onCompleteTask: (id: String) -> Unit,
     onCompleteSubtask: (id: String) -> Unit,
     modifier: Modifier = Modifier,
+    collapsedEntryIds: Set<String> = emptySet(),
+    onToggleCollapsed: (id: String) -> Unit = {},
     randomizer: RandomizerState = RandomizerState.Closed,
     onPickForMe: () -> Unit = {},
     onChooseEnergy: (Energy) -> Unit = {},
@@ -104,7 +116,14 @@ fun TodayContent(
         } else {
             LazyColumn(contentPadding = PaddingValues(bottom = 88.dp)) {
                 items(entries, key = { it.id }) { entry ->
-                    EntryItem(entry, onRemove, onCompleteTask, onCompleteSubtask)
+                    EntryItem(
+                        entry = entry,
+                        expanded = entry.id !in collapsedEntryIds,
+                        onToggleExpanded = { onToggleCollapsed(entry.id) },
+                        onRemove = onRemove,
+                        onCompleteTask = onCompleteTask,
+                        onCompleteSubtask = onCompleteSubtask,
+                    )
                     HorizontalDivider()
                 }
             }
@@ -144,13 +163,26 @@ fun TodayContent(
 @Composable
 private fun EntryItem(
     entry: PlannedTask,
+    expanded: Boolean,
+    onToggleExpanded: () -> Unit,
     onRemove: (String) -> Unit,
     onCompleteTask: (String) -> Unit,
     onCompleteSubtask: (String) -> Unit,
 ) {
     val hasSubtasks = entry.subtasks.isNotEmpty()
+    val chevronAngle by animateFloatAsState(if (expanded) 0f else -90f)
     ListItem(
-        leadingContent = if (hasSubtasks) null else ({
+        // Tapping the header of an entry with subtasks shows or hides them; entries without subtasks are not tappable.
+        modifier = if (hasSubtasks) {
+            Modifier
+                .clickable(onClickLabel = if (expanded) "Collapse" else "Expand", onClick = onToggleExpanded)
+                .semantics { stateDescription = if (expanded) "Expanded" else "Collapsed" }
+        } else {
+            Modifier
+        },
+        leadingContent = if (hasSubtasks) {
+            { Icon(ChevronIcon, contentDescription = null, modifier = Modifier.rotate(chevronAngle)) }
+        } else ({
             Checkbox(
                 checked = entry.isCompleted,
                 enabled = !entry.isCompleted,
@@ -172,8 +204,12 @@ private fun EntryItem(
             }
         }),
     )
-    entry.subtasks.forEach { subtask ->
-        SubtaskItem(subtask, onComplete = { onCompleteSubtask(subtask.id) })
+    AnimatedVisibility(visible = expanded) {
+        Column {
+            entry.subtasks.forEach { subtask ->
+                SubtaskItem(subtask, onComplete = { onCompleteSubtask(subtask.id) })
+            }
+        }
     }
 }
 
@@ -276,26 +312,24 @@ private fun TemplatePickerDialog(
     onPick: (TaskTemplate) -> Unit,
     onDismiss: () -> Unit,
 ) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Add to today") },
-        text = {
-            if (templates.isEmpty()) {
-                Text("You have no task templates yet. Create one on the Templates tab first.")
-            } else {
-                LazyColumn {
-                    items(templates, key = { it.id }) { template ->
-                        ListItem(
-                            headlineContent = { Text(template.name) },
-                            supportingContent = { Text(template.description()) },
-                            modifier = Modifier.clickable { onPick(template) },
-                        )
-                    }
-                }
+    FormSheet(
+        title = "Add to today",
+        onDismiss = onDismiss,
+        footer = { requestClose -> TextButton(onClick = requestClose) { Text("Close") } },
+    ) {
+        if (templates.isEmpty()) {
+            Text("You have no task templates yet. Create one on the Templates tab first.")
+        } else {
+            // The sheet body already scrolls, so a plain column (not a LazyColumn) keeps long lists reachable.
+            templates.forEach { template ->
+                ListItem(
+                    headlineContent = { Text(template.name) },
+                    supportingContent = { Text(template.description()) },
+                    modifier = Modifier.clickable { onPick(template) },
+                )
             }
-        },
-        confirmButton = { TextButton(onClick = onDismiss) { Text("Close") } },
-    )
+        }
+    }
 }
 
 @Preview

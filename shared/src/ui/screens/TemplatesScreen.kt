@@ -7,12 +7,12 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.PagerState
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.HorizontalDivider
@@ -29,9 +29,9 @@ import androidx.compose.runtime.Composable
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -44,24 +44,40 @@ import com.usuallycoding.openadhd.domain.Tier
 import com.usuallycoding.openadhd.ui.rewards.RewardTemplatesViewModel
 import com.usuallycoding.openadhd.ui.templates.TemplateInputError
 import com.usuallycoding.openadhd.ui.templates.TemplatesViewModel
+import com.usuallycoding.openadhd.ui.components.FormSheet
 import com.usuallycoding.openadhd.ui.theme.AddIcon
+import kotlinx.coroutines.launch
 import com.usuallycoding.openadhd.ui.theme.DeleteIcon
 import com.usuallycoding.openadhd.ui.theme.EditIcon
 
-/** The Templates destination: a Tasks tab and a Rewards tab. */
+/**
+ * The Templates destination: a Tasks tab and a Rewards tab that can be swiped between. [pagerState] is created by
+ * the caller so the selected tab survives leaving this screen while the app runs.
+ */
 @Composable
 fun TemplatesScreen(
     taskViewModel: TemplatesViewModel,
     rewardViewModel: RewardTemplatesViewModel,
     modifier: Modifier = Modifier,
+    pagerState: PagerState = rememberPagerState { 2 },
 ) {
-    var tab by rememberSaveable { mutableStateOf(0) }
+    val scope = rememberCoroutineScope()
     Column(modifier) {
-        TabRow(selectedTabIndex = tab) {
-            Tab(selected = tab == 0, onClick = { tab = 0 }, text = { Text("Tasks") })
-            Tab(selected = tab == 1, onClick = { tab = 1 }, text = { Text("Rewards") })
+        TabRow(selectedTabIndex = pagerState.currentPage) {
+            Tab(
+                selected = pagerState.currentPage == 0,
+                onClick = { scope.launch { pagerState.animateScrollToPage(0) } },
+                text = { Text("Tasks") },
+            )
+            Tab(
+                selected = pagerState.currentPage == 1,
+                onClick = { scope.launch { pagerState.animateScrollToPage(1) } },
+                text = { Text("Rewards") },
+            )
         }
-        if (tab == 0) TaskTemplatesScreen(taskViewModel) else RewardsScreen(rewardViewModel)
+        HorizontalPager(state = pagerState, modifier = Modifier.fillMaxSize()) { page ->
+            if (page == 0) TaskTemplatesScreen(taskViewModel) else RewardsScreen(rewardViewModel)
+        }
     }
 }
 
@@ -128,7 +144,6 @@ fun TemplatesContent(
             onDismiss = { editing = null },
             onConfirm = { name, tier, energy, description, subtasks ->
                 onSave(template.id.ifEmpty { null }, name, tier, energy, description, subtasks)
-                editing = null
             },
         )
     }
@@ -147,100 +162,99 @@ private fun TemplateDialog(
     val subtasks = remember { mutableStateListOf<String>().apply { addAll(initial.subtasks) } }
     var error by remember { mutableStateOf<TemplateInputError?>(null) }
 
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(if (initial.id.isEmpty()) "New task" else "Edit task") },
-        text = {
-            Column(
-                verticalArrangement = Arrangement.spacedBy(12.dp),
-                modifier = Modifier.verticalScroll(rememberScrollState()),
-            ) {
-                OutlinedTextField(
-                    value = name,
-                    onValueChange = { name = it; error = null },
-                    label = { Text("Name") },
-                    singleLine = true,
-                    isError = error == TemplateInputError.NameRequired,
-                    supportingText = if (error == TemplateInputError.NameRequired) ({ Text("A name is required") }) else null,
-                    modifier = Modifier.fillMaxWidth(),
-                )
-                OutlinedTextField(
-                    value = description,
-                    onValueChange = { description = it },
-                    label = { Text("Description (optional)") },
-                    minLines = 2,
-                    maxLines = 4,
-                    modifier = Modifier.fillMaxWidth(),
-                )
-                Text("Difficulty tier", style = MaterialTheme.typography.labelLarge)
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Tier.entries.forEach { option ->
-                        FilterChip(
-                            selected = option == tier,
-                            onClick = { tier = option; error = null },
-                            label = { Text("${option.level}") },
-                        )
-                    }
-                }
-                Text("Energy needed", style = MaterialTheme.typography.labelLarge)
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Energy.entries.forEach { option ->
-                        FilterChip(
-                            selected = option == energy,
-                            onClick = { energy = option },
-                            label = { Text(option.name) },
-                        )
-                    }
-                }
-                val limit = CoinRules.maxSubtasks(tier)
-                Text("Subtasks (${subtasks.size}/$limit)", style = MaterialTheme.typography.labelLarge)
-                subtasks.forEachIndexed { index, title ->
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        OutlinedTextField(
-                            value = title,
-                            onValueChange = { subtasks[index] = it; error = null },
-                            label = { Text("Subtask ${index + 1}") },
-                            singleLine = true,
-                            isError = error == TemplateInputError.SubtaskTitleRequired && title.isBlank(),
-                            modifier = Modifier.weight(1f),
-                        )
-                        IconButton(onClick = { subtasks.removeAt(index); error = null }) {
-                            Icon(DeleteIcon, contentDescription = "Remove subtask ${index + 1}")
-                        }
-                    }
-                }
-                if (error == TemplateInputError.SubtaskTitleRequired) {
-                    Text(
-                        "Every subtask needs a title",
-                        color = MaterialTheme.colorScheme.error,
-                        style = MaterialTheme.typography.bodySmall,
-                    )
-                }
-                if (error == TemplateInputError.TooManySubtasks) {
-                    Text(
-                        "A tier ${tier.level} task can have at most $limit subtasks. " +
-                            "Remove some or choose a higher tier.",
-                        color = MaterialTheme.colorScheme.error,
-                        style = MaterialTheme.typography.bodySmall,
-                    )
-                }
-                TextButton(
-                    onClick = { subtasks.add("") },
-                    enabled = subtasks.size < limit,
-                ) {
-                    Icon(AddIcon, contentDescription = null)
-                    Text("Add subtask", modifier = Modifier.padding(start = 8.dp))
-                }
-            }
-        },
-        confirmButton = {
+    FormSheet(
+        title = if (initial.id.isEmpty()) "New task" else "Edit task",
+        onDismiss = onDismiss,
+        footer = { requestClose ->
+            TextButton(onClick = requestClose) { Text("Cancel") }
             TextButton(onClick = {
                 val problem = TemplatesViewModel.validate(name, tier, subtasks.toList())
-                if (problem == null) onConfirm(name, tier, energy, description, subtasks.toList()) else error = problem
+                if (problem == null) {
+                    onConfirm(name, tier, energy, description, subtasks.toList())
+                    requestClose()
+                } else {
+                    error = problem
+                }
             }) { Text("Save") }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
-    )
+    ) {
+        OutlinedTextField(
+            value = name,
+            onValueChange = { name = it; error = null },
+            label = { Text("Name") },
+            singleLine = true,
+            isError = error == TemplateInputError.NameRequired,
+            supportingText = if (error == TemplateInputError.NameRequired) ({ Text("A name is required") }) else null,
+            modifier = Modifier.fillMaxWidth(),
+        )
+        OutlinedTextField(
+            value = description,
+            onValueChange = { description = it },
+            label = { Text("Description (optional)") },
+            minLines = 2,
+            maxLines = 4,
+            modifier = Modifier.fillMaxWidth(),
+        )
+        Text("Difficulty tier", style = MaterialTheme.typography.labelLarge)
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Tier.entries.forEach { option ->
+                FilterChip(
+                    selected = option == tier,
+                    onClick = { tier = option; error = null },
+                    label = { Text("${option.level}") },
+                )
+            }
+        }
+        Text("Energy needed", style = MaterialTheme.typography.labelLarge)
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Energy.entries.forEach { option ->
+                FilterChip(
+                    selected = option == energy,
+                    onClick = { energy = option },
+                    label = { Text(option.name) },
+                )
+            }
+        }
+        val limit = CoinRules.maxSubtasks(tier)
+        Text("Subtasks (${subtasks.size}/$limit)", style = MaterialTheme.typography.labelLarge)
+        subtasks.forEachIndexed { index, title ->
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                OutlinedTextField(
+                    value = title,
+                    onValueChange = { subtasks[index] = it; error = null },
+                    label = { Text("Subtask ${index + 1}") },
+                    singleLine = true,
+                    isError = error == TemplateInputError.SubtaskTitleRequired && title.isBlank(),
+                    modifier = Modifier.weight(1f),
+                )
+                IconButton(onClick = { subtasks.removeAt(index); error = null }) {
+                    Icon(DeleteIcon, contentDescription = "Remove subtask ${index + 1}")
+                }
+            }
+        }
+        if (error == TemplateInputError.SubtaskTitleRequired) {
+            Text(
+                "Every subtask needs a title",
+                color = MaterialTheme.colorScheme.error,
+                style = MaterialTheme.typography.bodySmall,
+            )
+        }
+        if (error == TemplateInputError.TooManySubtasks) {
+            Text(
+                "A tier ${tier.level} task can have at most $limit subtasks. " +
+                    "Remove some or choose a higher tier.",
+                color = MaterialTheme.colorScheme.error,
+                style = MaterialTheme.typography.bodySmall,
+            )
+        }
+        TextButton(
+            onClick = { subtasks.add("") },
+            enabled = subtasks.size < limit,
+        ) {
+            Icon(AddIcon, contentDescription = null)
+            Text("Add subtask", modifier = Modifier.padding(start = 8.dp))
+        }
+    }
 }
 
 internal fun TaskTemplate.description(): String {

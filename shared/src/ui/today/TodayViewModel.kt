@@ -19,6 +19,7 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.TimeZone
@@ -76,6 +77,15 @@ class TodayViewModel(
 
     /** One event per critical hit, for a short celebration; a small buffer keeps quick successive hits from being lost. */
     val criticalHits: SharedFlow<CriticalHitEvent> = _criticalHits
+
+    private val _collapsedEntryIds = MutableStateFlow<Set<String>>(emptySet())
+
+    /** Entries whose subtasks are hidden. Entries start expanded, so an id is only here once toggled; kept in memory only. */
+    val collapsedEntryIds: StateFlow<Set<String>> = _collapsedEntryIds
+
+    fun toggleCollapsed(entryId: String) {
+        _collapsedEntryIds.update { if (entryId in it) it - entryId else it + entryId }
+    }
 
     fun assign(template: TaskTemplate) {
         viewModelScope.launch { store.assign(template, today.value) }

@@ -6,6 +6,9 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.PagerState
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.AlertDialog
@@ -21,7 +24,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -43,13 +46,18 @@ import com.usuallycoding.openadhd.ui.shop.RollOption
 import com.usuallycoding.openadhd.ui.shop.ShopItem
 import com.usuallycoding.openadhd.ui.shop.ShopShelf
 import com.usuallycoding.openadhd.ui.shop.ShopViewModel
+import kotlinx.coroutines.launch
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
 import kotlin.time.Instant
 
 /** The Shop destination: rewards to buy and mystery rolls, and the history of purchases. */
 @Composable
-fun ShopScreen(viewModel: ShopViewModel, modifier: Modifier = Modifier) {
+fun ShopScreen(
+    viewModel: ShopViewModel,
+    modifier: Modifier = Modifier,
+    pagerState: PagerState = rememberPagerState { 2 },
+) {
     val shelves by viewModel.shelves.collectAsStateWithLifecycle()
     val history by viewModel.history.collectAsStateWithLifecycle()
     val rollOptions by viewModel.rollOptions.collectAsStateWithLifecycle()
@@ -63,6 +71,7 @@ fun ShopScreen(viewModel: ShopViewModel, modifier: Modifier = Modifier) {
         onRoll = viewModel::roll,
         onDismissRoll = viewModel::dismissRoll,
         modifier = modifier,
+        pagerState = pagerState,
     )
 }
 
@@ -76,14 +85,25 @@ fun ShopContent(
     onRoll: (tier: RewardTier, rollId: String) -> Unit,
     onDismissRoll: () -> Unit,
     modifier: Modifier = Modifier,
+    pagerState: PagerState = rememberPagerState { 2 },
 ) {
-    var tab by rememberSaveable { mutableStateOf(0) }
+    val scope = rememberCoroutineScope()
     Column(modifier) {
-        TabRow(selectedTabIndex = tab) {
-            Tab(selected = tab == 0, onClick = { tab = 0 }, text = { Text("Rewards") })
-            Tab(selected = tab == 1, onClick = { tab = 1 }, text = { Text("History") })
+        TabRow(selectedTabIndex = pagerState.currentPage) {
+            Tab(
+                selected = pagerState.currentPage == 0,
+                onClick = { scope.launch { pagerState.animateScrollToPage(0) } },
+                text = { Text("Rewards") },
+            )
+            Tab(
+                selected = pagerState.currentPage == 1,
+                onClick = { scope.launch { pagerState.animateScrollToPage(1) } },
+                text = { Text("History") },
+            )
         }
-        if (tab == 0) ShelvesList(shelves, rollOptions, onRedeem, onRoll) else HistoryList(history)
+        HorizontalPager(state = pagerState, modifier = Modifier.fillMaxSize()) { page ->
+            if (page == 0) ShelvesList(shelves, rollOptions, onRedeem, onRoll) else HistoryList(history)
+        }
     }
 
     lastRoll?.let { RollRevealDialog(it, onDismissRoll) }

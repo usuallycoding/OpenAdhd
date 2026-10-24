@@ -3,6 +3,7 @@ package com.usuallycoding.openadhd
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -69,6 +70,10 @@ fun App(container: AppContainer) {
     val walletViewModel = viewModel { WalletViewModel(container.store) }
     val balance by walletViewModel.balance.collectAsStateWithLifecycle()
 
+    // App never leaves composition, so these keep each screen's selected tab while the app runs.
+    val templatesPager = rememberPagerState { 2 }
+    val shopPager = rememberPagerState { 2 }
+
     val snackbarHostState = remember { SnackbarHostState() }
     LaunchedEffect(todayViewModel) {
         // Each critical hit gets a short message; showSnackbar waits its turn, so quick hits queue up instead of overlapping.
@@ -114,8 +119,8 @@ fun App(container: AppContainer) {
             val screenModifier = Modifier.padding(innerPadding)
             when (destination) {
                 Destination.Today -> TodayScreen(todayViewModel, screenModifier)
-                Destination.Templates -> TemplatesScreen(templatesViewModel, rewardTemplatesViewModel, screenModifier)
-                Destination.Shop -> ShopScreen(shopViewModel, screenModifier)
+                Destination.Templates -> TemplatesScreen(templatesViewModel, rewardTemplatesViewModel, screenModifier, templatesPager)
+                Destination.Shop -> ShopScreen(shopViewModel, screenModifier, shopPager)
             }
         }
     }
