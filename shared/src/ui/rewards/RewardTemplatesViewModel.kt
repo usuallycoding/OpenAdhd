@@ -3,6 +3,10 @@ package com.usuallycoding.openadhd.ui.rewards
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.usuallycoding.openadhd.domain.Energy
+import com.usuallycoding.openadhd.domain.GameRules
+import com.usuallycoding.openadhd.domain.Settings
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.flowOf
 import com.usuallycoding.openadhd.domain.RewardInputError
 import com.usuallycoding.openadhd.domain.RewardRepository
 import com.usuallycoding.openadhd.domain.RewardRules
@@ -17,7 +21,13 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
-class RewardTemplatesViewModel(private val repository: RewardRepository) : ViewModel() {
+class RewardTemplatesViewModel(
+    private val repository: RewardRepository,
+    settings: Flow<Settings> = flowOf(Settings.Default),
+) : ViewModel() {
+    private val rules: StateFlow<GameRules> =
+        settings.map { it.rules }.stateIn(viewModelScope, SharingStarted.Eagerly, GameRules.Default)
+
     val rewards: StateFlow<List<RewardTemplate>> =
         repository.rewards.stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
 
@@ -56,7 +66,7 @@ class RewardTemplatesViewModel(private val repository: RewardRepository) : ViewM
         description: String = "",
         customPrice: Int? = null,
     ) {
-        if (validate(name, tier, customPrice) != null) return
+        if (validate(name, tier, customPrice, rules.value) != null) return
         viewModelScope.launch {
             if (id == null) {
                 repository.createReward(name, tier, energy, description, customPrice)
@@ -71,7 +81,7 @@ class RewardTemplatesViewModel(private val repository: RewardRepository) : ViewM
     }
 
     companion object {
-        fun validate(name: String, tier: RewardTier, customPrice: Int?): RewardInputError? =
-            RewardRules.validate(name, tier, customPrice)
+        fun validate(name: String, tier: RewardTier, customPrice: Int?, rules: GameRules = GameRules.Default): RewardInputError? =
+            RewardRules.validate(name, tier, customPrice, rules)
     }
 }

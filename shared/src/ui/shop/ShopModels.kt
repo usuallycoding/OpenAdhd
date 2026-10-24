@@ -1,6 +1,7 @@
 package com.usuallycoding.openadhd.ui.shop
 
 import com.usuallycoding.openadhd.domain.CoinRules
+import com.usuallycoding.openadhd.domain.GameRules
 import com.usuallycoding.openadhd.domain.Redemption
 import com.usuallycoding.openadhd.domain.RewardTemplate
 import com.usuallycoding.openadhd.domain.RewardTier
@@ -17,7 +18,7 @@ data class ShopShelf(val tier: RewardTier, val items: List<ShopItem>)
  * Groups [rewards] by tier from 1 to 5, leaving out empty tiers. Tier 5 rewards, which each have their own
  * price, are ordered from cheapest to dearest; the other tiers keep their given order.
  */
-fun buildShelves(rewards: List<RewardTemplate>, balance: Int): List<ShopShelf> =
+fun buildShelves(rewards: List<RewardTemplate>, balance: Int, rules: GameRules = GameRules.Default): List<ShopShelf> =
     RewardTier.entries.mapNotNull { tier ->
         val inTier = rewards.filter { it.tier == tier }
         if (inTier.isEmpty()) return@mapNotNull null
@@ -25,7 +26,11 @@ fun buildShelves(rewards: List<RewardTemplate>, balance: Int): List<ShopShelf> =
         ShopShelf(
             tier,
             ordered.map { reward ->
-                ShopItem(reward, affordable = CoinRules.canPay(balance, reward.price), coinsNeeded = CoinRules.coinsNeeded(balance, reward.price))
+                ShopItem(
+                    reward,
+                    affordable = CoinRules.canPay(balance, reward.price, rules),
+                    coinsNeeded = CoinRules.coinsNeeded(balance, reward.price, rules),
+                )
             },
         )
     }
@@ -43,14 +48,14 @@ data class RollOption(
 }
 
 /** The four rolls, tiers 1 to 4, given the rewards that exist and the current balance. */
-fun buildRollOptions(rewards: List<RewardTemplate>, balance: Int): List<RollOption> =
+fun buildRollOptions(rewards: List<RewardTemplate>, balance: Int, rules: GameRules = GameRules.Default): List<RollOption> =
     RollRules.RollableTiers.map { tier ->
-        val price = RollRules.price(tier)
+        val price = RollRules.price(tier, rules)
         RollOption(
             tier = tier,
             price = price,
-            affordable = CoinRules.canPay(balance, price),
-            coinsNeeded = CoinRules.coinsNeeded(balance, price),
+            affordable = CoinRules.canPay(balance, price, rules),
+            coinsNeeded = CoinRules.coinsNeeded(balance, price, rules),
             hasRewards = rewards.any { it.tier == tier },
             upgradeTier = RollRules.nextTier(tier)?.takeIf { next -> rewards.any { it.tier == next } },
         )

@@ -4,6 +4,10 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.usuallycoding.openadhd.domain.Energy
 import com.usuallycoding.openadhd.domain.CoinRules
+import com.usuallycoding.openadhd.domain.GameRules
+import com.usuallycoding.openadhd.domain.Settings
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.flowOf
 import com.usuallycoding.openadhd.domain.TaskTemplate
 import com.usuallycoding.openadhd.domain.Tier
 import com.usuallycoding.openadhd.domain.TemplateRepository
@@ -18,7 +22,13 @@ import kotlinx.coroutines.launch
 
 enum class TemplateInputError { NameRequired, SubtaskTitleRequired, TooManySubtasks }
 
-class TemplatesViewModel(private val repository: TemplateRepository) : ViewModel() {
+class TemplatesViewModel(
+    private val repository: TemplateRepository,
+    settings: Flow<Settings> = flowOf(Settings.Default),
+) : ViewModel() {
+    private val rules: StateFlow<GameRules> =
+        settings.map { it.rules }.stateIn(viewModelScope, SharingStarted.Eagerly, GameRules.Default)
+
     val templates: StateFlow<List<TaskTemplate>> =
         repository.templates.stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
 
@@ -57,7 +67,7 @@ class TemplatesViewModel(private val repository: TemplateRepository) : ViewModel
         description: String = "",
         subtasks: List<String> = emptyList(),
     ) {
-        if (validate(name, tier, subtasks) != null) return
+        if (validate(name, tier, subtasks, rules.value) != null) return
         viewModelScope.launch {
             if (id == null) {
                 repository.create(name, tier, energy, description, subtasks)
@@ -74,10 +84,10 @@ class TemplatesViewModel(private val repository: TemplateRepository) : ViewModel
     companion object {
         fun isValidName(name: String): Boolean = name.isNotBlank()
 
-        fun validate(name: String, tier: Tier, subtasks: List<String>): TemplateInputError? = when {
+        fun validate(name: String, tier: Tier, subtasks: List<String>, rules: GameRules = GameRules.Default): TemplateInputError? = when {
             !isValidName(name) -> TemplateInputError.NameRequired
             subtasks.any { it.isBlank() } -> TemplateInputError.SubtaskTitleRequired
-            subtasks.size > CoinRules.maxSubtasks(tier) -> TemplateInputError.TooManySubtasks
+            subtasks.size > CoinRules.maxSubtasks(tier, rules) -> TemplateInputError.TooManySubtasks
             else -> null
         }
     }

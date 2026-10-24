@@ -13,6 +13,14 @@ val TemplatesIcon: ImageVector by lazy {
     themeIcon("Templates") { stroked("M4,6h16M4,12h16M4,18h10") }
 }
 
+val SettingsIcon: ImageVector by lazy {
+    themeIcon("Settings") {
+        stroked("M4,7h9M17,7h3M4,17h3M11,17h9")
+        stroked("M15,5a2,2 0 1,0 0,4a2,2 0 1,0 0,-4z")
+        stroked("M9,15a2,2 0 1,0 0,4a2,2 0 1,0 0,-4z")
+    }
+}
+
 val AddIcon: ImageVector by lazy {
     themeIcon("Add") { stroked("M12,5v14M5,12h14") }
 }

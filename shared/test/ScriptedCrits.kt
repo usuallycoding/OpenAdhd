@@ -8,5 +8,11 @@ class ScriptedCrits(vararg answers: Boolean) : CriticalHits {
 
     val remaining: Int get() = queue.size
 
-    override fun isCritical(): Boolean = queue.removeFirst()
+    /** The chance each draw was asked with, in order. */
+    val asked = mutableListOf<Int>()
+
+    override fun isCritical(oneIn: Int): Boolean {
+        asked += oneIn
+        return queue.removeFirst()
+    }
 }

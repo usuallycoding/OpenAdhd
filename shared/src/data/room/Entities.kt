@@ -12,8 +12,11 @@ import com.usuallycoding.openadhd.domain.PlannedSubtask
 import com.usuallycoding.openadhd.domain.PlannedTask
 import com.usuallycoding.openadhd.domain.Redemption
 import com.usuallycoding.openadhd.domain.RedemptionSource
+import com.usuallycoding.openadhd.domain.GameRules
+import com.usuallycoding.openadhd.domain.RewardRules
 import com.usuallycoding.openadhd.domain.RewardTemplate
 import com.usuallycoding.openadhd.domain.RewardTier
+import com.usuallycoding.openadhd.domain.Settings
 import com.usuallycoding.openadhd.domain.TaskTemplate
 import com.usuallycoding.openadhd.domain.Tier
 import kotlinx.datetime.LocalDate
@@ -35,6 +38,13 @@ data class TemplateSubtaskEntity(
     val templateId: String,
     val position: Int,
     val title: String,
+)
+
+/** A setting the user changed. A setting with no row has its default value. */
+@Entity(tableName = "settings")
+data class SettingEntity(
+    @PrimaryKey val key: String,
+    val value: String,
 )
 
 @Entity(tableName = "planned_tasks")
@@ -152,8 +162,9 @@ internal fun LedgerEntity.toDomain() = LedgerEntry(
 
 internal fun LedgerEntry.toEntity() = LedgerEntity(id, amount, timestamp.toEpochMilliseconds(), reason.name, refId)
 
-internal fun RewardTemplateEntity.toDomain() = RewardTemplate(
+internal fun RewardTemplateEntity.toDomain(rules: GameRules = GameRules.Default) = RewardTemplate(
     id, name, RewardTier.fromLevel(tier), Energy.valueOf(energy), description, customPrice,
+    RewardRules.price(RewardTier.fromLevel(tier), customPrice, rules),
 )
 
 internal fun RewardTemplate.toEntity() = RewardTemplateEntity(id, name, tier.level, energy.name, description, customPrice)
@@ -163,3 +174,5 @@ internal fun RedemptionEntity.toDomain() = Redemption(
     Instant.fromEpochMilliseconds(redeemedAtMillis),
     RedemptionSource.valueOf(source), rolledTier?.let(RewardTier::fromLevel), description,
 )
+
+internal fun List<SettingEntity>.toSettings(): Settings = Settings.fromOverrides(associate { it.key to it.value })

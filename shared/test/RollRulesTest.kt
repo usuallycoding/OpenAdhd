@@ -4,6 +4,7 @@ import com.usuallycoding.openadhd.domain.Energy
 import com.usuallycoding.openadhd.domain.Redemption
 import com.usuallycoding.openadhd.domain.RedemptionSource
 import com.usuallycoding.openadhd.domain.RewardTemplate
+import com.usuallycoding.openadhd.domain.GameRules
 import com.usuallycoding.openadhd.domain.RewardTier
 import com.usuallycoding.openadhd.domain.RollRules
 import kotlin.random.Random
@@ -42,8 +43,8 @@ class RollRulesTest {
     }
 
     @Test
-    fun `the upgrade chance is one in six`() {
-        assertEquals(6, RollRules.UpgradeOneIn)
+    fun `the default upgrade chance is one in six`() {
+        assertEquals(6, GameRules.Default.upgradeOneIn)
     }
 
     @Test
@@ -124,5 +125,15 @@ class RollRulesTest {
         assertTrue(redemption(RewardTier.Three, RewardTier.Two).isLuckyUpgrade)
         assertFalse(redemption(RewardTier.Two, RewardTier.Two).isLuckyUpgrade)
         assertFalse(redemption(RewardTier.Two, null).isLuckyUpgrade)
+    }
+
+    @Test
+    fun `the upgrade is drawn from the chance in the rules and a roll costs the changed price`() {
+        val rules = GameRules(upgradeOneIn = 3, rewardPrices = listOf(20, 60, 120, 300))
+        val random = ScriptedRandom(0, 0)
+        val outcome = RollRules.choose(random, RewardTier.Two, pool, rules)!!
+        assertEquals(listOf(3), random.bounds.take(1))
+        assertTrue(outcome.upgraded)
+        assertEquals(60, RollRules.price(RewardTier.Two, rules))
     }
 }

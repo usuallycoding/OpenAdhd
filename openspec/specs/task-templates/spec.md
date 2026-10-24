@@ -62,7 +62,7 @@ A template SHALL have an optional free-text description, shown when the user edi
 - **THEN** the template is saved and no description is shown for it
 
 ### Requirement: Template subtasks
-A template SHALL be able to hold an ordered, flat list of subtasks, each with a non-empty title, but never more subtasks than its tier's coin pool and never more than 10: 5 for tier 1 and 10 for tiers 2, 3 and 4. Subtasks MUST NOT have subtasks, descriptions, tiers or energy levels of their own.
+A template SHALL be able to hold an ordered, flat list of subtasks, each with a non-empty title, but never more subtasks than its tier's coin pool and never more than the subtask ceiling from Settings: by default 5 for tier 1 and 10 for tiers 2, 3 and 4. Subtasks MUST NOT have subtasks, descriptions, tiers or energy levels of their own.
 
 #### Scenario: Blank subtask title
 - **WHEN** the user tries to save a template with a subtask whose title is empty or only whitespace
@@ -87,3 +87,8 @@ A template SHALL be able to hold an ordered, flat list of subtasks, each with a 
 #### Scenario: Lowering the tier below the subtask count
 - **WHEN** a tier 2 template has 8 subtasks and the user changes it to tier 1 and saves
 - **THEN** the template is not saved and the user is told a tier 1 task can have at most 5 subtasks
+
+#### Scenario: Changed ceiling
+- **WHEN** the subtask ceiling in Settings is 6
+- **THEN** a tier 4 template can have at most 6 subtasks, and a tier 1 template still at most 5
+

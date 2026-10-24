@@ -1,6 +1,7 @@
 package com.usuallycoding.openadhd
 
 import com.usuallycoding.openadhd.domain.Energy
+import com.usuallycoding.openadhd.domain.GameRules
 import com.usuallycoding.openadhd.domain.RewardInputError
 import com.usuallycoding.openadhd.domain.RewardRules
 import com.usuallycoding.openadhd.domain.RewardTemplate
@@ -37,7 +38,7 @@ class RewardRulesTest {
 
     @Test
     fun `the tier five minimum is one above tier four`() {
-        assertEquals(301, RewardRules.MinCustomPrice)
+        assertEquals(301, RewardRules.minCustomPrice())
         assertEquals(RewardInputError.PriceTooLow, RewardRules.validate("Headphones", RewardTier.Five, 300))
         assertEquals(RewardInputError.PriceTooLow, RewardRules.validate("Headphones", RewardTier.Five, 1))
         assertNull(RewardRules.validate("Headphones", RewardTier.Five, 301))
@@ -60,5 +61,15 @@ class RewardRulesTest {
     @Test
     fun `tier maps from its level`() {
         assertEquals(RewardTier.Five, RewardTier.fromLevel(5))
+    }
+
+    @Test
+    fun `changed tier prices set the fixed prices and the tier five minimum`() {
+        val rules = GameRules(rewardPrices = listOf(10, 60, 150, 400))
+        assertEquals(60, RewardRules.price(RewardTier.Two, null, rules))
+        assertEquals(401, RewardRules.minCustomPrice(rules))
+        assertEquals(RewardInputError.PriceTooLow, RewardRules.validate("Trip", RewardTier.Five, 400, rules))
+        assertNull(RewardRules.validate("Trip", RewardTier.Five, 401, rules))
+        assertNull(RewardRules.fixedPrice(RewardTier.Five, rules))
     }
 }

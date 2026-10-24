@@ -19,10 +19,10 @@ class ShopViewModel(private val store: OpenAdhdStore) : ViewModel() {
         store.entries.map(CoinRules::balance).stateIn(viewModelScope, SharingStarted.Eagerly, 0)
 
     val shelves: StateFlow<List<ShopShelf>> =
-        combine(store.rewards, balance, ::buildShelves).stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
+        combine(store.rewards, balance, store.settings) { rewards, balance, settings -> buildShelves(rewards, balance, settings.rules) }.stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
 
     val rollOptions: StateFlow<List<RollOption>> =
-        combine(store.rewards, balance, ::buildRollOptions).stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
+        combine(store.rewards, balance, store.settings) { rewards, balance, settings -> buildRollOptions(rewards, balance, settings.rules) }.stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
 
     private val _lastRoll = MutableStateFlow<RollResult?>(null)
 

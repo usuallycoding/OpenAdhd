@@ -8,9 +8,13 @@ class ScriptedRandom(vararg values: Int) : Random() {
 
     val remaining: Int get() = queue.size
 
+    /** The exclusive upper bound of each draw, in order. */
+    val bounds = mutableListOf<Int>()
+
     override fun nextBits(bitCount: Int): Int = error("Only nextInt(until) is scripted")
 
     override fun nextInt(until: Int): Int {
+        bounds += until
         val value = queue.removeFirst()
         require(value in 0 until until) { "Scripted value $value is not below $until" }
         return value

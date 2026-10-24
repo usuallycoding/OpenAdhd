@@ -10,6 +10,8 @@ import com.usuallycoding.openadhd.domain.CoinRules
 import com.usuallycoding.openadhd.domain.Energy
 import com.usuallycoding.openadhd.domain.RedemptionSource
 import com.usuallycoding.openadhd.domain.RewardTier
+import com.usuallycoding.openadhd.domain.SettingKey
+import com.usuallycoding.openadhd.domain.Settings
 import com.usuallycoding.openadhd.domain.Tier
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
@@ -304,6 +306,20 @@ class RoomMigrationTest {
         val reward = store.rewards.first().single()
         store.updateReward(reward.copy(description = "Changed"))
         assertEquals("Treat", store.redemptions.first().first { it.id == "a" }.description)
+        database.close()
+    }
+
+    @Test
+    fun `upgrading to version 7 keeps the data and starts every setting at its default`() = runTest {
+        val database = Room.databaseBuilder<OpenAdhdDatabase>(createVersion5Database()).buildOpenAdhdDatabase()
+        val store = RoomStore(database)
+
+        assertEquals(Settings.Default, store.settings.first())
+        assertEquals(3, store.redemptions.first().size)
+        assertEquals(30, CoinRules.balance(store.entries.first()))
+
+        assertNull(store.saveSetting(SettingKey.DebtLimit, "250"))
+        assertEquals(250, store.settings.first().rules.debtLimit)
         database.close()
     }
 }

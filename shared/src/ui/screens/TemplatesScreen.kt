@@ -39,6 +39,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.usuallycoding.openadhd.domain.Energy
 import com.usuallycoding.openadhd.domain.CoinRules
+import com.usuallycoding.openadhd.ui.LocalGameRules
 import com.usuallycoding.openadhd.domain.TaskTemplate
 import com.usuallycoding.openadhd.domain.Tier
 import com.usuallycoding.openadhd.ui.rewards.RewardTemplatesViewModel
@@ -181,6 +182,7 @@ private fun TemplateDialog(
     var energy by remember { mutableStateOf(initial.energy) }
     val subtasks = remember { mutableStateListOf<String>().apply { addAll(initial.subtasks) } }
     var error by remember { mutableStateOf<TemplateInputError?>(null) }
+    val rules = LocalGameRules.current
 
     FormSheet(
         title = if (initial.id.isEmpty()) "New task" else "Edit task",
@@ -188,7 +190,7 @@ private fun TemplateDialog(
         footer = { requestClose ->
             TextButton(onClick = requestClose) { Text("Cancel") }
             TextButton(onClick = {
-                val problem = TemplatesViewModel.validate(name, tier, subtasks.toList())
+                val problem = TemplatesViewModel.validate(name, tier, subtasks.toList(), rules)
                 if (problem == null) {
                     onConfirm(name, tier, energy, description, subtasks.toList())
                     requestClose()
@@ -235,7 +237,7 @@ private fun TemplateDialog(
                 )
             }
         }
-        val limit = CoinRules.maxSubtasks(tier)
+        val limit = CoinRules.maxSubtasks(tier, rules)
         Text("Subtasks (${subtasks.size}/$limit)", style = MaterialTheme.typography.labelLarge)
         subtasks.forEachIndexed { index, title ->
             Row(verticalAlignment = Alignment.CenterVertically) {

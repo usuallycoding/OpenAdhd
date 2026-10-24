@@ -38,6 +38,8 @@ import com.usuallycoding.openadhd.domain.Redemption
 import com.usuallycoding.openadhd.domain.RedemptionSource
 import com.usuallycoding.openadhd.domain.RewardRules
 import com.usuallycoding.openadhd.domain.CoinRules
+import com.usuallycoding.openadhd.domain.GameRules
+import com.usuallycoding.openadhd.ui.LocalGameRules
 import com.usuallycoding.openadhd.domain.RewardTemplate
 import com.usuallycoding.openadhd.domain.RewardTier
 import com.usuallycoding.openadhd.domain.RollResult
@@ -155,7 +157,7 @@ private fun ShelvesList(
                 HorizontalDivider()
             }
             shelves.forEach { shelf ->
-                item(key = "tier-${shelf.tier.level}") { SectionTitle(shelf.title()) }
+                item(key = "tier-${shelf.tier.level}") { SectionTitle(shelf.title(LocalGameRules.current)) }
                 items(shelf.items, key = { it.reward.id }) { item ->
                     ShopRow(item, onRedeem = { confirming = item.reward })
                     HorizontalDivider()
@@ -238,7 +240,7 @@ private fun RollRow(option: RollOption, onRoll: () -> Unit) {
                     color = MaterialTheme.colorScheme.error,
                     style = MaterialTheme.typography.bodySmall,
                 )
-                else -> Text(option.oddsText())
+                else -> Text(option.oddsText(LocalGameRules.current.upgradeOneIn))
             }
         },
         trailingContent = {
@@ -252,10 +254,10 @@ private fun RollRow(option: RollOption, onRoll: () -> Unit) {
 }
 
 /** What a roll gives, in words; mentions the upgrade chance only when an upgrade is possible. */
-private fun RollOption.oddsText(): String {
+private fun RollOption.oddsText(upgradeOneIn: Int): String {
     val base = "A random tier ${tier.level} reward"
     val upgrade = upgradeTier ?: return base
-    return "$base, with a 1 in ${RollRules.UpgradeOneIn} chance of a tier ${upgrade.level} one"
+    return "$base, with a 1 in $upgradeOneIn chance of a tier ${upgrade.level} one"
 }
 
 /** The extra confirmation line when a purchase leaves the user in debt; nothing when it does not. */
@@ -292,7 +294,7 @@ private fun ConfirmRollDialog(
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("Roll tier ${option.tier.level}?") },
-        text = { Text("This costs ${option.price} coins. ${option.oddsText()}.${debtNote(CoinRules.debtAfter(balance, option.price))}") },
+        text = { Text("This costs ${option.price} coins. ${option.oddsText(LocalGameRules.current.upgradeOneIn)}.${debtNote(CoinRules.debtAfter(balance, option.price))}") },
         confirmButton = { TextButton(onClick = { onConfirm(rollId) }) { Text("Confirm") } },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
     )
@@ -378,8 +380,8 @@ private fun Redemption.historyNote(): String {
     return "Mystery roll of tier ${rolled.level}$upgrade · ${formatTime(redeemedAt)}"
 }
 
-private fun ShopShelf.title(): String =
-    if (tier == RewardTier.Five) "Tier 5 · your own price" else "Tier ${tier.level} · ${RewardRules.fixedPrice(tier)} coins"
+private fun ShopShelf.title(rules: GameRules): String =
+    if (tier == RewardTier.Five) "Tier 5 · your own price" else "Tier ${tier.level} · ${RewardRules.fixedPrice(tier, rules)} coins"
 
 private fun formatTime(instant: Instant): String {
     val local = instant.toLocalDateTime(TimeZone.currentSystemDefault())

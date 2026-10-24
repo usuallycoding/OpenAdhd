@@ -9,6 +9,10 @@ import com.usuallycoding.openadhd.domain.CompletionResult
 import com.usuallycoding.openadhd.domain.CriticalHits
 import com.usuallycoding.openadhd.domain.CoinRules
 import com.usuallycoding.openadhd.domain.CriticalRules
+import com.usuallycoding.openadhd.domain.SettingCheck
+import com.usuallycoding.openadhd.domain.SettingKey
+import com.usuallycoding.openadhd.domain.Settings
+import com.usuallycoding.openadhd.domain.checkSetting
 import com.usuallycoding.openadhd.domain.LedgerReason
 import com.usuallycoding.openadhd.domain.RedemptionSource
 import com.usuallycoding.openadhd.domain.RewardRules
@@ -20,6 +24,47 @@ import kotlin.random.Random
 
 @Dao
 abstract class OpenAdhdDao {
+    // ---- settings
+
+    @Query("SELECT * FROM settings")
+    abstract fun settingRows(): Flow<List<SettingEntity>>
+
+    @Query("SELECT * FROM settings")
+    abstract suspend fun settingRowsOnce(): List<SettingEntity>
+
+    @Query("INSERT OR REPLACE INTO settings (`key`, `value`) VALUES (:key, :value)")
+    abstract suspend fun upsertSetting(key: String, value: String)
+
+    @Query("DELETE FROM settings WHERE `key` = :key")
+    abstract suspend fun deleteSetting(key: String)
+
+    @Transaction
+    @Query("SELECT * FROM templates ORDER BY position, rowid")
+    abstract suspend fun templatesOnce(): List<TemplateWithSubtasks>
+
+    /** The settings in force: the defaults with the saved rows on top. */
+    open suspend fun currentSettings(): Settings = settingRowsOnce().toSettings()
+
+    /**
+     * Checks and saves a setting in one transaction with the reads it is checked against. A value equal to the
+     * default is stored as no row. Returns why it was refused, or null when it was saved.
+     */
+    @Transaction
+    open suspend fun saveSetting(key: SettingKey, text: String): String? {
+        val check = checkSetting(
+            key, text, currentSettings(),
+            allRewards().map { it.toDomain() }, templatesOnce().map { it.toDomain() },
+        )
+        return when (check) {
+            is SettingCheck.Refused -> check.message
+            is SettingCheck.Accepted -> {
+                val value = check.settings.text(key)
+                if (value == Settings.Default.text(key)) deleteSetting(key.storageKey) else upsertSetting(key.storageKey, value)
+                null
+            }
+        }
+    }
+
     // ---- templates
 
     @Transaction
@@ -204,8 +249,9 @@ abstract class OpenAdhdDao {
     open suspend fun redeemReward(rewardId: String, redemptionId: String, ledgerId: String, at: Long): Boolean {
         if (redemptionCount(redemptionId) > 0) return false
         val reward = rewardById(rewardId) ?: return false
-        val price = RewardRules.price(RewardTier.fromLevel(reward.tier), reward.customPrice)
-        if (!CoinRules.canPay(balance(), price)) return false
+        val rules = currentSettings().rules
+        val price = RewardRules.price(RewardTier.fromLevel(reward.tier), reward.customPrice, rules)
+        if (!CoinRules.canPay(balance(), price, rules)) return false
         insertRedemption(
             RedemptionEntity(
                 redemptionId, reward.id, reward.name, reward.tier, reward.energy, price, at,
@@ -234,9 +280,10 @@ abstract class OpenAdhdDao {
     ): RedemptionEntity? {
         if (tier !in RollRules.RollableTiers) return null
         if (redemptionCount(redemptionId) > 0) return null
-        val price = RollRules.price(tier)
-        if (!CoinRules.canPay(balance(), price)) return null
-        val outcome = RollRules.choose(random, tier, allRewards().map { it.toDomain() }) ?: return null
+        val rules = currentSettings().rules
+        val price = RollRules.price(tier, rules)
+        if (!CoinRules.canPay(balance(), price, rules)) return null
+        val outcome = RollRules.choose(random, tier, allRewards().map { it.toDomain(rules) }, rules) ?: return null
         val reward = outcome.reward
         val redemption = RedemptionEntity(
             redemptionId, reward.id, reward.name, reward.tier.level, reward.energy.name, price, at,
@@ -313,8 +360,9 @@ abstract class OpenAdhdDao {
         if (markTaskCompleted(id, at) == 0) return null
         val reward = taskReward(id)
         insertLedger(LedgerEntity(ledgerId, reward, at, LedgerReason.TaskCompleted.name, id))
-        if (!criticalHits.isCritical()) return CompletionResult(reward)
-        val bonus = CriticalRules.bonus(reward)
+        val rules = currentSettings().rules
+        if (!criticalHits.isCritical(rules.criticalOneIn)) return CompletionResult(reward)
+        val bonus = CriticalRules.bonus(reward, rules)
         insertLedger(LedgerEntity(bonusLedgerId, bonus, at, LedgerReason.CriticalHit.name, id))
         return CompletionResult(reward, bonus)
     }
@@ -331,8 +379,9 @@ abstract class OpenAdhdDao {
         if (markSubtaskCompleted(id, at) == 0) return null
         val reward = subtaskReward(id)
         insertLedger(LedgerEntity(ledgerId, reward, at, LedgerReason.SubtaskCompleted.name, id))
-        if (!criticalHits.isCritical()) return CompletionResult(reward)
-        val bonus = CriticalRules.bonus(reward)
+        val rules = currentSettings().rules
+        if (!criticalHits.isCritical(rules.criticalOneIn)) return CompletionResult(reward)
+        val bonus = CriticalRules.bonus(reward, rules)
         insertLedger(LedgerEntity(bonusLedgerId, bonus, at, LedgerReason.CriticalHit.name, id))
         return CompletionResult(reward, bonus)
     }

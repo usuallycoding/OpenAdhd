@@ -8,7 +8,7 @@ interface TemplateRepository {
 
     /**
      * Description and subtask titles are trimmed.
-     * @throws IllegalArgumentException if [name] or a subtask title is blank, or there are more subtasks than the tier's coin pool allows ([CoinRules.maxSubtasks]).
+     * @throws IllegalArgumentException if [name] or a subtask title is blank, or there are more subtasks than the tier's coin pool or the subtask ceiling allow ([CoinRules.maxSubtasks]).
      */
     suspend fun create(
         name: String,
@@ -44,7 +44,7 @@ interface PlannerRepository {
 
     /**
      * Completes a task that has no subtasks and appends its ledger entry as one operation. With a chance set
-     * by the store's [CriticalHits] it is a critical hit and also appends a bonus entry.
+     * by the settings and drawn by the store's [CriticalHits], it is a critical hit and also appends a bonus entry.
      * Returns null, changing nothing and not drawing, if the entry is unknown, has subtasks, or is already completed.
      */
     suspend fun completeTask(id: String): CompletionResult?
@@ -75,7 +75,7 @@ interface RewardRepository {
 
     /**
      * Name and description are trimmed; a custom price is kept for tier 5 only.
-     * @throws IllegalArgumentException if [name] is blank, or tier 5 has no custom price above [RewardRules.TopFixedPrice].
+     * @throws IllegalArgumentException if [name] is blank, or tier 5 has no custom price above the tier 4 price ([RewardRules.minCustomPrice]).
      */
     suspend fun createReward(
         name: String,
@@ -102,22 +102,37 @@ interface ShopRepository {
     /**
      * Buys a reward: records a redemption that freezes its name and price, and appends a ledger entry of
      * minus the price, as one operation. Returns false, changing nothing, if the reward is unknown, the
-     * payment would pass the debt limit ([CoinRules.DebtLimit]), or a redemption with [redemptionId] already exists (so a repeated
+     * payment would pass the debt limit ([GameRules.debtLimit]), or a redemption with [redemptionId] already exists (so a repeated
      * call with the same id is a no-op).
      */
     suspend fun redeem(rewardId: String, redemptionId: String = newId()): Boolean
 
     /**
      * Rolls for a random reward of [tier] (1 to 4): costs the tier's price and gives a reward from that tier,
-     * or with a 1 in [RollRules.UpgradeOneIn] chance from the next tier up. Records a redemption marked as a
+     * or with a 1 in [GameRules.upgradeOneIn] chance from the next tier up. Records a redemption marked as a
      * roll and a ledger entry of minus the price as one operation. Returns null, changing nothing, if the
      * payment would pass the debt limit, the tier has no rewards, or [redemptionId] already exists.
      */
     suspend fun mysteryRoll(tier: RewardTier, redemptionId: String = newId()): RollResult?
 }
 
+interface SettingsRepository {
+    /** The settings in force: the defaults with the user's changes on top. */
+    val settings: Flow<Settings>
+
+    /**
+     * Saves [text] as the value of [key] after [checkSetting] accepts it, as one operation with the read of
+     * the data it is checked against. A value equal to the default stores nothing, so it counts as restored.
+     * Returns why it was refused, or null when it was saved.
+     */
+    suspend fun saveSetting(key: SettingKey, text: String): String?
+
+    /** Puts the default back for [key] and forgets the saved value. */
+    suspend fun restoreSetting(key: SettingKey)
+}
+
 /** All repositories behind one object, so completing a task or buying a reward updates its records and the ledger together. */
-interface OpenAdhdStore : TemplateRepository, PlannerRepository, LedgerRepository, RewardRepository, ShopRepository
+interface OpenAdhdStore : TemplateRepository, PlannerRepository, LedgerRepository, RewardRepository, ShopRepository, SettingsRepository
 
 /**
  * This list reordered to follow [ids]: items named in [ids] come first in that order, unknown ids are ignored,

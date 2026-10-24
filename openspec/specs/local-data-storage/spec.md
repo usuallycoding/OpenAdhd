@@ -58,3 +58,18 @@ When the app is updated from an earlier version, all templates, Today entries an
 #### Scenario: Upgrade gives earlier redemptions a description
 - **WHEN** the app is updated from a version whose redemptions have no description, and the history holds one redemption of a reward that still exists with the description "Treat" and one of a reward that was deleted
 - **THEN** the first redemption shows "Treat", the second shows no description, and the balance is unchanged
+
+### Requirement: Settings are kept
+Changed settings SHALL survive a restart of the app and an update from an earlier version, and only changed settings are stored: a setting that was restored or never changed has the default value.
+
+#### Scenario: Restart keeps a setting
+- **WHEN** the user sets the debt limit to 200 and the app is restarted
+- **THEN** the debt limit is still 200
+
+#### Scenario: Restore survives a restart
+- **WHEN** the user changes the debt limit, restores it, and the app is restarted
+- **THEN** the debt limit is 500
+
+#### Scenario: Upgrade gives defaults
+- **WHEN** the app is updated from a version without settings
+- **THEN** every setting has its default, and templates, entries, rewards, redemptions and the balance are unchanged

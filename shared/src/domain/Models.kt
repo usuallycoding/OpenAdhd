@@ -84,7 +84,10 @@ enum class RewardTier(val level: Int) {
     }
 }
 
-/** A reusable reward. [customPrice] is set for tier 5 only; other tiers are priced by [RewardRules]. */
+/**
+ * A reusable reward. [customPrice] is set for tier 5 only; other tiers are priced by the settings. [price] is
+ * what it costs under the settings in force when the store produced it, so it follows a changed tier price.
+ */
 data class RewardTemplate(
     val id: String,
     val name: String,
@@ -92,8 +95,10 @@ data class RewardTemplate(
     val energy: Energy,
     val description: String = "",
     val customPrice: Int? = null,
+    val price: Int = RewardRules.fixedPrice(tier) ?: customPrice ?: 0,
 ) {
-    val price: Int get() = RewardRules.price(tier, customPrice)
+    /** This reward with its [price] worked out under [rules]. */
+    fun priced(rules: GameRules): RewardTemplate = copy(price = RewardRules.fixedPrice(tier, rules) ?: customPrice ?: 0)
 }
 
 enum class RedemptionSource { Purchase, Roll }

@@ -1,6 +1,7 @@
 package com.usuallycoding.openadhd
 
 import com.usuallycoding.openadhd.domain.CoinRules
+import com.usuallycoding.openadhd.domain.GameRules
 import com.usuallycoding.openadhd.domain.LedgerEntry
 import com.usuallycoding.openadhd.domain.LedgerReason
 import com.usuallycoding.openadhd.domain.Tier
@@ -73,7 +74,7 @@ class CoinRulesTest {
         assertEquals(10, CoinRules.maxSubtasks(Tier.Two))
         assertEquals(10, CoinRules.maxSubtasks(Tier.Three))
         assertEquals(10, CoinRules.maxSubtasks(Tier.Four))
-        assertEquals(10, CoinRules.SubtaskCeiling)
+        assertEquals(10, GameRules.Default.subtaskCeiling)
     }
 
     @Test
@@ -96,7 +97,7 @@ class CoinRulesTest {
 
     @Test
     fun `a price can be paid while the balance after paying stays within the debt limit`() {
-        assertEquals(500, CoinRules.DebtLimit)
+        assertEquals(500, GameRules.Default.debtLimit)
         assertTrue(CoinRules.canPay(balance = 100, price = 50))
         assertTrue(CoinRules.canPay(balance = 30, price = 50))
         assertTrue(CoinRules.canPay(balance = 0, price = 500))
@@ -121,5 +122,22 @@ class CoinRulesTest {
         assertEquals(0, CoinRules.debtAfter(balance = 50, price = 50))
         assertEquals(20, CoinRules.debtAfter(balance = 30, price = 50))
         assertEquals(70, CoinRules.debtAfter(balance = -20, price = 50))
+    }
+
+    @Test
+    fun `a changed payout and ceiling change the pool and the subtask limit`() {
+        val rules = GameRules(taskPayouts = listOf(3, 12, 25, 60), subtaskCeiling = 6)
+        assertEquals(25, CoinRules.baseReward(Tier.Three, rules))
+        assertEquals(3, CoinRules.maxSubtasks(Tier.One, rules))
+        assertEquals(6, CoinRules.maxSubtasks(Tier.Four, rules))
+        assertEquals(listOf(9, 8, 8), CoinRules.splitPool(CoinRules.baseReward(Tier.Three, rules), 3))
+    }
+
+    @Test
+    fun `a changed debt limit moves what can be paid`() {
+        val rules = GameRules(debtLimit = 100)
+        assertTrue(CoinRules.canPay(balance = -80, price = 20, rules = rules))
+        assertFalse(CoinRules.canPay(balance = -80, price = 30, rules = rules))
+        assertEquals(10, CoinRules.coinsNeeded(balance = -80, price = 30, rules = rules))
     }
 }

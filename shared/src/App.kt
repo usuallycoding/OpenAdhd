@@ -28,17 +28,22 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.usuallycoding.openadhd.data.AppContainer
 import com.usuallycoding.openadhd.data.InMemoryStore
+import com.usuallycoding.openadhd.domain.Settings
+import com.usuallycoding.openadhd.ui.LocalGameRules
 import com.usuallycoding.openadhd.ui.components.ThemeChooser
+import com.usuallycoding.openadhd.ui.screens.SettingsScreen
 import com.usuallycoding.openadhd.ui.screens.ShopScreen
 import com.usuallycoding.openadhd.ui.screens.TemplatesScreen
 import com.usuallycoding.openadhd.ui.screens.TodayScreen
 import com.usuallycoding.openadhd.ui.rewards.RewardTemplatesViewModel
+import com.usuallycoding.openadhd.ui.settings.SettingsViewModel
 import com.usuallycoding.openadhd.ui.shop.RewardHistoryViewModel
 import com.usuallycoding.openadhd.ui.shop.ShopViewModel
 import com.usuallycoding.openadhd.ui.templates.TemplatesViewModel
 import com.usuallycoding.openadhd.ui.theme.AppTheme
 import com.usuallycoding.openadhd.ui.theme.CoinIcon
 import com.usuallycoding.openadhd.ui.theme.ReorderIcon
+import com.usuallycoding.openadhd.ui.theme.SettingsIcon
 import com.usuallycoding.openadhd.ui.theme.ShopIcon
 import com.usuallycoding.openadhd.ui.theme.TemplatesIcon
 import com.usuallycoding.openadhd.ui.theme.ThemeMode
@@ -52,6 +57,7 @@ private enum class Destination(val label: String, val icon: ImageVector) {
     Today("Today", TodayIcon),
     Templates("Templates", TemplatesIcon),
     Shop("Shop", ShopIcon),
+    Settings("Settings", SettingsIcon),
 }
 
 /** Previews and hot reload use this in-memory container; each platform entry point passes a persistent one. */
@@ -69,13 +75,15 @@ fun App(container: AppContainer) {
     var destination by rememberSaveable { mutableStateOf(Destination.Today) }
 
     val todayViewModel = viewModel { TodayViewModel(container.store, container.clock, dateCheckInterval = container.dateCheckInterval, random = container.random) }
-    val templatesViewModel = viewModel { TemplatesViewModel(container.store) }
-    val rewardTemplatesViewModel = viewModel { RewardTemplatesViewModel(container.store) }
+    val templatesViewModel = viewModel { TemplatesViewModel(container.store, container.store.settings) }
+    val rewardTemplatesViewModel = viewModel { RewardTemplatesViewModel(container.store, container.store.settings) }
     val historyViewModel = viewModel { HistoryViewModel(container.store, todayViewModel.today) }
     val shopViewModel = viewModel { ShopViewModel(container.store) }
     val rewardHistoryViewModel = viewModel { RewardHistoryViewModel(container.store, todayViewModel.today) }
     val walletViewModel = viewModel { WalletViewModel(container.store) }
+    val settingsViewModel = viewModel { SettingsViewModel(container.store) }
     val balance by walletViewModel.balance.collectAsStateWithLifecycle()
+    val settings by container.store.settings.collectAsStateWithLifecycle(Settings.Default)
 
     // App never leaves composition, so these keep each screen's selected tab while the app runs.
     val todayPager = rememberPagerState { 2 }
@@ -98,7 +106,7 @@ fun App(container: AppContainer) {
             } else {
                 ReorderToggle(rewardsReordering, rewardsCanReorder, rewardTemplatesViewModel::setReordering)
             }
-        Destination.Shop -> null
+        Destination.Shop, Destination.Settings -> null
     }
     // Leaving a list ends its Reorder mode, so it is never left on out of sight.
     LaunchedEffect(destination, todayPager.currentPage, templatesPager.currentPage) {
@@ -122,13 +130,14 @@ fun App(container: AppContainer) {
         }
     }
 
+    CompositionLocalProvider(LocalGameRules provides settings.rules) {
     AppTheme(themeMode) {
         Scaffold(
             modifier = Modifier.fillMaxSize(),
             snackbarHost = { SnackbarHost(snackbarHostState) },
             topBar = {
                 CenterAlignedTopAppBar(
-                    title = { Text("OpenAdhd") },
+                    title = { Text(settings.title) },
                     actions = {
                         if (reorderToggle != null && (reorderToggle.canReorder || reorderToggle.on)) {
                             IconToggleButton(checked = reorderToggle.on, onCheckedChange = reorderToggle.onChange) {
@@ -166,8 +175,10 @@ fun App(container: AppContainer) {
                 Destination.Today -> TodayScreen(todayViewModel, historyViewModel, screenModifier, todayPager)
                 Destination.Templates -> TemplatesScreen(templatesViewModel, rewardTemplatesViewModel, screenModifier, templatesPager)
                 Destination.Shop -> ShopScreen(shopViewModel, rewardHistoryViewModel, screenModifier, shopPager)
+                Destination.Settings -> SettingsScreen(settingsViewModel, screenModifier)
             }
         }
+    }
     }
 }
 

@@ -52,6 +52,7 @@ import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.usuallycoding.openadhd.domain.CoinRules
+import com.usuallycoding.openadhd.ui.LocalGameRules
 import com.usuallycoding.openadhd.domain.Energy
 import com.usuallycoding.openadhd.domain.PlannedSubtask
 import com.usuallycoding.openadhd.domain.PlannedTask
@@ -380,7 +381,7 @@ private fun RandomizerDialog(
                     Text(template.name, style = MaterialTheme.typography.titleMedium)
                     if (template.description.isNotBlank()) Text(template.description)
                     Text(template.description())
-                    Text("${CoinRules.baseReward(template.tier)} coins")
+                    Text("${CoinRules.baseReward(template.tier, LocalGameRules.current)} coins")
                 }
             },
             confirmButton = {

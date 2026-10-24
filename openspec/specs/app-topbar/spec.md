@@ -7,11 +7,19 @@ Defines the app's top bar and the control it provides for choosing the theme mod
 ## Requirements
 
 ### Requirement: Top bar
-The app SHALL display a top app bar above its content showing the app name centered.
+The app SHALL display a top app bar above its content showing the app name centered. When a name is set in Settings, the title SHALL be that name followed by "'s OpenAdhd".
 
 #### Scenario: Top bar visible
 - **WHEN** the app is shown on any supported platform
 - **THEN** a top bar with the title "OpenAdhd" centered is displayed above the content
+
+#### Scenario: Title with a name
+- **WHEN** the name in Settings is "Sam"
+- **THEN** the top bar title reads "Sam's OpenAdhd"
+
+#### Scenario: Name removed
+- **WHEN** the user restores the name to its default
+- **THEN** the top bar title reads "OpenAdhd"
 
 ### Requirement: Theme chooser
 The top bar SHALL contain an icon button that opens a dropdown of three options, each with an icon and label: follow system theme, light, and dark. The button MUST show the icon of the current mode, and the current option MUST be highlighted in the dropdown.

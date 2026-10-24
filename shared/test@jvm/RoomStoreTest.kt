@@ -10,6 +10,7 @@ import com.usuallycoding.openadhd.domain.Energy
 import com.usuallycoding.openadhd.domain.LedgerReason
 import com.usuallycoding.openadhd.domain.RedemptionSource
 import com.usuallycoding.openadhd.domain.RewardTier
+import com.usuallycoding.openadhd.domain.SettingKey
 import com.usuallycoding.openadhd.domain.OpenAdhdStore
 import com.usuallycoding.openadhd.domain.Tier
 import kotlinx.coroutines.flow.first
@@ -20,6 +21,7 @@ import kotlin.io.path.createTempDirectory
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlin.random.Random
 import kotlin.time.Clock
@@ -48,6 +50,24 @@ class RoomStoreTest : StoreContractTest() {
         assertEquals(listOf(LedgerReason.SubtaskCompleted, LedgerReason.CriticalHit), ledger.map { it.reason })
         assertEquals(listOf(entry.subtasks.first().id, entry.subtasks.first().id), ledger.map { it.refId })
         assertEquals(14, CoinRules.balance(ledger))
+    }
+
+    @Test
+    fun `settings survive a restart and a restored one is gone`() = runTest {
+        val file = createTempDirectory().resolve("settings.db").toString()
+        val firstDb = Room.databaseBuilder<OpenAdhdDatabase>(file).buildOpenAdhdDatabase()
+        val first = RoomStore(firstDb, clock)
+        assertNull(first.saveSetting(SettingKey.DebtLimit, "200"))
+        assertNull(first.saveSetting(SettingKey.Name, "Sam"))
+        assertNull(first.saveSetting(SettingKey.PriceTier2, "60"))
+        first.restoreSetting(SettingKey.PriceTier2)
+        firstDb.close()
+
+        val second = RoomStore(Room.databaseBuilder<OpenAdhdDatabase>(file).buildOpenAdhdDatabase(), clock)
+        val settings = second.settings.first()
+        assertEquals(200, settings.rules.debtLimit)
+        assertEquals("Sam", settings.name)
+        assertEquals(50, settings.rules.rewardPrices[1])
     }
 
     @Test

@@ -2,18 +2,11 @@ package com.usuallycoding.openadhd.domain
 
 object CoinRules {
     /** The coin pool of a task of this [tier]. */
-    fun baseReward(tier: Tier): Int = when (tier) {
-        Tier.One -> 5
-        Tier.Two -> 10
-        Tier.Three -> 20
-        Tier.Four -> 40
-    }
+    fun baseReward(tier: Tier, rules: GameRules = GameRules.Default): Int = rules.payout(tier)
 
-    /** No task has more subtasks than this, whatever its tier, to keep lists short. */
-    const val SubtaskCeiling = 10
-
-    /** The most subtasks a task of this [tier] can have: never more than its pool, so each is worth 1 coin or more. */
-    fun maxSubtasks(tier: Tier): Int = minOf(baseReward(tier), SubtaskCeiling)
+    /** The most subtasks a task of this [tier] can have: never more than its pool, so each is worth 1 coin or more, nor more than the ceiling. */
+    fun maxSubtasks(tier: Tier, rules: GameRules = GameRules.Default): Int =
+        minOf(baseReward(tier, rules), rules.subtaskCeiling)
 
     /**
      * Splits [pool] across [parts] subtasks, in order: each gets the pool divided by [parts], rounded down,
@@ -29,14 +22,13 @@ object CoinRules {
 
     fun balance(entries: List<LedgerEntry>): Int = entries.sumOf { it.amount }
 
-    /** How far below zero a purchase may take the balance. Undoing a completion is a correction and ignores it. */
-    const val DebtLimit = 500
-
-    /** Whether [price] can be paid from [balance]: the balance after paying is not lower than minus [DebtLimit]. */
-    fun canPay(balance: Int, price: Int): Boolean = balance - price >= -DebtLimit
+    /** Whether [price] can be paid from [balance]: the balance after paying is not lower than minus the debt limit. Undoing a completion is a correction and ignores it. */
+    fun canPay(balance: Int, price: Int, rules: GameRules = GameRules.Default): Boolean =
+        balance - price >= -rules.debtLimit
 
     /** How many more coins are needed before [price] can be paid, counting the room the debt limit gives. */
-    fun coinsNeeded(balance: Int, price: Int): Int = maxOf(0, price - balance - DebtLimit)
+    fun coinsNeeded(balance: Int, price: Int, rules: GameRules = GameRules.Default): Int =
+        maxOf(0, price - balance - rules.debtLimit)
 
     /** The debt a purchase of [price] leaves, or 0 when the balance stays at zero or above. */
     fun debtAfter(balance: Int, price: Int): Int = maxOf(0, price - balance)

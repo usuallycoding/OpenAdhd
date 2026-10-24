@@ -8,6 +8,8 @@ import com.usuallycoding.openadhd.domain.LedgerReason
 import com.usuallycoding.openadhd.domain.OpenAdhdStore
 import com.usuallycoding.openadhd.domain.RedemptionSource
 import com.usuallycoding.openadhd.domain.RewardTier
+import com.usuallycoding.openadhd.domain.SettingKey
+import com.usuallycoding.openadhd.domain.Settings
 import com.usuallycoding.openadhd.domain.Tier
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
@@ -1093,5 +1095,222 @@ abstract class StoreContractTest {
 
         store.uncompleteSubtask(entry.subtasks[1].id)
         assertNull(store.entriesFor(today).first().first { it.id == entry.id }.doneAt)
+    }
+
+    // ---- settings
+
+    private suspend fun OpenAdhdStore.earn(tier: Tier, name: String = "Earn ${tier.level}"): CompletionResult =
+        completeTask(assign(create(name, tier, Energy.Low), today).id)!!
+
+    @Test
+    fun `a new store has the default settings`() = runTest {
+        val store = newStore(clock)
+        assertEquals(Settings.Default, store.settings.first())
+    }
+
+    @Test
+    fun `a saved setting is applied and restoring puts the default back`() = runTest {
+        val store = newStore(clock)
+        assertNull(store.saveSetting(SettingKey.DebtLimit, "200"))
+        assertNull(store.saveSetting(SettingKey.Name, "  Sam "))
+        val saved = store.settings.first()
+        assertEquals(200, saved.rules.debtLimit)
+        assertEquals("Sam", saved.name)
+        assertEquals("Sam's OpenAdhd", saved.title)
+
+        store.restoreSetting(SettingKey.DebtLimit)
+        val restored = store.settings.first()
+        assertEquals(500, restored.rules.debtLimit)
+        assertEquals("Sam", restored.name)
+    }
+
+    @Test
+    fun `saving the default value counts as restored`() = runTest {
+        val store = newStore(clock)
+        assertNull(store.saveSetting(SettingKey.DebtLimit, "200"))
+        assertNull(store.saveSetting(SettingKey.DebtLimit, "500"))
+        assertEquals(Settings.Default, store.settings.first())
+    }
+
+    @Test
+    fun `a refused setting changes nothing and says why`() = runTest {
+        val store = newStore(clock)
+        assertEquals("Enter a whole number", store.saveSetting(SettingKey.DebtLimit, "lots"))
+        assertEquals("Tier 3 must pay more than tier 2", store.saveSetting(SettingKey.PayoutTier3, "10"))
+        assertEquals("Tier 2 must cost less than tier 3", store.saveSetting(SettingKey.PriceTier2, "120"))
+        assertEquals(Settings.Default, store.settings.first())
+    }
+
+    @Test
+    fun `a changed debt limit decides what can be bought and rolled`() = runTest {
+        val store = newStore(clock, Random(1))
+        store.earn(Tier.One)
+        store.createReward("Tea", RewardTier.Two, Energy.Low)
+        val dear = store.createReward("Gift", RewardTier.Four, Energy.Low)
+        assertNull(store.saveSetting(SettingKey.DebtLimit, "100"))
+
+        // 5 coins and a 100 coin limit: 300 is too much, 50 is fine (balance -45)
+        assertFalse(store.redeem(dear.id, "no"))
+        assertNotNull(store.mysteryRoll(RewardTier.Two, "roll"))
+        assertEquals(-45, CoinRules.balance(store.entries.first()))
+        // another 50 would reach -95 (allowed), a third -145 (refused)
+        assertNotNull(store.mysteryRoll(RewardTier.Two, "roll2"))
+        assertNull(store.mysteryRoll(RewardTier.Two, "roll3"))
+        assertEquals(-95, CoinRules.balance(store.entries.first()))
+    }
+
+    @Test
+    fun `a changed payout applies to entries assigned afterwards only`() = runTest {
+        val store = newStore(clock)
+        val template = store.create("Taxes", Tier.Three, Energy.High)
+        val before = store.assign(template, today)
+        assertNull(store.saveSetting(SettingKey.PayoutTier3, "25"))
+        val after = store.assign(template, today)
+
+        assertEquals(20, before.reward)
+        assertEquals(25, after.reward)
+        assertEquals(20, store.completeTask(before.id)!!.reward)
+        assertEquals(25, store.completeTask(after.id)!!.reward)
+        assertEquals(45, CoinRules.balance(store.entries.first()))
+    }
+
+    @Test
+    fun `a changed payout splits among subtasks`() = runTest {
+        val store = newStore(clock)
+        assertNull(store.saveSetting(SettingKey.PayoutTier3, "25"))
+        val template = store.create("Clean", Tier.Three, Energy.Low, subtasks = listOf("A", "B", "C"))
+        val entry = store.assign(template, today)
+        assertEquals(listOf(9, 8, 8), entry.subtasks.map { it.reward })
+    }
+
+    @Test
+    fun `the subtask ceiling limits new templates`() = runTest {
+        val store = newStore(clock)
+        assertNull(store.saveSetting(SettingKey.SubtaskCeiling, "3"))
+        assertFailsWith<IllegalArgumentException> {
+            store.create("Big", Tier.Four, Energy.Low, subtasks = List(4) { "Step $it" })
+        }
+        store.create("Fits", Tier.Four, Energy.Low, subtasks = List(3) { "Step $it" })
+        assertEquals(1, store.templates.first().size)
+    }
+
+    @Test
+    fun `lowering the ceiling keeps existing templates but they cannot be saved with too many subtasks`() = runTest {
+        val store = newStore(clock)
+        val template = store.create("Kitchen", Tier.Two, Energy.Low, subtasks = List(8) { "Step $it" })
+        assertNull(store.saveSetting(SettingKey.SubtaskCeiling, "5"))
+        assertEquals(8, store.templates.first().single().subtasks.size)
+        assertFailsWith<IllegalArgumentException> { store.update(template.copy(name = "Renamed")) }
+        store.update(template.copy(name = "Renamed", subtasks = List(5) { "Step $it" }))
+        assertEquals("Renamed", store.templates.first().single().name)
+    }
+
+    @Test
+    fun `a payout below a template's subtask count is refused`() = runTest {
+        val store = newStore(clock)
+        store.create("Clean kitchen", Tier.Two, Energy.Low, subtasks = List(8) { "Step $it" })
+        assertEquals(
+            "\"Clean kitchen\" has 8 subtasks and needs at least 8 coins",
+            store.saveSetting(SettingKey.PayoutTier2, "6"),
+        )
+        assertEquals(10, store.settings.first().rules.taskPayouts[1])
+        assertNull(store.saveSetting(SettingKey.PayoutTier2, "8"))
+    }
+
+    @Test
+    fun `a tier price applies to rewards that already exist and redemptions keep what was paid`() = runTest {
+        val store = newStore(clock)
+        repeat(3) { store.earn(Tier.Four) }
+        val tea = store.createReward("Tea", RewardTier.Two, Energy.Low)
+        assertEquals(50, store.rewards.first().single().price)
+        assertTrue(store.redeem(tea.id, "r1"))
+
+        assertNull(store.saveSetting(SettingKey.PriceTier2, "60"))
+        assertEquals(60, store.rewards.first().single().price)
+        assertTrue(store.redeem(tea.id, "r2"))
+
+        val history = store.redemptions.first()
+        assertEquals(listOf(60, 50), history.map { it.price })
+        assertEquals(120 - 50 - 60, CoinRules.balance(store.entries.first()))
+    }
+
+    @Test
+    fun `a roll costs the changed price`() = runTest {
+        val store = newStore(clock, ScriptedRandom(3, 0))
+        repeat(2) { store.earn(Tier.Four) }
+        store.createReward("Tea", RewardTier.Two, Energy.Low)
+        assertNull(store.saveSetting(SettingKey.PriceTier2, "60"))
+        assertNotNull(store.mysteryRoll(RewardTier.Two, "roll"))
+        assertEquals(80 - 60, CoinRules.balance(store.entries.first()))
+    }
+
+    @Test
+    fun `tier four cannot be set to the price of a tier five reward`() = runTest {
+        val store = newStore(clock)
+        store.createReward("Weekend away", RewardTier.Five, Energy.High, customPrice = 500)
+        assertEquals(
+            "Tier 4 must cost less than \"Weekend away\", which costs 500",
+            store.saveSetting(SettingKey.PriceTier4, "500"),
+        )
+        assertNull(store.saveSetting(SettingKey.PriceTier4, "499"))
+        assertFailsWith<IllegalArgumentException> { store.createReward("Cheap", RewardTier.Five, Energy.Low, customPrice = 499) }
+        store.createReward("Fine", RewardTier.Five, Energy.Low, customPrice = 500)
+    }
+
+    @Test
+    fun `the critical chance is passed on and the multiplier sets the bonus`() = runTest {
+        val crits = ScriptedCrits(true, false)
+        val store = newStore(clock, criticalHits = crits)
+        assertNull(store.saveSetting(SettingKey.CriticalOneIn, "3"))
+        assertNull(store.saveSetting(SettingKey.CriticalMultiplier, "3"))
+
+        val first = store.earn(Tier.Three, "A")
+        val second = store.earn(Tier.Three, "B")
+
+        assertEquals(CompletionResult(20, 40), first)
+        assertEquals(CompletionResult(20, 0), second)
+        assertEquals(listOf(3, 3), crits.asked)
+        assertEquals(80, CoinRules.balance(store.entries.first()))
+    }
+
+    @Test
+    fun `the upgrade chance is drawn from the setting`() = runTest {
+        val random = ScriptedRandom(0, 0)
+        val store = newStore(clock, random)
+        store.earn(Tier.Four)
+        store.createReward("Tea", RewardTier.One, Energy.Low)
+        store.createReward("Dinner", RewardTier.Two, Energy.Low)
+        assertNull(store.saveSetting(SettingKey.UpgradeOneIn, "3"))
+
+        val result = store.mysteryRoll(RewardTier.One, "roll")!!
+        assertEquals(3, random.bounds.first())
+        assertTrue(result.upgraded)
+        assertEquals("Dinner", result.redemption.name)
+    }
+
+    @Test
+    fun `changing a setting leaves the ledger and the balance alone`() = runTest {
+        val store = newStore(clock)
+        store.earn(Tier.Three)
+        val ledger = store.entries.first()
+        for (key in listOf(SettingKey.DebtLimit, SettingKey.PayoutTier3, SettingKey.PriceTier2, SettingKey.CriticalMultiplier)) {
+            val value = Settings.Default.text(key).toInt()
+            assertNull(store.saveSetting(key, (value + 1).toString()))
+        }
+        assertEquals(ledger, store.entries.first())
+        assertEquals(20, CoinRules.balance(store.entries.first()))
+    }
+
+    @Test
+    fun `a stored debt limit below the current debt keeps the balance and refuses spending`() = runTest {
+        val store = newStore(clock)
+        val gift = store.createReward("Gift", RewardTier.Four, Energy.Low)
+        val tea = store.createReward("Tea", RewardTier.One, Energy.Low)
+        assertTrue(store.redeem(gift.id, "g"))
+        assertEquals(-300, CoinRules.balance(store.entries.first()))
+        assertNull(store.saveSetting(SettingKey.DebtLimit, "100"))
+
+        assertEquals(-300, CoinRules.balance(store.entries.first()))
+        assertFalse(store.redeem(tea.id, "t"))
     }
 }

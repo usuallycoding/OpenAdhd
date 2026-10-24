@@ -19,8 +19,9 @@ import kotlinx.coroutines.Dispatchers
         LedgerEntity::class,
         RewardTemplateEntity::class,
         RedemptionEntity::class,
+        SettingEntity::class,
     ],
-    version = 6,
+    version = 7,
     exportSchema = false,
 )
 @ConstructedBy(OpenAdhdDatabaseConstructor::class)
@@ -121,8 +122,15 @@ val Migration5To6: Migration = object : Migration(5, 6) {
     }
 }
 
+/** Version 7 adds the settings table. It only creates a table, so no existing data is touched and every setting starts at its default. */
+val Migration6To7: Migration = object : Migration(6, 7) {
+    override fun migrate(connection: SQLiteConnection) {
+        connection.execSQL("CREATE TABLE IF NOT EXISTS settings (`key` TEXT NOT NULL, `value` TEXT NOT NULL, PRIMARY KEY(`key`))")
+    }
+}
+
 fun RoomDatabase.Builder<OpenAdhdDatabase>.buildOpenAdhdDatabase(): OpenAdhdDatabase =
     setDriver(BundledSQLiteDriver())
         .setQueryCoroutineContext(Dispatchers.Default)
-        .addMigrations(Migration1To2, Migration2To3, Migration3To4, Migration4To5, Migration5To6)
+        .addMigrations(Migration1To2, Migration2To3, Migration3To4, Migration4To5, Migration5To6, Migration6To7)
         .build()

@@ -11,9 +11,14 @@ import com.usuallycoding.openadhd.domain.OpenAdhdStore
 import com.usuallycoding.openadhd.domain.PlannedTask
 import com.usuallycoding.openadhd.domain.Redemption
 import com.usuallycoding.openadhd.domain.RedemptionSource
+import com.usuallycoding.openadhd.domain.GameRules
 import com.usuallycoding.openadhd.domain.RewardTemplate
 import com.usuallycoding.openadhd.domain.RewardTier
 import com.usuallycoding.openadhd.domain.RollResult
+import com.usuallycoding.openadhd.domain.SettingCheck
+import com.usuallycoding.openadhd.domain.SettingKey
+import com.usuallycoding.openadhd.domain.Settings
+import com.usuallycoding.openadhd.domain.checkSetting
 import com.usuallycoding.openadhd.domain.RollRules
 import com.usuallycoding.openadhd.domain.TaskTemplate
 import com.usuallycoding.openadhd.domain.reorderedBy
@@ -22,6 +27,7 @@ import com.usuallycoding.openadhd.domain.newId
 import com.usuallycoding.openadhd.domain.toPlannedTask
 import com.usuallycoding.openadhd.domain.validated
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
@@ -36,7 +42,12 @@ data class StoreState(
     val ledger: List<LedgerEntry> = emptyList(),
     val rewards: List<RewardTemplate> = emptyList(),
     val redemptions: List<Redemption> = emptyList(),
-)
+    /** The settings the user changed: storage key to text. Anything missing has its default. */
+    val overrides: Map<String, String> = emptyMap(),
+) {
+    val settings: Settings get() = Settings.fromOverrides(overrides)
+    val rules: GameRules get() = settings.rules
+}
 
 /** Pure state transitions shared by every [OpenAdhdStore] implementation. */
 internal class StoreLogic(
@@ -45,9 +56,9 @@ internal class StoreLogic(
     private val criticalHits: CriticalHits = CriticalHits.Never,
 ) {
     /** The reward entry, plus a bonus entry when this completion turns out to be a critical hit. */
-    private fun payout(reward: LedgerEntry, refId: String): Pair<List<LedgerEntry>, CompletionResult> {
-        if (!criticalHits.isCritical()) return listOf(reward) to CompletionResult(reward.amount)
-        val bonus = LedgerEntry(newId(), CriticalRules.bonus(reward.amount), reward.timestamp, LedgerReason.CriticalHit, refId)
+    private fun payout(reward: LedgerEntry, refId: String, rules: GameRules): Pair<List<LedgerEntry>, CompletionResult> {
+        if (!criticalHits.isCritical(rules.criticalOneIn)) return listOf(reward) to CompletionResult(reward.amount)
+        val bonus = LedgerEntry(newId(), CriticalRules.bonus(reward.amount, rules), reward.timestamp, LedgerReason.CriticalHit, refId)
         return listOf(reward, bonus) to CompletionResult(reward.amount, bonus.amount)
     }
 
@@ -59,12 +70,12 @@ internal class StoreLogic(
         description: String,
         subtasks: List<String>,
     ): Pair<StoreState, TaskTemplate> {
-        val template = TaskTemplate(newId(), name, tier, energy, description, subtasks).validated()
+        val template = TaskTemplate(newId(), name, tier, energy, description, subtasks).validated(state.rules)
         return state.copy(templates = listOf(template) + state.templates) to template
     }
 
     fun update(state: StoreState, template: TaskTemplate): StoreState {
-        val valid = template.validated()
+        val valid = template.validated(state.rules)
         return state.copy(templates = state.templates.map { if (it.id == valid.id) valid else it })
     }
 
@@ -84,7 +95,7 @@ internal class StoreLogic(
     }
 
     fun assign(state: StoreState, template: TaskTemplate, date: LocalDate): Pair<StoreState, PlannedTask> {
-        val task = template.toPlannedTask(date)
+        val task = template.toPlannedTask(date, state.rules)
         return state.copy(planned = state.planned + task) to task
     }
 
@@ -96,7 +107,7 @@ internal class StoreLogic(
         val task = state.planned.firstOrNull { it.id == id } ?: return null
         if (task.subtasks.isNotEmpty() || task.isCompleted) return null
         val now = clock.now()
-        val (entries, result) = payout(LedgerEntry(newId(), task.reward, now, LedgerReason.TaskCompleted, task.id), task.id)
+        val (entries, result) = payout(LedgerEntry(newId(), task.reward, now, LedgerReason.TaskCompleted, task.id), task.id, state.rules)
         val next = state.copy(
             planned = state.planned.map { if (it.id == id) it.copy(completedAt = now) else it },
             ledger = state.ledger + entries,
@@ -146,12 +157,12 @@ internal class StoreLogic(
         description: String,
         customPrice: Int?,
     ): Pair<StoreState, RewardTemplate> {
-        val reward = RewardTemplate(newId(), name, tier, energy, description, customPrice).validated()
-        return state.copy(rewards = listOf(reward) + state.rewards) to reward
+        val reward = RewardTemplate(newId(), name, tier, energy, description, customPrice).validated(state.rules)
+        return state.copy(rewards = listOf(reward) + state.rewards) to reward.priced(state.rules)
     }
 
     fun updateReward(state: StoreState, reward: RewardTemplate): StoreState {
-        val valid = reward.validated()
+        val valid = reward.validated(state.rules)
         return state.copy(rewards = state.rewards.map { if (it.id == valid.id) valid else it })
     }
 
@@ -162,8 +173,9 @@ internal class StoreLogic(
     fun redeem(state: StoreState, rewardId: String, redemptionId: String): StoreState? {
         if (state.redemptions.any { it.id == redemptionId }) return null
         val reward = state.rewards.firstOrNull { it.id == rewardId } ?: return null
-        val price = reward.price
-        if (!CoinRules.canPay(CoinRules.balance(state.ledger), price)) return null
+        val rules = state.rules
+        val price = reward.priced(rules).price
+        if (!CoinRules.canPay(CoinRules.balance(state.ledger), price, rules)) return null
         val now = clock.now()
         val redemption = Redemption(
             redemptionId, reward.id, reward.name, reward.tier, reward.energy, price, now,
@@ -180,9 +192,10 @@ internal class StoreLogic(
     fun mysteryRoll(state: StoreState, tier: RewardTier, redemptionId: String): Pair<StoreState, RollResult>? {
         if (tier !in RollRules.RollableTiers) return null
         if (state.redemptions.any { it.id == redemptionId }) return null
-        val price = RollRules.price(tier)
-        if (!CoinRules.canPay(CoinRules.balance(state.ledger), price)) return null
-        val outcome = RollRules.choose(random, tier, state.rewards) ?: return null
+        val rules = state.rules
+        val price = RollRules.price(tier, rules)
+        if (!CoinRules.canPay(CoinRules.balance(state.ledger), price, rules)) return null
+        val outcome = RollRules.choose(random, tier, state.rewards, rules) ?: return null
         val now = clock.now()
         val reward = outcome.reward
         val redemption = Redemption(
@@ -194,6 +207,21 @@ internal class StoreLogic(
         return next to RollResult(redemption, outcome.upgraded)
     }
 
+    /** The state with [key] set to [text], or why it is refused. A value equal to the default is stored as no override. */
+    fun saveSetting(state: StoreState, key: SettingKey, text: String): Pair<StoreState?, String?> =
+        when (val check = checkSetting(key, text, state.settings, state.rewards, state.templates)) {
+            is SettingCheck.Refused -> null to check.message
+            is SettingCheck.Accepted -> {
+                val value = check.settings.text(key)
+                val overrides = if (value == Settings.Default.text(key)) state.overrides - key.storageKey
+                else state.overrides + (key.storageKey to value)
+                state.copy(overrides = overrides) to null
+            }
+        }
+
+    fun restoreSetting(state: StoreState, key: SettingKey): StoreState =
+        state.copy(overrides = state.overrides - key.storageKey)
+
     /** Returns the new state and what was paid, or null when the subtask is unknown or already completed. */
     fun completeSubtask(state: StoreState, id: String): Pair<StoreState, CompletionResult>? {
         val task = state.planned.firstOrNull { entry -> entry.subtasks.any { it.id == id } } ?: return null
@@ -203,6 +231,7 @@ internal class StoreLogic(
         val (entries, result) = payout(
             LedgerEntry(newId(), subtask.reward, now, LedgerReason.SubtaskCompleted, subtask.id),
             subtask.id,
+            state.rules,
         )
         val next = state.copy(
             planned = state.planned.map { entry ->
@@ -224,6 +253,7 @@ class InMemoryStore(
     private val logic = StoreLogic(clock, random, criticalHits)
     private val state = MutableStateFlow(initial)
 
+    override val settings: Flow<Settings> = state.map { it.settings }.distinctUntilChanged()
     override val templates: Flow<List<TaskTemplate>> = state.map { it.templates }
     override val entries: Flow<List<LedgerEntry>> = state.map { it.ledger }
 
@@ -240,7 +270,7 @@ class InMemoryStore(
         subtasks: List<String>,
     ): TaskTemplate {
         // Validate before touching the state so invalid input throws to the caller.
-        TaskTemplate("", name, tier, energy, description, subtasks).validated()
+        TaskTemplate("", name, tier, energy, description, subtasks).validated(state.value.rules)
         var created: TaskTemplate? = null
         state.update { s ->
             logic.create(s, name, tier, energy, description, subtasks).also { created = it.second }.first
@@ -249,7 +279,7 @@ class InMemoryStore(
     }
 
     override suspend fun update(template: TaskTemplate) {
-        template.validated()
+        template.validated(state.value.rules)
         state.update { logic.update(it, template) }
     }
 
@@ -270,7 +300,7 @@ class InMemoryStore(
 
     override suspend fun reorderRewards(ids: List<String>) = state.update { logic.reorderRewards(it, ids) }
 
-    override val rewards: Flow<List<RewardTemplate>> = state.map { it.rewards }
+    override val rewards: Flow<List<RewardTemplate>> = state.map { s -> s.rewards.map { it.priced(s.rules) } }
     override val redemptions: Flow<List<Redemption>> = state.map { it.redemptions.asReversed() }
 
     override suspend fun createReward(
@@ -281,7 +311,7 @@ class InMemoryStore(
         customPrice: Int?,
     ): RewardTemplate {
         // Validate before touching the state so invalid input throws to the caller.
-        RewardTemplate("", name, tier, energy, description, customPrice).validated()
+        RewardTemplate("", name, tier, energy, description, customPrice).validated(state.value.rules)
         var created: RewardTemplate? = null
         state.update { s ->
             logic.createReward(s, name, tier, energy, description, customPrice).also { created = it.second }.first
@@ -290,7 +320,7 @@ class InMemoryStore(
     }
 
     override suspend fun updateReward(reward: RewardTemplate) {
-        reward.validated()
+        reward.validated(state.value.rules)
         state.update { logic.updateReward(it, reward) }
     }
 
@@ -306,6 +336,17 @@ class InMemoryStore(
             if (state.compareAndSet(before, after)) return result
         }
     }
+
+    override suspend fun saveSetting(key: SettingKey, text: String): String? {
+        while (true) {
+            val before = state.value
+            val (after, problem) = logic.saveSetting(before, key, text)
+            if (after == null) return problem
+            if (state.compareAndSet(before, after)) return null
+        }
+    }
+
+    override suspend fun restoreSetting(key: SettingKey) = state.update { logic.restoreSetting(it, key) }
 
     override suspend fun completeTask(id: String): CompletionResult? = completion { logic.completeTask(it, id) }
 

@@ -35,6 +35,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.usuallycoding.openadhd.domain.Energy
 import com.usuallycoding.openadhd.domain.RewardInputError
 import com.usuallycoding.openadhd.domain.RewardRules
+import com.usuallycoding.openadhd.ui.LocalGameRules
 import com.usuallycoding.openadhd.domain.RewardTemplate
 import com.usuallycoding.openadhd.domain.RewardTier
 import com.usuallycoding.openadhd.ui.rewards.RewardTemplatesViewModel
@@ -148,6 +149,7 @@ private fun RewardDialog(
     var energy by remember { mutableStateOf(initial.energy) }
     var priceText by remember { mutableStateOf(initial.customPrice?.toString() ?: "") }
     var error by remember { mutableStateOf<RewardInputError?>(null) }
+    val rules = LocalGameRules.current
 
     FormSheet(
         title = if (initial.id.isEmpty()) "New reward" else "Edit reward",
@@ -156,7 +158,7 @@ private fun RewardDialog(
             TextButton(onClick = requestClose) { Text("Cancel") }
             TextButton(onClick = {
                 val customPrice = if (tier == RewardTier.Five) priceText.toIntOrNull() else null
-                val problem = RewardTemplatesViewModel.validate(name, tier, customPrice)
+                val problem = RewardTemplatesViewModel.validate(name, tier, customPrice, rules)
                 if (problem == null) {
                     onConfirm(name, tier, energy, description, customPrice)
                     requestClose()
@@ -206,15 +208,15 @@ private fun RewardDialog(
                         when (error) {
                             RewardInputError.PriceRequired -> "A price is required for tier 5"
                             RewardInputError.PriceTooLow ->
-                                "A tier 5 price must be larger than ${RewardRules.TopFixedPrice}"
-                            else -> "Must be larger than ${RewardRules.TopFixedPrice}"
+                                "A tier 5 price must be larger than ${RewardRules.minCustomPrice(rules) - 1}"
+                            else -> "Must be larger than ${RewardRules.minCustomPrice(rules) - 1}"
                         },
                     )
                 },
                 modifier = Modifier.fillMaxWidth(),
             )
         } else {
-            Text("Costs ${RewardRules.price(tier, null)} coins", style = MaterialTheme.typography.bodyMedium)
+            Text("Costs ${RewardRules.price(tier, null, rules)} coins", style = MaterialTheme.typography.bodyMedium)
         }
         Text("Energy it takes", style = MaterialTheme.typography.labelLarge)
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {

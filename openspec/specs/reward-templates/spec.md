@@ -18,7 +18,7 @@ The app SHALL let the user create a reward template with a non-empty name, an op
 - **THEN** the reward is not saved and the user is told a name is required
 
 ### Requirement: Price by tier
-Rewards in tiers 1 to 4 SHALL cost a fixed price set by their tier: 20 coins for tier 1, 50 for tier 2, 120 for tier 3 and 300 for tier 4. A tier 5 reward SHALL cost the custom price the user entered, which MUST be a whole number larger than 300.
+Rewards in tiers 1 to 4 SHALL cost a fixed price set by their tier in Settings: by default 20 coins for tier 1, 50 for tier 2, 120 for tier 3 and 300 for tier 4. A tier 5 reward SHALL cost the custom price the user entered, which MUST be a whole number larger than the tier 4 price.
 
 #### Scenario: Fixed tier price
 - **WHEN** a reward is saved in tier 3
@@ -39,6 +39,10 @@ Rewards in tiers 1 to 4 SHALL cost a fixed price set by their tier: 20 coins for
 #### Scenario: Tier 5 needs a price
 - **WHEN** the user tries to save a tier 5 reward without entering a price
 - **THEN** the reward is not saved and the user is told a price is required
+
+#### Scenario: Changed tier price
+- **WHEN** the tier 4 price in Settings is 400 and the user tries to save a tier 5 reward with a custom price of 400
+- **THEN** the reward is not saved and the user is told a tier 5 price must be larger than 400
 
 ### Requirement: Edit a reward template
 The app SHALL let the user change the name, description, tier, energy level and custom price of an existing reward, and the reward's price MUST follow its new tier.
