@@ -54,3 +54,15 @@ val DiceIcon: ImageVector by lazy {
 val ChevronIcon: ImageVector by lazy {
     themeIcon("Chevron") { stroked("M6,9l6,6l6,-6") }
 }
+
+val ReorderIcon: ImageVector by lazy {
+    themeIcon("Reorder") { stroked("M8,9l4,-4l4,4M8,15l4,4l4,-4") }
+}
+
+val ArrowUpIcon: ImageVector by lazy {
+    themeIcon("ArrowUp") { stroked("M12,19V5M6,11l6,-6l6,6") }
+}
+
+val ArrowDownIcon: ImageVector by lazy {
+    themeIcon("ArrowDown") { stroked("M12,5v14M6,13l6,6l6,-6") }
+}

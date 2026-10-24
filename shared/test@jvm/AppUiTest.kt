@@ -1,5 +1,6 @@
 package com.usuallycoding.openadhd
 
+import androidx.compose.ui.test.ComposeUiTest
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsEnabled
@@ -37,6 +38,7 @@ import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
+import kotlin.test.assertEquals
 
 @OptIn(ExperimentalTestApi::class, ExperimentalCoroutinesApi::class)
 class AppUiTest {
@@ -679,5 +681,156 @@ class AppUiTest {
         onNodeWithText("Templates").performClick()
 
         onNodeWithText("Tasks").assertIsSelected()
+    }
+
+    // ---- reordering
+
+    private fun ComposeUiTest.topOf(text: String) = onNodeWithText(text).fetchSemanticsNode().boundsInRoot.top
+
+    private fun ComposeUiTest.assertOrder(vararg texts: String) {
+        val tops = texts.map { topOf(it) }
+        assertEquals(tops.sorted(), tops, "expected ${texts.toList()} top to bottom")
+    }
+
+    private fun reorderStore(templates: List<String> = listOf("Alpha", "Beta", "Gamma"), planToday: Boolean = false): InMemoryStore {
+        val store = InMemoryStore()
+        runBlocking {
+            val today = kotlin.time.Clock.System.todayIn(TimeZone.currentSystemDefault())
+            templates.forEach {
+                val template = store.create(it, Tier.One, Energy.Low)
+                if (planToday) store.assign(template, today)
+            }
+        }
+        return store
+    }
+
+    @Test
+    fun `reorder mode on task templates shows arrows hides editing and moves a template`() = runComposeUiTest {
+        setContent { App(AppContainer(reorderStore(), dateCheckInterval = null)) }
+        onNodeWithText("Templates").performClick()
+        assertOrder("Alpha", "Beta", "Gamma")
+        onNodeWithContentDescription("Edit Alpha").assertExists()
+
+        onNodeWithContentDescription("Reorder").performClick()
+        onNodeWithContentDescription("Edit Alpha").assertDoesNotExist()
+        onNodeWithContentDescription("Delete Alpha").assertDoesNotExist()
+        onNodeWithContentDescription("Add template").assertDoesNotExist()
+        onNodeWithContentDescription("Move Alpha up").assertIsNotEnabled()
+        onNodeWithContentDescription("Move Alpha down").assertIsEnabled()
+        onNodeWithContentDescription("Move Gamma down").assertIsNotEnabled()
+
+        onNodeWithContentDescription("Move Alpha down").performClick()
+        assertOrder("Beta", "Alpha", "Gamma")
+        onNodeWithContentDescription("Move Gamma up").performClick()
+        assertOrder("Beta", "Gamma", "Alpha")
+
+        onNodeWithContentDescription("Finish reordering").performClick()
+        onNodeWithContentDescription("Move Beta down").assertDoesNotExist()
+        onNodeWithContentDescription("Edit Beta").assertExists()
+        onNodeWithContentDescription("Add template").assertExists()
+        assertOrder("Beta", "Gamma", "Alpha")
+    }
+
+    @Test
+    fun `there is no reorder toggle with fewer than two items`() = runComposeUiTest {
+        setContent { App(AppContainer(reorderStore(listOf("Only")), dateCheckInterval = null)) }
+        onNodeWithContentDescription("Reorder").assertDoesNotExist()
+        onNodeWithText("Templates").performClick()
+        onNodeWithContentDescription("Reorder").assertDoesNotExist()
+        onNodeWithText("Rewards").performClick()
+        onNodeWithContentDescription("Reorder").assertDoesNotExist()
+    }
+
+    @Test
+    fun `reorder mode on reward templates moves a reward and each tab has its own mode`() = runComposeUiTest {
+        val store = reorderStore()
+        runBlocking {
+            store.createReward("Tea", RewardTier.One, Energy.Low)
+            store.createReward("Cake", RewardTier.One, Energy.Low)
+        }
+        setContent { App(AppContainer(store, dateCheckInterval = null)) }
+        onNodeWithText("Templates").performClick()
+        onNodeWithContentDescription("Reorder").performClick()
+        onNodeWithContentDescription("Move Alpha down").assertExists()
+
+        // swiping to the Rewards tab leaves the other list's mode, so nothing is left switched on
+        swipeContentLeft()
+        onNodeWithText("Tea").assertExists()
+        onNodeWithContentDescription("Move Tea down").assertDoesNotExist()
+        onNodeWithContentDescription("Edit Tea").assertExists()
+
+        onNodeWithContentDescription("Reorder").performClick()
+        onNodeWithContentDescription("Add reward").assertDoesNotExist()
+        onNodeWithContentDescription("Move Tea down").performClick()
+        assertOrder("Cake", "Tea")
+    }
+
+    @Test
+    fun `reorder mode on today moves pending entries and leaves completed ones below without controls`() = runComposeUiTest {
+        val store = reorderStore(planToday = true)
+        // Alpha is completed before the screen opens: it is shown below the pending entries
+        runBlocking {
+            val today = kotlin.time.Clock.System.todayIn(TimeZone.currentSystemDefault())
+            store.completeTask(store.entriesFor(today).first().first { it.name == "Alpha" }.id)
+        }
+        setContent { App(AppContainer(store, dateCheckInterval = null)) }
+        assertOrder("Beta", "Gamma", "Alpha")
+
+        onNodeWithContentDescription("Reorder").performClick()
+        // the only toggleable left is the Finish reordering button itself: no completion checkboxes
+        onAllNodes(isToggleable()).assertCountEquals(1)
+        onNodeWithContentDescription("Remove Beta from today").assertDoesNotExist()
+        onNodeWithContentDescription("Add task to today").assertDoesNotExist()
+        onNodeWithContentDescription("Move Alpha down").assertDoesNotExist()
+        onNodeWithContentDescription("Move Alpha up").assertDoesNotExist()
+        onNodeWithContentDescription("Move Beta up").assertIsNotEnabled()
+        onNodeWithContentDescription("Move Gamma down").assertIsNotEnabled()
+
+        onNodeWithContentDescription("Move Beta down").performClick()
+        assertOrder("Gamma", "Beta", "Alpha")
+    }
+
+    @Test
+    fun `today hides subtasks while reordering and keeps them collapsed or expanded afterwards`() = runComposeUiTest {
+        val store = InMemoryStore()
+        runBlocking {
+            val today = kotlin.time.Clock.System.todayIn(TimeZone.currentSystemDefault())
+            store.assign(store.create("Clean", Tier.Two, Energy.Low, subtasks = listOf("Dishes", "Floor")), today)
+            store.assign(store.create("Walk", Tier.One, Energy.Low), today)
+        }
+        setContent { App(AppContainer(store, dateCheckInterval = null)) }
+        onNodeWithText("Dishes").assertExists()
+        onNodeWithContentDescription("Reorder").performClick()
+        onNodeWithText("Dishes").assertDoesNotExist()
+        onNodeWithContentDescription("Finish reordering").performClick()
+        onNodeWithText("Dishes").assertExists()
+    }
+
+    @Test
+    fun `the picker and the shop follow the new order`() = runComposeUiTest {
+        val store = reorderStore()
+        runBlocking {
+            store.createReward("Tea", RewardTier.One, Energy.Low)
+            store.createReward("Cake", RewardTier.One, Energy.Low)
+        }
+        setContent { App(AppContainer(store, dateCheckInterval = null)) }
+
+        onNodeWithText("Templates").performClick()
+        onNodeWithContentDescription("Reorder").performClick()
+        onNodeWithContentDescription("Move Gamma up").performClick()
+        onNodeWithContentDescription("Move Gamma up").performClick()
+        onNodeWithContentDescription("Finish reordering").performClick()
+        onNodeWithText("Rewards").performClick()
+        onNodeWithContentDescription("Reorder").performClick()
+        onNodeWithContentDescription("Move Cake up").performClick()
+        onNodeWithContentDescription("Finish reordering").performClick()
+
+        onNodeWithText("Today").performClick()
+        onNodeWithContentDescription("Add task to today").performClick()
+        assertOrder("Gamma", "Alpha", "Beta")
+        onNodeWithText("Close").performClick()
+
+        onNodeWithText("Shop").performClick()
+        assertOrder("Cake", "Tea")
     }
 }

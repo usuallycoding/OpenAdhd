@@ -46,6 +46,7 @@ import com.usuallycoding.openadhd.domain.PlannedTask
 import com.usuallycoding.openadhd.domain.TaskTemplate
 import com.usuallycoding.openadhd.domain.Tier
 import com.usuallycoding.openadhd.ui.components.FormSheet
+import com.usuallycoding.openadhd.ui.components.MoveButtons
 import com.usuallycoding.openadhd.ui.theme.AddIcon
 import com.usuallycoding.openadhd.ui.theme.ChevronIcon
 import com.usuallycoding.openadhd.ui.theme.DeleteIcon
@@ -61,6 +62,7 @@ fun TodayScreen(viewModel: TodayViewModel, modifier: Modifier = Modifier) {
     val templates by viewModel.templates.collectAsStateWithLifecycle()
     val randomizer by viewModel.randomizer.collectAsStateWithLifecycle()
     val collapsed by viewModel.collapsedEntryIds.collectAsStateWithLifecycle()
+    val reordering by viewModel.reordering.collectAsStateWithLifecycle()
     TodayContent(
         entries = entries,
         templates = templates,
@@ -70,6 +72,9 @@ fun TodayScreen(viewModel: TodayViewModel, modifier: Modifier = Modifier) {
         onCompleteSubtask = viewModel::completeSubtask,
         collapsedEntryIds = collapsed,
         onToggleCollapsed = viewModel::toggleCollapsed,
+        reordering = reordering,
+        onMoveUp = viewModel::moveUp,
+        onMoveDown = viewModel::moveDown,
         randomizer = randomizer,
         onPickForMe = viewModel::openRandomizer,
         onChooseEnergy = viewModel::chooseEnergy,
@@ -92,6 +97,9 @@ fun TodayContent(
     modifier: Modifier = Modifier,
     collapsedEntryIds: Set<String> = emptySet(),
     onToggleCollapsed: (id: String) -> Unit = {},
+    reordering: Boolean = false,
+    onMoveUp: (id: String) -> Unit = {},
+    onMoveDown: (id: String) -> Unit = {},
     randomizer: RandomizerState = RandomizerState.Closed,
     onPickForMe: () -> Unit = {},
     onChooseEnergy: (Energy) -> Unit = {},
@@ -115,10 +123,17 @@ fun TodayContent(
             }
         } else {
             LazyColumn(contentPadding = PaddingValues(bottom = 88.dp)) {
+                val pendingIds = entries.filter { !it.isCompleted }.map { it.id }
                 items(entries, key = { it.id }) { entry ->
+                    val pendingIndex = pendingIds.indexOf(entry.id)
                     EntryItem(
                         entry = entry,
                         expanded = entry.id !in collapsedEntryIds,
+                        reordering = reordering,
+                        canMoveUp = pendingIndex > 0,
+                        canMoveDown = pendingIndex in 0 until pendingIds.lastIndex,
+                        onMoveUp = { onMoveUp(entry.id) },
+                        onMoveDown = { onMoveDown(entry.id) },
                         onToggleExpanded = { onToggleCollapsed(entry.id) },
                         onRemove = onRemove,
                         onCompleteTask = onCompleteTask,
@@ -128,16 +143,18 @@ fun TodayContent(
                 }
             }
         }
-        Column(
-            horizontalAlignment = Alignment.End,
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-            modifier = Modifier.align(Alignment.BottomEnd).padding(16.dp),
-        ) {
-            SmallFloatingActionButton(onClick = onPickForMe) {
-                Icon(DiceIcon, contentDescription = "Pick one for me")
-            }
-            FloatingActionButton(onClick = { picking = true }) {
-                Icon(AddIcon, contentDescription = "Add task to today")
+        if (!reordering) {
+            Column(
+                horizontalAlignment = Alignment.End,
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+                modifier = Modifier.align(Alignment.BottomEnd).padding(16.dp),
+            ) {
+                SmallFloatingActionButton(onClick = onPickForMe) {
+                    Icon(DiceIcon, contentDescription = "Pick one for me")
+                }
+                FloatingActionButton(onClick = { picking = true }) {
+                    Icon(AddIcon, contentDescription = "Add task to today")
+                }
             }
         }
     }
@@ -164,23 +181,32 @@ fun TodayContent(
 private fun EntryItem(
     entry: PlannedTask,
     expanded: Boolean,
+    reordering: Boolean,
+    canMoveUp: Boolean,
+    canMoveDown: Boolean,
+    onMoveUp: () -> Unit,
+    onMoveDown: () -> Unit,
     onToggleExpanded: () -> Unit,
     onRemove: (String) -> Unit,
     onCompleteTask: (String) -> Unit,
     onCompleteSubtask: (String) -> Unit,
 ) {
     val hasSubtasks = entry.subtasks.isNotEmpty()
+    // While reordering a row is only a name to move: nothing can be completed, removed or expanded.
+    val showSubtasks = expanded && !reordering
     val chevronAngle by animateFloatAsState(if (expanded) 0f else -90f)
     ListItem(
         // Tapping the header of an entry with subtasks shows or hides them; entries without subtasks are not tappable.
-        modifier = if (hasSubtasks) {
+        modifier = if (hasSubtasks && !reordering) {
             Modifier
                 .clickable(onClickLabel = if (expanded) "Collapse" else "Expand", onClick = onToggleExpanded)
                 .semantics { stateDescription = if (expanded) "Expanded" else "Collapsed" }
         } else {
             Modifier
         },
-        leadingContent = if (hasSubtasks) {
+        leadingContent = if (reordering) {
+            null
+        } else if (hasSubtasks) {
             { Icon(ChevronIcon, contentDescription = null, modifier = Modifier.rotate(chevronAngle)) }
         } else ({
             Checkbox(
@@ -198,13 +224,17 @@ private fun EntryItem(
                 Text(entry.summary())
             }
         },
-        trailingContent = if (entry.hasProgress) null else ({
+        trailingContent = if (reordering) {
+            if (entry.isCompleted) null else ({ MoveButtons(entry.name, canMoveUp, canMoveDown, onMoveUp, onMoveDown) })
+        } else if (entry.hasProgress) {
+            null
+        } else ({
             IconButton(onClick = { onRemove(entry.id) }) {
                 Icon(DeleteIcon, contentDescription = "Remove ${entry.name} from today")
             }
         }),
     )
-    AnimatedVisibility(visible = expanded) {
+    AnimatedVisibility(visible = showSubtasks) {
         Column {
             entry.subtasks.forEach { subtask ->
                 SubtaskItem(subtask, onComplete = { onCompleteSubtask(subtask.id) })

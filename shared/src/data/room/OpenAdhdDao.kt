@@ -13,6 +13,7 @@ import com.usuallycoding.openadhd.domain.RedemptionSource
 import com.usuallycoding.openadhd.domain.RewardRules
 import com.usuallycoding.openadhd.domain.RewardTier
 import com.usuallycoding.openadhd.domain.RollRules
+import com.usuallycoding.openadhd.domain.reorderedBy
 import kotlinx.coroutines.flow.Flow
 import kotlin.random.Random
 
@@ -21,7 +22,7 @@ abstract class OpenAdhdDao {
     // ---- templates
 
     @Transaction
-    @Query("SELECT * FROM templates ORDER BY rowid")
+    @Query("SELECT * FROM templates ORDER BY position, rowid")
     abstract fun templates(): Flow<List<TemplateWithSubtasks>>
 
     @Insert
@@ -39,15 +40,33 @@ abstract class OpenAdhdDao {
     @Query("DELETE FROM templates WHERE id = :id")
     abstract suspend fun deleteTemplateRow(id: String)
 
+    @Query("SELECT COALESCE(MAX(position), -1) + 1 FROM templates")
+    abstract suspend fun nextTemplatePosition(): Int
+
+    @Query("SELECT position FROM templates WHERE id = :id")
+    abstract suspend fun templatePosition(id: String): Int?
+
+    @Query("SELECT id FROM templates ORDER BY position, rowid")
+    abstract suspend fun templateIds(): List<String>
+
+    @Query("UPDATE templates SET position = :position WHERE id = :id")
+    abstract suspend fun setTemplatePosition(id: String, position: Int)
+
+    @Transaction
+    open suspend fun reorderTemplates(ids: List<String>) {
+        templateIds().reorderedBy(ids) { it }.forEachIndexed { index, id -> setTemplatePosition(id, index) }
+    }
+
     @Transaction
     open suspend fun insertTemplateWithSubtasks(template: TemplateEntity, subtasks: List<TemplateSubtaskEntity>) {
-        insertTemplate(template)
+        insertTemplate(template.copy(position = nextTemplatePosition()))
         insertTemplateSubtasks(subtasks)
     }
 
     @Transaction
     open suspend fun updateTemplateWithSubtasks(template: TemplateEntity, subtasks: List<TemplateSubtaskEntity>) {
-        updateTemplate(template)
+        // @Update writes every column, so carry the stored position over or an edit would move the template.
+        updateTemplate(template.copy(position = templatePosition(template.id) ?: template.position))
         deleteTemplateSubtasks(template.id)
         insertTemplateSubtasks(subtasks)
     }
@@ -61,7 +80,7 @@ abstract class OpenAdhdDao {
     // ---- planned tasks
 
     @Transaction
-    @Query("SELECT * FROM planned_tasks WHERE date = :date ORDER BY rowid")
+    @Query("SELECT * FROM planned_tasks WHERE date = :date ORDER BY position, rowid")
     abstract fun plannedFor(date: String): Flow<List<PlannedWithSubtasks>>
 
     @Insert
@@ -70,9 +89,23 @@ abstract class OpenAdhdDao {
     @Insert
     abstract suspend fun insertPlannedSubtasks(subtasks: List<PlannedSubtaskEntity>)
 
+    @Query("SELECT COALESCE(MAX(position), -1) + 1 FROM planned_tasks WHERE date = :date")
+    abstract suspend fun nextPlannedPosition(date: String): Int
+
+    @Query("SELECT id FROM planned_tasks WHERE date = :date ORDER BY position, rowid")
+    abstract suspend fun plannedIds(date: String): List<String>
+
+    @Query("UPDATE planned_tasks SET position = :position WHERE id = :id")
+    abstract suspend fun setPlannedPosition(id: String, position: Int)
+
+    @Transaction
+    open suspend fun reorderPlanned(date: String, ids: List<String>) {
+        plannedIds(date).reorderedBy(ids) { it }.forEachIndexed { index, id -> setPlannedPosition(id, index) }
+    }
+
     @Transaction
     open suspend fun insertPlannedWithSubtasks(task: PlannedTaskEntity, subtasks: List<PlannedSubtaskEntity>) {
-        insertPlanned(task)
+        insertPlanned(task.copy(position = nextPlannedPosition(task.date)))
         insertPlannedSubtasks(subtasks)
     }
 
@@ -101,7 +134,7 @@ abstract class OpenAdhdDao {
 
     // ---- rewards and redemptions
 
-    @Query("SELECT * FROM reward_templates ORDER BY rowid")
+    @Query("SELECT * FROM reward_templates ORDER BY position, rowid")
     abstract fun rewards(): Flow<List<RewardTemplateEntity>>
 
     @Insert
@@ -109,6 +142,34 @@ abstract class OpenAdhdDao {
 
     @Update
     abstract suspend fun updateReward(reward: RewardTemplateEntity)
+
+    @Query("SELECT COALESCE(MAX(position), -1) + 1 FROM reward_templates")
+    abstract suspend fun nextRewardPosition(): Int
+
+    @Query("SELECT position FROM reward_templates WHERE id = :id")
+    abstract suspend fun rewardPosition(id: String): Int?
+
+    @Query("SELECT id FROM reward_templates ORDER BY position, rowid")
+    abstract suspend fun rewardIds(): List<String>
+
+    @Query("UPDATE reward_templates SET position = :position WHERE id = :id")
+    abstract suspend fun setRewardPosition(id: String, position: Int)
+
+    @Transaction
+    open suspend fun insertRewardLast(reward: RewardTemplateEntity) {
+        insertReward(reward.copy(position = nextRewardPosition()))
+    }
+
+    /** Keeps the stored position, because @Update writes every column. */
+    @Transaction
+    open suspend fun updateRewardKeepingPosition(reward: RewardTemplateEntity) {
+        updateReward(reward.copy(position = rewardPosition(reward.id) ?: reward.position))
+    }
+
+    @Transaction
+    open suspend fun reorderRewards(ids: List<String>) {
+        rewardIds().reorderedBy(ids) { it }.forEachIndexed { index, id -> setRewardPosition(id, index) }
+    }
 
     @Query("DELETE FROM reward_templates WHERE id = :id")
     abstract suspend fun deleteReward(id: String)
@@ -149,7 +210,7 @@ abstract class OpenAdhdDao {
         return true
     }
 
-    @Query("SELECT * FROM reward_templates ORDER BY rowid")
+    @Query("SELECT * FROM reward_templates ORDER BY position, rowid")
     abstract suspend fun allRewards(): List<RewardTemplateEntity>
 
     /**

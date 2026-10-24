@@ -12,7 +12,7 @@ import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.PagerState
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.HorizontalDivider
@@ -45,6 +45,7 @@ import com.usuallycoding.openadhd.ui.rewards.RewardTemplatesViewModel
 import com.usuallycoding.openadhd.ui.templates.TemplateInputError
 import com.usuallycoding.openadhd.ui.templates.TemplatesViewModel
 import com.usuallycoding.openadhd.ui.components.FormSheet
+import com.usuallycoding.openadhd.ui.components.MoveButtons
 import com.usuallycoding.openadhd.ui.theme.AddIcon
 import kotlinx.coroutines.launch
 import com.usuallycoding.openadhd.ui.theme.DeleteIcon
@@ -84,8 +85,12 @@ fun TemplatesScreen(
 @Composable
 fun TaskTemplatesScreen(viewModel: TemplatesViewModel, modifier: Modifier = Modifier) {
     val templates by viewModel.templates.collectAsStateWithLifecycle()
+    val reordering by viewModel.reordering.collectAsStateWithLifecycle()
     TemplatesContent(
         templates = templates,
+        reordering = reordering,
+        onMoveUp = viewModel::moveUp,
+        onMoveDown = viewModel::moveDown,
         onSave = viewModel::save,
         onDelete = viewModel::delete,
         modifier = modifier,
@@ -98,6 +103,9 @@ fun TemplatesContent(
     onSave: (id: String?, name: String, tier: Tier, energy: Energy, description: String, subtasks: List<String>) -> Unit,
     onDelete: (id: String) -> Unit,
     modifier: Modifier = Modifier,
+    reordering: Boolean = false,
+    onMoveUp: (id: String) -> Unit = {},
+    onMoveDown: (id: String) -> Unit = {},
 ) {
     // null = closed; a template with a blank id = creating; otherwise editing that template
     var editing by remember { mutableStateOf<TaskTemplate?>(null) }
@@ -111,17 +119,27 @@ fun TemplatesContent(
             )
         } else {
             LazyColumn(contentPadding = PaddingValues(bottom = 88.dp)) {
-                items(templates, key = { it.id }) { template ->
+                itemsIndexed(templates, key = { _, template -> template.id }) { index, template ->
                     ListItem(
                         headlineContent = { Text(template.name) },
                         supportingContent = { Text(template.description()) },
                         trailingContent = {
-                            Row {
-                                IconButton(onClick = { editing = template }) {
-                                    Icon(EditIcon, contentDescription = "Edit ${template.name}")
-                                }
-                                IconButton(onClick = { onDelete(template.id) }) {
-                                    Icon(DeleteIcon, contentDescription = "Delete ${template.name}")
+                            if (reordering) {
+                                MoveButtons(
+                                    name = template.name,
+                                    canMoveUp = index > 0,
+                                    canMoveDown = index < templates.lastIndex,
+                                    onMoveUp = { onMoveUp(template.id) },
+                                    onMoveDown = { onMoveDown(template.id) },
+                                )
+                            } else {
+                                Row {
+                                    IconButton(onClick = { editing = template }) {
+                                        Icon(EditIcon, contentDescription = "Edit ${template.name}")
+                                    }
+                                    IconButton(onClick = { onDelete(template.id) }) {
+                                        Icon(DeleteIcon, contentDescription = "Delete ${template.name}")
+                                    }
                                 }
                             }
                         },
@@ -130,11 +148,13 @@ fun TemplatesContent(
                 }
             }
         }
-        FloatingActionButton(
-            onClick = { editing = TaskTemplate("", "", Tier.One, Energy.Medium) },
-            modifier = Modifier.align(Alignment.BottomEnd).padding(16.dp),
-        ) {
-            Icon(AddIcon, contentDescription = "Add template")
+        if (!reordering) {
+            FloatingActionButton(
+                onClick = { editing = TaskTemplate("", "", Tier.One, Energy.Medium) },
+                modifier = Modifier.align(Alignment.BottomEnd).padding(16.dp),
+            ) {
+                Icon(AddIcon, contentDescription = "Add template")
+            }
         }
     }
 

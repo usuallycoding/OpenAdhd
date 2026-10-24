@@ -16,6 +16,7 @@ import com.usuallycoding.openadhd.domain.RewardTier
 import com.usuallycoding.openadhd.domain.RollResult
 import com.usuallycoding.openadhd.domain.RollRules
 import com.usuallycoding.openadhd.domain.TaskTemplate
+import com.usuallycoding.openadhd.domain.reorderedBy
 import com.usuallycoding.openadhd.domain.Tier
 import com.usuallycoding.openadhd.domain.newId
 import com.usuallycoding.openadhd.domain.toPlannedTask
@@ -69,6 +70,18 @@ internal class StoreLogic(
 
     fun delete(state: StoreState, id: String): StoreState =
         state.copy(templates = state.templates.filterNot { it.id == id })
+
+    fun reorderTemplates(state: StoreState, ids: List<String>): StoreState =
+        state.copy(templates = state.templates.reorderedBy(ids) { it.id })
+
+    fun reorderRewards(state: StoreState, ids: List<String>): StoreState =
+        state.copy(rewards = state.rewards.reorderedBy(ids) { it.id })
+
+    /** Reorders one day's entries within the slots that day already occupies, leaving other days where they are. */
+    fun reorderEntries(state: StoreState, date: LocalDate, ids: List<String>): StoreState {
+        val reordered = state.planned.filter { it.date == date }.reorderedBy(ids) { it.id }.iterator()
+        return state.copy(planned = state.planned.map { if (it.date == date) reordered.next() else it })
+    }
 
     fun assign(state: StoreState, template: TaskTemplate, date: LocalDate): Pair<StoreState, PlannedTask> {
         val task = template.toPlannedTask(date)
@@ -210,6 +223,13 @@ class InMemoryStore(
     }
 
     override suspend fun remove(id: String) = state.update { logic.remove(it, id) }
+
+    override suspend fun reorderEntries(date: LocalDate, ids: List<String>) =
+        state.update { logic.reorderEntries(it, date, ids) }
+
+    override suspend fun reorderTemplates(ids: List<String>) = state.update { logic.reorderTemplates(it, ids) }
+
+    override suspend fun reorderRewards(ids: List<String>) = state.update { logic.reorderRewards(it, ids) }
 
     override val rewards: Flow<List<RewardTemplate>> = state.map { it.rewards }
     override val redemptions: Flow<List<Redemption>> = state.map { it.redemptions.asReversed() }

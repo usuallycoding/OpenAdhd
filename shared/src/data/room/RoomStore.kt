@@ -54,6 +54,12 @@ class RoomStore(
 
     override suspend fun delete(id: String) = dao.deleteTemplate(id)
 
+    override suspend fun reorderTemplates(ids: List<String>) = dao.reorderTemplates(ids)
+
+    override suspend fun reorderRewards(ids: List<String>) = dao.reorderRewards(ids)
+
+    override suspend fun reorderEntries(date: LocalDate, ids: List<String>) = dao.reorderPlanned(date.toString(), ids)
+
     override suspend fun assign(template: TaskTemplate, date: LocalDate): PlannedTask {
         val task = template.toPlannedTask(date)
         dao.insertPlannedWithSubtasks(task.toEntity(), task.subtaskEntities())
@@ -73,12 +79,12 @@ class RoomStore(
         customPrice: Int?,
     ): RewardTemplate {
         val reward = RewardTemplate(newId(), name, tier, energy, description, customPrice).validated()
-        dao.insertReward(reward.toEntity())
+        dao.insertRewardLast(reward.toEntity())
         return reward
     }
 
     override suspend fun updateReward(reward: RewardTemplate) {
-        dao.updateReward(reward.validated().toEntity())
+        dao.updateRewardKeepingPosition(reward.validated().toEntity())
     }
 
     override suspend fun deleteReward(id: String) = dao.deleteReward(id)

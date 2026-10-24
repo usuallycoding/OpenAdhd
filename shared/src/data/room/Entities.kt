@@ -26,6 +26,7 @@ data class TemplateEntity(
     val tier: Int,
     val energy: String,
     @ColumnInfo(defaultValue = "''") val description: String,
+    @ColumnInfo(defaultValue = "0") val position: Int = 0,
 )
 
 @Entity(tableName = "template_subtasks")
@@ -47,6 +48,7 @@ data class PlannedTaskEntity(
     val completedAtMillis: Long?,
     @ColumnInfo(defaultValue = "''") val description: String,
     @ColumnInfo(defaultValue = "0") val reward: Int,
+    @ColumnInfo(defaultValue = "0") val position: Int = 0,
 )
 
 @Entity(tableName = "planned_subtasks")
@@ -76,6 +78,7 @@ data class RewardTemplateEntity(
     val energy: String,
     val description: String,
     val customPrice: Int?,
+    @ColumnInfo(defaultValue = "0") val position: Int = 0,
 )
 
 @Entity(tableName = "redemptions")

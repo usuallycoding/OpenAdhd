@@ -22,6 +22,9 @@ interface TemplateRepository {
     suspend fun update(template: TaskTemplate)
 
     suspend fun delete(id: String)
+
+    /** Puts the templates in the order of [ids]; see [reorderedBy] for how unknown and missing ids are treated. */
+    suspend fun reorderTemplates(ids: List<String>)
 }
 
 interface PlannerRepository {
@@ -32,6 +35,9 @@ interface PlannerRepository {
 
     /** Removes an entry; entries with any completed part are left alone so earned coins are never orphaned. */
     suspend fun remove(id: String)
+
+    /** Puts the entries of [date] in the order of [ids]; other days are untouched. See [reorderedBy]. */
+    suspend fun reorderEntries(date: LocalDate, ids: List<String>)
 
     /**
      * Completes a task that has no subtasks and appends its ledger entry as one operation. With a chance set
@@ -71,6 +77,9 @@ interface RewardRepository {
 
     /** Deleting a reward keeps its redemptions and ledger entries. */
     suspend fun deleteReward(id: String)
+
+    /** Puts the reward templates in the order of [ids]; see [reorderedBy]. */
+    suspend fun reorderRewards(ids: List<String>)
 }
 
 interface ShopRepository {
@@ -96,3 +105,22 @@ interface ShopRepository {
 
 /** All repositories behind one object, so completing a task or buying a reward updates its records and the ledger together. */
 interface OpenAdhdStore : TemplateRepository, PlannerRepository, LedgerRepository, RewardRepository, ShopRepository
+
+/**
+ * This list reordered to follow [ids]: items named in [ids] come first in that order, unknown ids are ignored,
+ * and items not named keep their relative order after them, so a stale call can never lose an item.
+ */
+fun <T> List<T>.reorderedBy(ids: List<String>, idOf: (T) -> String): List<T> {
+    val byId = associateBy(idOf)
+    val listed = ids.distinct().mapNotNull { byId[it] }
+    val listedIds = listed.map(idOf).toSet()
+    return listed + filterNot { idOf(it) in listedIds }
+}
+
+/** These ids with [id] moved [offset] places (-1 up, +1 down); unchanged when [id] is absent or the move would leave the list. */
+fun List<String>.moved(id: String, offset: Int): List<String> {
+    val from = indexOf(id)
+    val to = from + offset
+    if (from < 0 || to !in indices) return this
+    return toMutableList().also { it.add(to, it.removeAt(from)) }
+}

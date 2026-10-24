@@ -201,4 +201,61 @@ class RoomMigrationTest {
         assertEquals(0, CoinRules.balance(store.entries.first()))
         database.close()
     }
+
+    /** A version 4 database with three templates, two rewards and Today entries on two days, in insertion order. */
+    private fun createVersion4Database(): String {
+        val file = createTempDirectory().resolve("v4.db").toString()
+        val connection = BundledSQLiteDriver().open(file)
+        try {
+            connection.execSQL("CREATE TABLE templates (id TEXT NOT NULL, name TEXT NOT NULL, tier INTEGER NOT NULL, energy TEXT NOT NULL, description TEXT NOT NULL DEFAULT '', PRIMARY KEY(id))")
+            connection.execSQL("CREATE TABLE template_subtasks (id TEXT NOT NULL, templateId TEXT NOT NULL, position INTEGER NOT NULL, title TEXT NOT NULL, PRIMARY KEY(id))")
+            connection.execSQL("CREATE TABLE planned_tasks (id TEXT NOT NULL, date TEXT NOT NULL, name TEXT NOT NULL, tier INTEGER NOT NULL, energy TEXT NOT NULL, templateId TEXT, completedAtMillis INTEGER, description TEXT NOT NULL DEFAULT '', reward INTEGER NOT NULL DEFAULT 0, PRIMARY KEY(id))")
+            connection.execSQL("CREATE TABLE planned_subtasks (id TEXT NOT NULL, plannedTaskId TEXT NOT NULL, position INTEGER NOT NULL, title TEXT NOT NULL, reward INTEGER NOT NULL, completedAtMillis INTEGER, PRIMARY KEY(id))")
+            connection.execSQL("CREATE TABLE ledger (id TEXT NOT NULL, amount INTEGER NOT NULL, timestampMillis INTEGER NOT NULL, reason TEXT NOT NULL, refId TEXT, PRIMARY KEY(id))")
+            connection.execSQL("CREATE TABLE reward_templates (id TEXT NOT NULL, name TEXT NOT NULL, tier INTEGER NOT NULL, energy TEXT NOT NULL, description TEXT NOT NULL, customPrice INTEGER, PRIMARY KEY(id))")
+            connection.execSQL("CREATE TABLE redemptions (id TEXT NOT NULL, templateId TEXT, name TEXT NOT NULL, tier INTEGER NOT NULL, energy TEXT NOT NULL, price INTEGER NOT NULL, redeemedAtMillis INTEGER NOT NULL, source TEXT NOT NULL DEFAULT 'Purchase', rolledTier INTEGER, PRIMARY KEY(id))")
+            // ids are deliberately not in alphabetical order, so only the stored order can explain the result
+            connection.execSQL("INSERT INTO templates (id, name, tier, energy) VALUES ('z', 'Zeta', 1, 'Low'), ('m', 'Mu', 2, 'Medium'), ('a', 'Alpha', 3, 'High')")
+            connection.execSQL("INSERT INTO reward_templates VALUES ('r2', 'Movie', 2, 'Low', '', NULL), ('r1', 'Tea', 1, 'Low', '', NULL)")
+            connection.execSQL("INSERT INTO planned_tasks (id, date, name, tier, energy, reward) VALUES ('p3', '$day', 'Third', 1, 'Low', 5), ('p1', '2026-10-22', 'Old', 1, 'Low', 5), ('p2', '$day', 'Second', 1, 'Low', 5)")
+            connection.execSQL("PRAGMA user_version = 4")
+        } finally {
+            connection.close()
+        }
+        return file
+    }
+
+    @Test
+    fun `upgrading from version 4 keeps every list in its order and puts new items last`() = runTest {
+        val database = Room.databaseBuilder<OpenAdhdDatabase>(createVersion4Database()).buildOpenAdhdDatabase()
+        val store = RoomStore(database)
+
+        assertEquals(listOf("Zeta", "Mu", "Alpha"), store.templates.first().map { it.name })
+        assertEquals(listOf("Movie", "Tea"), store.rewards.first().map { it.name })
+        assertEquals(listOf("Third", "Second"), store.entriesFor(day).first().map { it.name })
+        assertEquals(listOf("Old"), store.entriesFor(LocalDate(2026, 10, 22)).first().map { it.name })
+
+        store.create("New", Tier.One, Energy.Low)
+        store.createReward("Walk", RewardTier.One, Energy.Low)
+        store.assign(store.templates.first().first(), day)
+        assertEquals(listOf("Zeta", "Mu", "Alpha", "New"), store.templates.first().map { it.name })
+        assertEquals(listOf("Movie", "Tea", "Walk"), store.rewards.first().map { it.name })
+        assertEquals(listOf("Third", "Second", "Zeta"), store.entriesFor(day).first().map { it.name })
+
+        store.reorderTemplates(listOf("a"))
+        assertEquals(listOf("Alpha", "Zeta", "Mu", "New"), store.templates.first().map { it.name })
+        database.close()
+    }
+
+    @Test
+    fun `editing a template or reward after the upgrade keeps its place`() = runTest {
+        val database = Room.databaseBuilder<OpenAdhdDatabase>(createVersion4Database()).buildOpenAdhdDatabase()
+        val store = RoomStore(database)
+
+        store.update(store.templates.first().first { it.id == "m" }.copy(name = "Mu2"))
+        store.updateReward(store.rewards.first().first { it.id == "r2" }.copy(name = "Cinema"))
+        assertEquals(listOf("Zeta", "Mu2", "Alpha"), store.templates.first().map { it.name })
+        assertEquals(listOf("Cinema", "Tea"), store.rewards.first().map { it.name })
+        database.close()
+    }
 }

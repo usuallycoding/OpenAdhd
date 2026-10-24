@@ -7,8 +7,12 @@ import com.usuallycoding.openadhd.domain.CoinRules
 import com.usuallycoding.openadhd.domain.TaskTemplate
 import com.usuallycoding.openadhd.domain.Tier
 import com.usuallycoding.openadhd.domain.TemplateRepository
+import com.usuallycoding.openadhd.domain.moved
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
@@ -17,6 +21,29 @@ enum class TemplateInputError { NameRequired, SubtaskTitleRequired, TooManySubta
 class TemplatesViewModel(private val repository: TemplateRepository) : ViewModel() {
     val templates: StateFlow<List<TaskTemplate>> =
         repository.templates.stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
+
+    /** Whether there are enough items for the order to be worth changing. */
+    val canReorder: StateFlow<Boolean> = templates.map { it.size >= 2 }.stateIn(viewModelScope, SharingStarted.Eagerly, false)
+
+    private val reorderRequested = MutableStateFlow(false)
+
+    /** Whether the list shows move controls. Ends by itself when fewer than two templates are left; not saved. */
+    val reordering: StateFlow<Boolean> = combine(reorderRequested, templates) { on, list -> on && list.size >= 2 }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, false)
+
+    fun setReordering(on: Boolean) {
+        reorderRequested.value = on
+    }
+
+    fun moveUp(id: String) = move(id, -1)
+
+    fun moveDown(id: String) = move(id, 1)
+
+    private fun move(id: String, offset: Int) {
+        val ids = templates.value.map { it.id }
+        val moved = ids.moved(id, offset)
+        if (moved != ids) viewModelScope.launch { repository.reorderTemplates(moved) }
+    }
 
     /**
      * Creates a template, or updates the one with [id]. Invalid input is ignored; check [validate] first

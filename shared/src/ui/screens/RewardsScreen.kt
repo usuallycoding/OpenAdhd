@@ -9,7 +9,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FloatingActionButton
@@ -39,6 +39,7 @@ import com.usuallycoding.openadhd.domain.RewardTemplate
 import com.usuallycoding.openadhd.domain.RewardTier
 import com.usuallycoding.openadhd.ui.rewards.RewardTemplatesViewModel
 import com.usuallycoding.openadhd.ui.components.FormSheet
+import com.usuallycoding.openadhd.ui.components.MoveButtons
 import com.usuallycoding.openadhd.ui.theme.AddIcon
 import com.usuallycoding.openadhd.ui.theme.DeleteIcon
 import com.usuallycoding.openadhd.ui.theme.EditIcon
@@ -46,8 +47,12 @@ import com.usuallycoding.openadhd.ui.theme.EditIcon
 @Composable
 fun RewardsScreen(viewModel: RewardTemplatesViewModel, modifier: Modifier = Modifier) {
     val rewards by viewModel.rewards.collectAsStateWithLifecycle()
+    val reordering by viewModel.reordering.collectAsStateWithLifecycle()
     RewardsContent(
         rewards = rewards,
+        reordering = reordering,
+        onMoveUp = viewModel::moveUp,
+        onMoveDown = viewModel::moveDown,
         onSave = viewModel::save,
         onDelete = viewModel::delete,
         modifier = modifier,
@@ -60,6 +65,9 @@ fun RewardsContent(
     onSave: (id: String?, name: String, tier: RewardTier, energy: Energy, description: String, customPrice: Int?) -> Unit,
     onDelete: (id: String) -> Unit,
     modifier: Modifier = Modifier,
+    reordering: Boolean = false,
+    onMoveUp: (id: String) -> Unit = {},
+    onMoveDown: (id: String) -> Unit = {},
 ) {
     // null = closed; a reward with a blank id = creating; otherwise editing that reward
     var editing by remember { mutableStateOf<RewardTemplate?>(null) }
@@ -73,7 +81,7 @@ fun RewardsContent(
             )
         } else {
             LazyColumn(contentPadding = PaddingValues(bottom = 88.dp)) {
-                items(rewards, key = { it.id }) { reward ->
+                itemsIndexed(rewards, key = { _, reward -> reward.id }) { index, reward ->
                     ListItem(
                         headlineContent = { Text(reward.name) },
                         supportingContent = {
@@ -83,12 +91,22 @@ fun RewardsContent(
                             }
                         },
                         trailingContent = {
-                            Row {
-                                IconButton(onClick = { editing = reward }) {
-                                    Icon(EditIcon, contentDescription = "Edit ${reward.name}")
-                                }
-                                IconButton(onClick = { onDelete(reward.id) }) {
-                                    Icon(DeleteIcon, contentDescription = "Delete ${reward.name}")
+                            if (reordering) {
+                                MoveButtons(
+                                    name = reward.name,
+                                    canMoveUp = index > 0,
+                                    canMoveDown = index < rewards.lastIndex,
+                                    onMoveUp = { onMoveUp(reward.id) },
+                                    onMoveDown = { onMoveDown(reward.id) },
+                                )
+                            } else {
+                                Row {
+                                    IconButton(onClick = { editing = reward }) {
+                                        Icon(EditIcon, contentDescription = "Edit ${reward.name}")
+                                    }
+                                    IconButton(onClick = { onDelete(reward.id) }) {
+                                        Icon(DeleteIcon, contentDescription = "Delete ${reward.name}")
+                                    }
                                 }
                             }
                         },
@@ -97,11 +115,13 @@ fun RewardsContent(
                 }
             }
         }
-        FloatingActionButton(
-            onClick = { editing = RewardTemplate("", "", RewardTier.One, Energy.Low) },
-            modifier = Modifier.align(Alignment.BottomEnd).padding(16.dp),
-        ) {
-            Icon(AddIcon, contentDescription = "Add reward")
+        if (!reordering) {
+            FloatingActionButton(
+                onClick = { editing = RewardTemplate("", "", RewardTier.One, Energy.Low) },
+                modifier = Modifier.align(Alignment.BottomEnd).padding(16.dp),
+            ) {
+                Icon(AddIcon, contentDescription = "Add reward")
+            }
         }
     }
 

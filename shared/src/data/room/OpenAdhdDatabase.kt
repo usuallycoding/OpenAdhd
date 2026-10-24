@@ -20,7 +20,7 @@ import kotlinx.coroutines.Dispatchers
         RewardTemplateEntity::class,
         RedemptionEntity::class,
     ],
-    version = 4,
+    version = 5,
     exportSchema = false,
 )
 @ConstructedBy(OpenAdhdDatabaseConstructor::class)
@@ -83,8 +83,31 @@ val Migration3To4: Migration = object : Migration(3, 4) {
     }
 }
 
+/**
+ * Version 5 stores the order of task templates, reward templates and Today entries. Each list gets its
+ * positions from the order it already had (rowid, per date for Today entries), so nothing moves.
+ */
+val Migration4To5: Migration = object : Migration(4, 5) {
+    override fun migrate(connection: SQLiteConnection) {
+        for (table in listOf("templates", "reward_templates", "planned_tasks")) {
+            connection.execSQL("ALTER TABLE $table ADD COLUMN position INTEGER NOT NULL DEFAULT 0")
+        }
+        connection.execSQL(
+            "UPDATE templates SET position = (SELECT COUNT(*) FROM templates AS earlier WHERE earlier.rowid < templates.rowid)",
+        )
+        connection.execSQL(
+            "UPDATE reward_templates SET position = " +
+                "(SELECT COUNT(*) FROM reward_templates AS earlier WHERE earlier.rowid < reward_templates.rowid)",
+        )
+        connection.execSQL(
+            "UPDATE planned_tasks SET position = (SELECT COUNT(*) FROM planned_tasks AS earlier " +
+                "WHERE earlier.date = planned_tasks.date AND earlier.rowid < planned_tasks.rowid)",
+        )
+    }
+}
+
 fun RoomDatabase.Builder<OpenAdhdDatabase>.buildOpenAdhdDatabase(): OpenAdhdDatabase =
     setDriver(BundledSQLiteDriver())
         .setQueryCoroutineContext(Dispatchers.Default)
-        .addMigrations(Migration1To2, Migration2To3, Migration3To4)
+        .addMigrations(Migration1To2, Migration2To3, Migration3To4, Migration4To5)
         .build()

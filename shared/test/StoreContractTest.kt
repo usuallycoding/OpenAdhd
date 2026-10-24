@@ -740,4 +740,89 @@ abstract class StoreContractTest {
         }
         assertEquals(200, CoinRules.balance(store.entries.first()))
     }
+
+    // ---- ordering
+
+    private suspend fun OpenAdhdStore.templateNames() = templates.first().map { it.name }
+    private suspend fun OpenAdhdStore.entryNames(date: LocalDate) = entriesFor(date).first().map { it.name }
+    private suspend fun OpenAdhdStore.rewardNames() = rewards.first().map { it.name }
+
+    @Test
+    fun `templates follow the order they are reordered into and new ones go last`() = runTest {
+        val store = newStore(clock)
+        val a = store.create("A", Tier.One, Energy.Low)
+        val b = store.create("B", Tier.One, Energy.Low)
+        val c = store.create("C", Tier.One, Energy.Low)
+        store.reorderTemplates(listOf(c.id, a.id, b.id))
+        assertEquals(listOf("C", "A", "B"), store.templateNames())
+        store.create("D", Tier.One, Energy.Low)
+        assertEquals(listOf("C", "A", "B", "D"), store.templateNames())
+    }
+
+    @Test
+    fun `reordering ignores unknown ids and keeps unnamed items after the named ones`() = runTest {
+        val store = newStore(clock)
+        val a = store.create("A", Tier.One, Energy.Low)
+        store.create("B", Tier.One, Energy.Low)
+        val c = store.create("C", Tier.One, Energy.Low)
+        store.reorderTemplates(listOf("nope", c.id, "nope", a.id))
+        assertEquals(listOf("C", "A", "B"), store.templateNames())
+        store.reorderTemplates(emptyList())
+        assertEquals(listOf("C", "A", "B"), store.templateNames())
+    }
+
+    @Test
+    fun `editing and deleting do not disturb the order`() = runTest {
+        val store = newStore(clock)
+        val a = store.create("A", Tier.One, Energy.Low)
+        val b = store.create("B", Tier.One, Energy.Low)
+        val c = store.create("C", Tier.One, Energy.Low)
+        store.reorderTemplates(listOf(c.id, a.id, b.id))
+        store.update(a.copy(name = "A2"))
+        assertEquals(listOf("C", "A2", "B"), store.templateNames())
+        store.delete(c.id)
+        assertEquals(listOf("A2", "B"), store.templateNames())
+        store.create("D", Tier.One, Energy.Low)
+        assertEquals(listOf("A2", "B", "D"), store.templateNames())
+    }
+
+    @Test
+    fun `rewards follow the order they are reordered into and new ones go last`() = runTest {
+        val store = newStore(clock)
+        val a = store.createReward("A", RewardTier.One, Energy.Low)
+        val b = store.createReward("B", RewardTier.Two, Energy.Low)
+        store.reorderRewards(listOf(b.id, a.id))
+        assertEquals(listOf("B", "A"), store.rewardNames())
+        store.createReward("C", RewardTier.One, Energy.Low)
+        assertEquals(listOf("B", "A", "C"), store.rewardNames())
+    }
+
+    @Test
+    fun `entries are reordered per day and new entries go last`() = runTest {
+        val store = newStore(clock)
+        val yesterday = today.minus(1, DateTimeUnit.DAY)
+        val a = store.create("A", Tier.One, Energy.Low)
+        val b = store.create("B", Tier.One, Energy.Low)
+        val c = store.create("C", Tier.One, Energy.Low)
+        val e1 = store.assign(a, today)
+        store.assign(a, yesterday)
+        val e2 = store.assign(b, today)
+        store.assign(b, yesterday)
+        val e3 = store.assign(c, today)
+        store.reorderEntries(today, listOf(e3.id, e1.id, e2.id))
+        assertEquals(listOf("C", "A", "B"), store.entryNames(today))
+        assertEquals(listOf("A", "B"), store.entryNames(yesterday))
+        store.assign(a, today)
+        assertEquals(listOf("C", "A", "B", "A"), store.entryNames(today))
+    }
+
+    @Test
+    fun `completing an entry keeps its place in the stored order`() = runTest {
+        val store = newStore(clock)
+        val a = store.assign(store.create("A", Tier.One, Energy.Low), today)
+        val b = store.assign(store.create("B", Tier.One, Energy.Low), today)
+        store.reorderEntries(today, listOf(b.id, a.id))
+        store.completeTask(b.id)
+        assertEquals(listOf("B", "A"), store.entryNames(today))
+    }
 }

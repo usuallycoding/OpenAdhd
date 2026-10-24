@@ -8,6 +8,7 @@ import com.usuallycoding.openadhd.domain.OpenAdhdStore
 import com.usuallycoding.openadhd.domain.PlannedTask
 import com.usuallycoding.openadhd.domain.TaskPicker
 import com.usuallycoding.openadhd.domain.TaskTemplate
+import com.usuallycoding.openadhd.domain.moved
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -18,6 +19,8 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -67,8 +70,39 @@ class TodayViewModel(
         }
     }.distinctUntilChanged().stateIn(viewModelScope, SharingStarted.Eagerly, clock.todayIn(timeZone))
 
+    /** Pending entries first, then completed ones, each group in the order the user put them (the sort is stable). */
     val entries: StateFlow<List<PlannedTask>> =
-        today.flatMapLatest { store.entriesFor(it) }.stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
+        today.flatMapLatest { store.entriesFor(it) }
+            .map { list -> list.sortedBy { it.isCompleted } }
+            .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
+
+    /** Whether at least two entries are pending, so there is an order to change. */
+    val canReorder: StateFlow<Boolean> =
+        entries.map { list -> list.count { !it.isCompleted } >= 2 }.stateIn(viewModelScope, SharingStarted.Eagerly, false)
+
+    private val reorderRequested = MutableStateFlow(false)
+
+    /** Whether Today shows move controls. Ends by itself when fewer than two entries are pending; not saved. */
+    val reordering: StateFlow<Boolean> =
+        combine(reorderRequested, entries) { on, list -> on && list.count { !it.isCompleted } >= 2 }
+            .stateIn(viewModelScope, SharingStarted.Eagerly, false)
+
+    fun setReordering(on: Boolean) {
+        reorderRequested.value = on
+    }
+
+    fun moveUp(id: String) = move(id, -1)
+
+    fun moveDown(id: String) = move(id, 1)
+
+    /** Moves a pending entry among the pending ones; completed entries keep their place after them. */
+    private fun move(id: String, offset: Int) {
+        val (pending, done) = entries.value.partition { !it.isCompleted }
+        val pendingIds = pending.map { it.id }
+        val moved = pendingIds.moved(id, offset)
+        if (moved == pendingIds) return
+        viewModelScope.launch { store.reorderEntries(today.value, moved + done.map { it.id }) }
+    }
 
     val templates: StateFlow<List<TaskTemplate>> =
         store.templates.stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
