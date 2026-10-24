@@ -13,6 +13,7 @@ import com.usuallycoding.openadhd.ui.shop.buildShelves
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
@@ -135,13 +136,13 @@ class RewardViewModelsTest {
 
         vm.redeem(cheap.id, "r1")
         assertEquals(30, vm.balance.value)
-        assertEquals(listOf("Movie night"), vm.history.value.map { it.name })
+        assertEquals(listOf("Movie night"), store.redemptions.first().map { it.name })
         // 30 coins no longer cover the 50-coin reward, but it can be bought again on credit
         assertEquals(true, vm.shelves.value.flatMap { it.items }.any { it.affordable && it.reward.id == cheap.id })
 
         vm.redeem(dear.id, "r2")
         assertEquals(30, vm.balance.value)
-        assertEquals(1, vm.history.value.size)
+        assertEquals(1, store.redemptions.first().size)
         vm.viewModelScope.cancel()
     }
 
@@ -155,7 +156,7 @@ class RewardViewModelsTest {
         vm.redeem(reward.id, "same")
 
         assertEquals(30, vm.balance.value)
-        assertEquals(1, vm.history.value.size)
+        assertEquals(1, store.redemptions.first().size)
         vm.viewModelScope.cancel()
     }
 
@@ -219,7 +220,7 @@ class RewardViewModelsTest {
         assertEquals("Movie night", result.redemption.name)
         assertFalse(result.upgraded)
         assertEquals(10, vm.balance.value)
-        assertEquals(1, vm.history.value.size)
+        assertEquals(1, rolling.redemptions.first().size)
 
         vm.dismissRoll()
         assertEquals(null, vm.lastRoll.value)
@@ -258,7 +259,7 @@ class RewardViewModelsTest {
 
         assertEquals(null, vm.lastRoll.value)
         assertEquals(-460, vm.balance.value)
-        assertEquals(listOf("Gift"), vm.history.value.map { it.name })
+        assertEquals(listOf("Gift"), rolling.redemptions.first().map { it.name })
         vm.viewModelScope.cancel()
     }
 
@@ -273,7 +274,7 @@ class RewardViewModelsTest {
         vm.roll(RewardTier.Two, "same")
 
         assertEquals(30, vm.balance.value)
-        assertEquals(1, vm.history.value.size)
+        assertEquals(1, rolling.redemptions.first().size)
         vm.viewModelScope.cancel()
     }
 }

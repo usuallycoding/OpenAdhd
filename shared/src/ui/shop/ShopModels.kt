@@ -1,9 +1,11 @@
 package com.usuallycoding.openadhd.ui.shop
 
 import com.usuallycoding.openadhd.domain.CoinRules
+import com.usuallycoding.openadhd.domain.Redemption
 import com.usuallycoding.openadhd.domain.RewardTemplate
 import com.usuallycoding.openadhd.domain.RewardTier
 import com.usuallycoding.openadhd.domain.RollRules
+import kotlinx.datetime.LocalDate
 
 /** A reward as the shop shows it, given the current balance. */
 data class ShopItem(val reward: RewardTemplate, val affordable: Boolean, val coinsNeeded: Int)
@@ -53,3 +55,12 @@ fun buildRollOptions(rewards: List<RewardTemplate>, balance: Int): List<RollOpti
             upgradeTier = RollRules.nextTier(tier)?.takeIf { next -> rewards.any { it.tier == next } },
         )
     }
+
+/** What the Shop's History tab shows: the redemptions of [date], and the days the calendar can pick. */
+data class RewardHistoryDay(
+    val date: LocalDate,
+    val today: LocalDate,
+    val canGoNext: Boolean,
+    val redemptions: List<Redemption>,
+    val daysWithRedemptions: Set<LocalDate>,
+)

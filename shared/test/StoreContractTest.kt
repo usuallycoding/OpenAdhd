@@ -403,6 +403,37 @@ abstract class StoreContractTest {
     }
 
     @Test
+    fun `a purchase and a roll keep the description of the reward and later edits and deletes do not change it`() = runTest {
+        val store = newStore(clock)
+        earn(store, Tier.Four)
+        earn(store, Tier.Four)
+        earn(store, Tier.Four)
+        val bought = store.createReward("Movie night", RewardTier.Two, Energy.Low, "Pick anything, no guilt")
+        assertTrue(store.redeem(bought.id, "r1"))
+        assertEquals("Pick anything, no guilt", store.redemptions.first().single().description)
+
+        store.updateReward(bought.copy(description = "Edited"))
+        assertEquals("Pick anything, no guilt", store.redemptions.first().single().description)
+
+        store.deleteReward(bought.id)
+        assertEquals("Pick anything, no guilt", store.redemptions.first().single().description)
+
+        store.createReward("Dinner out", RewardTier.Two, Energy.High, "Somewhere nice")
+        val rolled = store.mysteryRoll(RewardTier.Two, "roll1")!!
+        assertEquals("Somewhere nice", rolled.redemption.description)
+        assertEquals("Somewhere nice", store.redemptions.first().first().description)
+    }
+
+    @Test
+    fun `a reward without a description gives a redemption without one`() = runTest {
+        val store = newStore(clock)
+        earn(store, Tier.Four)
+        val reward = store.createReward("Tea", RewardTier.One, Energy.Low)
+        assertTrue(store.redeem(reward.id, "r1"))
+        assertEquals("", store.redemptions.first().single().description)
+    }
+
+    @Test
     fun `redeeming past the debt limit is refused and changes nothing`() = runTest {
         val store = newStore(clock)
         earn(store, Tier.Three)

@@ -24,6 +24,19 @@ class HistoryDaysTest {
     }
 
     @Test
+    fun `with includeToday a day today with entries is selectable and nothing else changes`() {
+        assertTrue(HistoryDays.isSelectable(today, today, withEntries, includeToday = true))
+        assertFalse(HistoryDays.isSelectable(today, today, setOf(LocalDate(2026, 10, 20)), includeToday = true), "today without entries")
+        assertTrue(HistoryDays.isSelectable(LocalDate(2026, 10, 20), today, withEntries, includeToday = true))
+        assertFalse(HistoryDays.isSelectable(LocalDate(2026, 10, 21), today, withEntries, includeToday = true), "empty past day")
+        assertFalse(HistoryDays.isSelectable(LocalDate(2026, 10, 25), today, withEntries + LocalDate(2026, 10, 25), includeToday = true), "future day")
+        assertTrue(HistoryDays.isSelectableYear(2026, today, setOf(today), includeToday = true))
+        val rule = SelectableHistoryDays(today, withEntries, includeToday = true)
+        assertTrue(rule.isSelectableDate(HistoryDays.toPickerMillis(today)))
+        assertTrue(rule.isSelectableYear(2026))
+    }
+
+    @Test
     fun `a year is selectable only if it has a selectable day`() {
         assertTrue(HistoryDays.isSelectableYear(2026, today, withEntries))
         assertTrue(HistoryDays.isSelectableYear(2025, today, withEntries))

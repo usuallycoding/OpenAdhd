@@ -92,6 +92,7 @@ data class RedemptionEntity(
     val redeemedAtMillis: Long,
     @ColumnInfo(defaultValue = "'Purchase'") val source: String,
     val rolledTier: Int?,
+    @ColumnInfo(defaultValue = "''") val description: String = "",
 )
 
 data class TemplateWithSubtasks(
@@ -160,5 +161,5 @@ internal fun RewardTemplate.toEntity() = RewardTemplateEntity(id, name, tier.lev
 internal fun RedemptionEntity.toDomain() = Redemption(
     id, templateId, name, RewardTier.fromLevel(tier), Energy.valueOf(energy), price,
     Instant.fromEpochMilliseconds(redeemedAtMillis),
-    RedemptionSource.valueOf(source), rolledTier?.let(RewardTier::fromLevel),
+    RedemptionSource.valueOf(source), rolledTier?.let(RewardTier::fromLevel), description,
 )

@@ -4,7 +4,6 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.usuallycoding.openadhd.domain.CoinRules
 import com.usuallycoding.openadhd.domain.OpenAdhdStore
-import com.usuallycoding.openadhd.domain.Redemption
 import com.usuallycoding.openadhd.domain.RewardTier
 import com.usuallycoding.openadhd.domain.RollResult
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -29,10 +28,6 @@ class ShopViewModel(private val store: OpenAdhdStore) : ViewModel() {
 
     /** The result of the latest roll, shown in the reveal until [dismissRoll] is called. */
     val lastRoll: StateFlow<RollResult?> = _lastRoll
-
-    /** Purchases and rolls, newest first. */
-    val history: StateFlow<List<Redemption>> =
-        store.redemptions.stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
 
     /**
      * Buys a reward. The caller creates [redemptionId] when the confirmation opens, so confirming twice in

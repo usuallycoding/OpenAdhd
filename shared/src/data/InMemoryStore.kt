@@ -165,7 +165,10 @@ internal class StoreLogic(
         val price = reward.price
         if (!CoinRules.canPay(CoinRules.balance(state.ledger), price)) return null
         val now = clock.now()
-        val redemption = Redemption(redemptionId, reward.id, reward.name, reward.tier, reward.energy, price, now)
+        val redemption = Redemption(
+            redemptionId, reward.id, reward.name, reward.tier, reward.energy, price, now,
+            description = reward.description,
+        )
         val spend = LedgerEntry(newId(), -price, now, LedgerReason.RewardRedeemed, redemptionId)
         return state.copy(redemptions = state.redemptions + redemption, ledger = state.ledger + spend)
     }
@@ -184,7 +187,7 @@ internal class StoreLogic(
         val reward = outcome.reward
         val redemption = Redemption(
             redemptionId, reward.id, reward.name, reward.tier, reward.energy, price, now,
-            RedemptionSource.Roll, tier,
+            RedemptionSource.Roll, tier, reward.description,
         )
         val spend = LedgerEntry(newId(), -price, now, LedgerReason.MysteryRoll, redemptionId)
         val next = state.copy(redemptions = state.redemptions + redemption, ledger = state.ledger + spend)

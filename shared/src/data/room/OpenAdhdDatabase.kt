@@ -20,7 +20,7 @@ import kotlinx.coroutines.Dispatchers
         RewardTemplateEntity::class,
         RedemptionEntity::class,
     ],
-    version = 5,
+    version = 6,
     exportSchema = false,
 )
 @ConstructedBy(OpenAdhdDatabaseConstructor::class)
@@ -106,8 +106,23 @@ val Migration4To5: Migration = object : Migration(4, 5) {
     }
 }
 
+/**
+ * Version 6 keeps the reward's description on each redemption, so history does not change when a reward is
+ * edited or deleted. Earlier redemptions get the description of their reward if it still exists, which may
+ * differ from what it said at the time, and none otherwise. Ledger rows are not touched.
+ */
+val Migration5To6: Migration = object : Migration(5, 6) {
+    override fun migrate(connection: SQLiteConnection) {
+        connection.execSQL("ALTER TABLE redemptions ADD COLUMN description TEXT NOT NULL DEFAULT ''")
+        connection.execSQL(
+            "UPDATE redemptions SET description = COALESCE(" +
+                "(SELECT description FROM reward_templates WHERE reward_templates.id = redemptions.templateId), '')",
+        )
+    }
+}
+
 fun RoomDatabase.Builder<OpenAdhdDatabase>.buildOpenAdhdDatabase(): OpenAdhdDatabase =
     setDriver(BundledSQLiteDriver())
         .setQueryCoroutineContext(Dispatchers.Default)
-        .addMigrations(Migration1To2, Migration2To3, Migration3To4, Migration4To5)
+        .addMigrations(Migration1To2, Migration2To3, Migration3To4, Migration4To5, Migration5To6)
         .build()

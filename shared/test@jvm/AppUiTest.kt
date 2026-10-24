@@ -269,7 +269,7 @@ class AppUiTest {
         onNodeWithContentDescription("Redeem Treat").assertIsEnabled()
 
         onNodeWithText("History").performClick()
-        onNodeWithText("Nothing redeemed yet.").assertExists()
+        onNodeWithText("Nothing redeemed on this day").assertExists()
         onNodeWithText("Rewards").performClick()
 
         // cancelling spends nothing
@@ -643,7 +643,7 @@ class AppUiTest {
 
         swipeContentLeft()
         onNodeWithText("History").assertIsSelected()
-        onNodeWithText("Nothing redeemed yet.").assertExists()
+        onNodeWithText("Nothing redeemed on this day").assertExists()
 
         swipeContentRight()
         onNodeWithText("Rewards").assertIsSelected()
@@ -657,7 +657,7 @@ class AppUiTest {
         onNodeWithText("History").performClick()
 
         onNodeWithText("History").assertIsSelected()
-        onNodeWithText("Nothing redeemed yet.").assertExists()
+        onNodeWithText("Nothing redeemed on this day").assertExists()
     }
 
     @Test

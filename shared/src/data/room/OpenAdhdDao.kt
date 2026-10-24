@@ -207,7 +207,7 @@ abstract class OpenAdhdDao {
         insertRedemption(
             RedemptionEntity(
                 redemptionId, reward.id, reward.name, reward.tier, reward.energy, price, at,
-                RedemptionSource.Purchase.name, null,
+                RedemptionSource.Purchase.name, null, reward.description,
             ),
         )
         insertLedger(LedgerEntity(ledgerId, -price, at, LedgerReason.RewardRedeemed.name, redemptionId))
@@ -238,7 +238,7 @@ abstract class OpenAdhdDao {
         val reward = outcome.reward
         val redemption = RedemptionEntity(
             redemptionId, reward.id, reward.name, reward.tier.level, reward.energy.name, price, at,
-            RedemptionSource.Roll.name, tier.level,
+            RedemptionSource.Roll.name, tier.level, reward.description,
         )
         insertRedemption(redemption)
         insertLedger(LedgerEntity(ledgerId, -price, at, LedgerReason.MysteryRoll.name, redemptionId))

@@ -113,6 +113,8 @@ data class Redemption(
     val redeemedAt: Instant,
     val source: RedemptionSource = RedemptionSource.Purchase,
     val rolledTier: RewardTier? = null,
+    /** The reward's description when it was redeemed; later edits to the reward do not change it. */
+    val description: String = "",
 ) {
     /** A roll that gave a reward from a higher tier than the one rolled. */
     val isLuckyUpgrade: Boolean get() = rolledTier != null && tier.level > rolledTier.level

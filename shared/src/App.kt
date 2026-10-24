@@ -33,6 +33,7 @@ import com.usuallycoding.openadhd.ui.screens.ShopScreen
 import com.usuallycoding.openadhd.ui.screens.TemplatesScreen
 import com.usuallycoding.openadhd.ui.screens.TodayScreen
 import com.usuallycoding.openadhd.ui.rewards.RewardTemplatesViewModel
+import com.usuallycoding.openadhd.ui.shop.RewardHistoryViewModel
 import com.usuallycoding.openadhd.ui.shop.ShopViewModel
 import com.usuallycoding.openadhd.ui.templates.TemplatesViewModel
 import com.usuallycoding.openadhd.ui.theme.AppTheme
@@ -72,6 +73,7 @@ fun App(container: AppContainer) {
     val rewardTemplatesViewModel = viewModel { RewardTemplatesViewModel(container.store) }
     val historyViewModel = viewModel { HistoryViewModel(container.store, todayViewModel.today) }
     val shopViewModel = viewModel { ShopViewModel(container.store) }
+    val rewardHistoryViewModel = viewModel { RewardHistoryViewModel(container.store, todayViewModel.today) }
     val walletViewModel = viewModel { WalletViewModel(container.store) }
     val balance by walletViewModel.balance.collectAsStateWithLifecycle()
 
@@ -163,7 +165,7 @@ fun App(container: AppContainer) {
             when (destination) {
                 Destination.Today -> TodayScreen(todayViewModel, historyViewModel, screenModifier, todayPager)
                 Destination.Templates -> TemplatesScreen(templatesViewModel, rewardTemplatesViewModel, screenModifier, templatesPager)
-                Destination.Shop -> ShopScreen(shopViewModel, screenModifier, shopPager)
+                Destination.Shop -> ShopScreen(shopViewModel, rewardHistoryViewModel, screenModifier, shopPager)
             }
         }
     }

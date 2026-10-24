@@ -51,6 +51,21 @@ class RoomStoreTest : StoreContractTest() {
     }
 
     @Test
+    fun `the description of a redemption survives a restart`() = runTest {
+        val file = createTempDirectory().resolve("redemption-description.db").toString()
+        val today = clock.todayIn(TimeZone.UTC)
+        val firstDb = Room.databaseBuilder<OpenAdhdDatabase>(file).buildOpenAdhdDatabase()
+        val first = RoomStore(firstDb, clock)
+        first.assign(first.create("Taxes", Tier.Four, Energy.High), today).let { first.completeTask(it.id) }
+        val reward = first.createReward("Movie night", RewardTier.One, Energy.Low, "With snacks")
+        assertTrue(first.redeem(reward.id, "r1"))
+        firstDb.close()
+
+        val second = RoomStore(Room.databaseBuilder<OpenAdhdDatabase>(file).buildOpenAdhdDatabase(), clock)
+        assertEquals("With snacks", second.redemptions.first().single().description)
+    }
+
+    @Test
     fun `data survives closing and reopening the database`() = runTest {
         val file = createTempDirectory().resolve("restart.db").toString()
         val today = clock.todayIn(TimeZone.UTC)

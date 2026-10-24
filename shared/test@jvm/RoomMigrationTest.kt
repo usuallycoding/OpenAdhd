@@ -258,4 +258,51 @@ class RoomMigrationTest {
         assertEquals(listOf("Cinema", "Tea"), store.rewards.first().map { it.name })
         database.close()
     }
+
+    /** A version 5 database with redemptions of a reward that exists, one that was deleted, and one without a template id. */
+    private fun createVersion5Database(): String {
+        val file = createTempDirectory().resolve("v5.db").toString()
+        val connection = BundledSQLiteDriver().open(file)
+        try {
+            connection.execSQL("CREATE TABLE templates (id TEXT NOT NULL, name TEXT NOT NULL, tier INTEGER NOT NULL, energy TEXT NOT NULL, description TEXT NOT NULL DEFAULT '', position INTEGER NOT NULL DEFAULT 0, PRIMARY KEY(id))")
+            connection.execSQL("CREATE TABLE template_subtasks (id TEXT NOT NULL, templateId TEXT NOT NULL, position INTEGER NOT NULL, title TEXT NOT NULL, PRIMARY KEY(id))")
+            connection.execSQL("CREATE TABLE planned_tasks (id TEXT NOT NULL, date TEXT NOT NULL, name TEXT NOT NULL, tier INTEGER NOT NULL, energy TEXT NOT NULL, templateId TEXT, completedAtMillis INTEGER, description TEXT NOT NULL DEFAULT '', reward INTEGER NOT NULL DEFAULT 0, position INTEGER NOT NULL DEFAULT 0, PRIMARY KEY(id))")
+            connection.execSQL("CREATE TABLE planned_subtasks (id TEXT NOT NULL, plannedTaskId TEXT NOT NULL, position INTEGER NOT NULL, title TEXT NOT NULL, reward INTEGER NOT NULL, completedAtMillis INTEGER, PRIMARY KEY(id))")
+            connection.execSQL("CREATE TABLE ledger (id TEXT NOT NULL, amount INTEGER NOT NULL, timestampMillis INTEGER NOT NULL, reason TEXT NOT NULL, refId TEXT, PRIMARY KEY(id))")
+            connection.execSQL("CREATE TABLE reward_templates (id TEXT NOT NULL, name TEXT NOT NULL, tier INTEGER NOT NULL, energy TEXT NOT NULL, description TEXT NOT NULL, customPrice INTEGER, position INTEGER NOT NULL DEFAULT 0, PRIMARY KEY(id))")
+            connection.execSQL("CREATE TABLE redemptions (id TEXT NOT NULL, templateId TEXT, name TEXT NOT NULL, tier INTEGER NOT NULL, energy TEXT NOT NULL, price INTEGER NOT NULL, redeemedAtMillis INTEGER NOT NULL, source TEXT NOT NULL DEFAULT 'Purchase', rolledTier INTEGER, PRIMARY KEY(id))")
+            connection.execSQL("INSERT INTO reward_templates VALUES ('w1', 'Movie night', 2, 'Low', 'Treat', NULL, 0)")
+            connection.execSQL("INSERT INTO redemptions VALUES ('a', 'w1', 'Movie night', 2, 'Low', 50, 3000, 'Purchase', NULL)")
+            connection.execSQL("INSERT INTO redemptions VALUES ('b', 'gone', 'Deleted one', 1, 'Low', 10, 4000, 'Roll', 1)")
+            connection.execSQL("INSERT INTO redemptions VALUES ('c', NULL, 'No template', 1, 'Low', 10, 5000, 'Purchase', NULL)")
+            connection.execSQL("INSERT INTO ledger VALUES ('l1', 100, 1000, 'TaskCompleted', 'p0')")
+            connection.execSQL("INSERT INTO ledger VALUES ('l2', -50, 3000, 'RewardRedeemed', 'a')")
+            connection.execSQL("INSERT INTO ledger VALUES ('l3', -10, 4000, 'MysteryRoll', 'b')")
+            connection.execSQL("INSERT INTO ledger VALUES ('l4', -10, 5000, 'RewardRedeemed', 'c')")
+            connection.execSQL("PRAGMA user_version = 5")
+        } finally {
+            connection.close()
+        }
+        return file
+    }
+
+    @Test
+    fun `upgrading from version 5 gives redemptions the description of their reward if it exists`() = runTest {
+        val database = Room.databaseBuilder<OpenAdhdDatabase>(createVersion5Database()).buildOpenAdhdDatabase()
+        val store = RoomStore(database)
+
+        val byName = store.redemptions.first().associateBy { it.name }
+        assertEquals(3, byName.size)
+        assertEquals("Treat", byName.getValue("Movie night").description)
+        assertEquals("", byName.getValue("Deleted one").description)
+        assertEquals("", byName.getValue("No template").description)
+        assertEquals(RedemptionSource.Roll, byName.getValue("Deleted one").source)
+        assertEquals(30, CoinRules.balance(store.entries.first()))
+
+        // New redemptions keep working, and the stored description no longer follows the reward.
+        val reward = store.rewards.first().single()
+        store.updateReward(reward.copy(description = "Changed"))
+        assertEquals("Treat", store.redemptions.first().first { it.id == "a" }.description)
+        database.close()
+    }
 }

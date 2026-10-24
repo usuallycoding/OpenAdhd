@@ -43,11 +43,15 @@ import com.usuallycoding.openadhd.domain.RewardTier
 import com.usuallycoding.openadhd.domain.RollResult
 import com.usuallycoding.openadhd.domain.RollRules
 import com.usuallycoding.openadhd.domain.newId
+import com.usuallycoding.openadhd.ui.components.DayNavigator
+import com.usuallycoding.openadhd.ui.shop.RewardHistoryDay
+import com.usuallycoding.openadhd.ui.shop.RewardHistoryViewModel
 import com.usuallycoding.openadhd.ui.shop.RollOption
 import com.usuallycoding.openadhd.ui.shop.ShopItem
 import com.usuallycoding.openadhd.ui.shop.ShopShelf
 import com.usuallycoding.openadhd.ui.shop.ShopViewModel
 import kotlinx.coroutines.launch
+import kotlinx.datetime.LocalDate
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
 import kotlin.time.Instant
@@ -56,17 +60,22 @@ import kotlin.time.Instant
 @Composable
 fun ShopScreen(
     viewModel: ShopViewModel,
+    historyViewModel: RewardHistoryViewModel,
     modifier: Modifier = Modifier,
     pagerState: PagerState = rememberPagerState { 2 },
 ) {
     val shelves by viewModel.shelves.collectAsStateWithLifecycle()
-    val history by viewModel.history.collectAsStateWithLifecycle()
+    val date by historyViewModel.date.collectAsStateWithLifecycle()
+    val today by historyViewModel.today.collectAsStateWithLifecycle()
+    val canGoNext by historyViewModel.canGoNext.collectAsStateWithLifecycle()
+    val redemptions by historyViewModel.redemptions.collectAsStateWithLifecycle()
+    val days by historyViewModel.daysWithRedemptions.collectAsStateWithLifecycle()
     val rollOptions by viewModel.rollOptions.collectAsStateWithLifecycle()
     val lastRoll by viewModel.lastRoll.collectAsStateWithLifecycle()
     val balance by viewModel.balance.collectAsStateWithLifecycle()
     ShopContent(
         shelves = shelves,
-        history = history,
+        history = RewardHistoryDay(date, today, canGoNext, redemptions, days),
         rollOptions = rollOptions,
         lastRoll = lastRoll,
         onRedeem = viewModel::redeem,
@@ -75,13 +84,16 @@ fun ShopScreen(
         modifier = modifier,
         pagerState = pagerState,
         balance = balance,
+        onPreviousDay = historyViewModel::previousDay,
+        onNextDay = historyViewModel::nextDay,
+        onPickDay = historyViewModel::pickDay,
     )
 }
 
 @Composable
 fun ShopContent(
     shelves: List<ShopShelf>,
-    history: List<Redemption>,
+    history: RewardHistoryDay,
     rollOptions: List<RollOption>,
     lastRoll: RollResult?,
     onRedeem: (rewardId: String, redemptionId: String) -> Unit,
@@ -90,6 +102,9 @@ fun ShopContent(
     modifier: Modifier = Modifier,
     pagerState: PagerState = rememberPagerState { 2 },
     balance: Int = 0,
+    onPreviousDay: () -> Unit = {},
+    onNextDay: () -> Unit = {},
+    onPickDay: (LocalDate) -> Unit = {},
 ) {
     val scope = rememberCoroutineScope()
     Column(modifier) {
@@ -106,7 +121,7 @@ fun ShopContent(
             )
         }
         HorizontalPager(state = pagerState, modifier = Modifier.fillMaxSize()) { page ->
-            if (page == 0) ShelvesList(shelves, rollOptions, balance, onRedeem, onRoll) else HistoryList(history)
+            if (page == 0) ShelvesList(shelves, rollOptions, balance, onRedeem, onRoll) else HistoryList(history, onPreviousDay, onNextDay, onPickDay)
         }
     }
 
@@ -308,24 +323,48 @@ private fun RollRevealDialog(result: RollResult, onDismiss: () -> Unit) {
 }
 
 @Composable
-private fun HistoryList(history: List<Redemption>) {
-    if (history.isEmpty()) {
-        Box(Modifier.fillMaxSize()) {
-            Text(
-                "Nothing redeemed yet.",
-                style = MaterialTheme.typography.bodyLarge,
-                modifier = Modifier.align(Alignment.Center).padding(32.dp),
-            )
-        }
-    } else {
-        LazyColumn {
-            items(history, key = { it.id }) { purchase ->
-                ListItem(
-                    headlineContent = { Text(purchase.name) },
-                    supportingContent = { Text(purchase.historyNote()) },
-                    trailingContent = { Text("-${purchase.price}") },
+private fun HistoryList(
+    history: RewardHistoryDay,
+    onPreviousDay: () -> Unit,
+    onNextDay: () -> Unit,
+    onPickDay: (LocalDate) -> Unit,
+) {
+    Column(Modifier.fillMaxSize()) {
+        // Today is allowed here, unlike on the Today screen's History, because a reward can be redeemed today.
+        DayNavigator(
+            date = history.date,
+            today = history.today,
+            canGoNext = history.canGoNext,
+            daysWithEntries = history.daysWithRedemptions,
+            includeToday = true,
+            onPreviousDay = onPreviousDay,
+            onNextDay = onNextDay,
+            onPickDay = onPickDay,
+        )
+        HorizontalDivider()
+        if (history.redemptions.isEmpty()) {
+            Box(Modifier.fillMaxSize()) {
+                Text(
+                    "Nothing redeemed on this day",
+                    style = MaterialTheme.typography.bodyLarge,
+                    modifier = Modifier.align(Alignment.Center).padding(32.dp),
                 )
-                HorizontalDivider()
+            }
+        } else {
+            LazyColumn {
+                items(history.redemptions, key = { it.id }) { purchase ->
+                    ListItem(
+                        headlineContent = { Text(purchase.name) },
+                        supportingContent = {
+                            Column {
+                                if (purchase.description.isNotBlank()) Text(purchase.description)
+                                Text(purchase.historyNote())
+                            }
+                        },
+                        trailingContent = { Text("-${purchase.price}") },
+                    )
+                    HorizontalDivider()
+                }
             }
         }
     }
@@ -359,7 +398,7 @@ private fun ShopContentPreview() {
                 ShopShelf(RewardTier.Two, listOf(ShopItem(movie, affordable = true, coinsNeeded = 0))),
                 ShopShelf(RewardTier.Five, listOf(ShopItem(headphones, affordable = false, coinsNeeded = 750))),
             ),
-            history = emptyList(),
+            history = RewardHistoryDay(LocalDate(2026, 10, 24), LocalDate(2026, 10, 24), false, emptyList(), emptySet()),
             rollOptions = listOf(
                 RollOption(RewardTier.One, 20, affordable = true, coinsNeeded = 0, hasRewards = false, upgradeTier = RewardTier.Two),
                 RollOption(RewardTier.Two, 50, affordable = true, coinsNeeded = 0, hasRewards = true, upgradeTier = null),
