@@ -4,14 +4,16 @@ import androidx.lifecycle.viewModelScope
 import com.usuallycoding.openadhd.data.InMemoryStore
 import com.usuallycoding.openadhd.domain.CoinRules
 import com.usuallycoding.openadhd.domain.Energy
-import com.usuallycoding.openadhd.domain.TaskTemplate
 import com.usuallycoding.openadhd.domain.Tier
+import com.usuallycoding.openadhd.ui.today.PickedEntryEvent
 import com.usuallycoding.openadhd.ui.today.RandomizerState
 import com.usuallycoding.openadhd.ui.today.TodayViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
@@ -21,7 +23,6 @@ import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
-import kotlin.test.assertIs
 import kotlin.test.assertTrue
 
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -38,122 +39,116 @@ class RandomizerViewModelTest {
     private fun viewModel(vararg draws: Int) =
         TodayViewModel(store, clock, TimeZone.UTC, dateCheckInterval = null, random = ScriptedRandom(*draws))
 
-    /** Creates a template and moves it to the end, so the templates stay in the order the tests write them. */
-    private suspend fun template(name: String, energy: Energy, tier: Tier = Tier.Two): TaskTemplate {
-        val created = store.create(name, tier, energy)
-        store.reorderTemplates(store.templates.first().map { it.id }.filterNot { it == created.id } + created.id)
-        return created
+    /** Plans a new template and returns the entry's id; entries are listed in the order they were planned. */
+    private suspend fun TodayViewModel.plan(name: String, energy: Energy): String {
+        assign(store.create(name, Tier.Two, energy))
+        return entries.value.first { it.name == name }.id
     }
 
-    private fun TodayViewModel.suggested(): String? = (randomizer.value as? RandomizerState.Suggesting)?.template?.name
+    /** Collects the pick events of [vm] so a test can read what was picked. */
+    private fun TestScope.collectPicks(vm: TodayViewModel): List<PickedEntryEvent> {
+        val picks = mutableListOf<PickedEntryEvent>()
+        backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { vm.picked.collect { picks += it } }
+        return picks
+    }
 
     @Test
-    fun `no templates at all says so`() = runTest {
+    fun `an empty day has nothing to pick`() = runTest {
         val vm = viewModel()
         vm.openRandomizer()
-        assertEquals(RandomizerState.NoTemplates, vm.randomizer.value)
+        assertEquals(RandomizerState.NothingPending, vm.randomizer.value)
         vm.viewModelScope.cancel()
     }
 
     @Test
-    fun `with templates it asks for the energy first`() = runTest {
-        template("Dishes", Energy.Low)
+    fun `a day where everything is done has nothing to pick`() = runTest {
         val vm = viewModel()
+        val id = vm.plan("Dishes", Energy.Low)
+        vm.completeTask(id)
+
+        vm.openRandomizer()
+
+        assertEquals(RandomizerState.NothingPending, vm.randomizer.value)
+        vm.viewModelScope.cancel()
+    }
+
+    @Test
+    fun `with pending entries it asks for the energy first`() = runTest {
+        val vm = viewModel()
+        vm.plan("Dishes", Energy.Low)
         vm.openRandomizer()
         assertEquals(RandomizerState.ChoosingEnergy, vm.randomizer.value)
         vm.viewModelScope.cancel()
     }
 
     @Test
-    fun `choosing an energy suggests a template by weight`() = runTest {
-        template("High job", Energy.High)
-        template("Medium job", Energy.Medium)
-        template("Low job", Energy.Low)
+    fun `choosing an energy picks an entry by weight and closes`() = runTest {
         val vm = viewModel(4)
+        vm.plan("High job", Energy.High)
+        val medium = vm.plan("Medium job", Energy.Medium)
+        vm.plan("Low job", Energy.Low)
+        val picks = collectPicks(vm)
         vm.openRandomizer()
 
         vm.chooseEnergy(Energy.High)
 
-        val state = assertIs<RandomizerState.Suggesting>(vm.randomizer.value)
-        assertEquals(Energy.High, state.energy)
-        assertEquals("Medium job", state.template.name) // draw 4 of 7 falls in the medium weight
+        assertEquals(listOf(PickedEntryEvent(medium)), picks) // draw 4 of 7 falls in the medium weight
+        assertEquals(RandomizerState.Closed, vm.randomizer.value)
         vm.viewModelScope.cancel()
     }
 
     @Test
-    fun `low energy never suggests anything that needs more`() = runTest {
-        template("Medium job", Energy.Medium)
-        template("High job", Energy.High)
+    fun `low energy never picks anything that needs more`() = runTest {
         val vm = viewModel()
+        vm.plan("Medium job", Energy.Medium)
+        vm.plan("High job", Energy.High)
+        val picks = collectPicks(vm)
         vm.openRandomizer()
 
         vm.chooseEnergy(Energy.Low)
 
-        assertEquals(RandomizerState.NothingFits(Energy.Low, exhausted = false), vm.randomizer.value)
+        assertEquals(RandomizerState.NothingFits(Energy.Low), vm.randomizer.value)
+        assertTrue(picks.isEmpty())
         vm.viewModelScope.cancel()
     }
 
     @Test
-    fun `templates already on today's list are never suggested`() = runTest {
-        val pending = template("Pending", Energy.Medium)
-        val done = template("Done", Energy.Medium)
-        template("Fresh", Energy.Medium)
+    fun `completed entries are never picked`() = runTest {
         val vm = viewModel(0)
-        vm.assign(pending)
-        vm.assign(done)
-        vm.completeTask(vm.entries.value.first { it.name == "Done" }.id)
+        val done = vm.plan("Done", Energy.Medium)
+        val pending = vm.plan("Pending", Energy.Medium)
+        vm.completeTask(done)
+        val picks = collectPicks(vm)
         vm.openRandomizer()
 
         vm.chooseEnergy(Energy.Medium)
 
-        assertEquals("Fresh", vm.suggested())
+        assertEquals(listOf(PickedEntryEvent(pending)), picks)
         vm.viewModelScope.cancel()
     }
 
     @Test
-    fun `another never repeats until everything has been shown and then says so`() = runTest {
-        template("A", Energy.Medium)
-        template("B", Energy.Medium)
-        template("C", Energy.Low)
-        val vm = viewModel(0, 0, 0)
-        vm.openRandomizer()
-
-        vm.chooseEnergy(Energy.Medium)
-        val first = vm.suggested()
-        vm.another()
-        val second = vm.suggested()
-        vm.another()
-        val third = vm.suggested()
-
-        assertEquals(listOf("A", "B", "C"), listOf(first, second, third))
-        vm.another()
-        assertEquals(RandomizerState.NothingFits(Energy.Medium, exhausted = true), vm.randomizer.value)
-        vm.viewModelScope.cancel()
-    }
-
-    @Test
-    fun `choosing the energy again forgets what was shown`() = runTest {
-        template("A", Energy.Medium)
-        template("B", Energy.Medium)
+    fun `picking again may pick the same entry`() = runTest {
         val vm = viewModel(0, 0)
+        val only = vm.plan("A", Energy.Medium)
+        val picks = collectPicks(vm)
+
         vm.openRandomizer()
-
         vm.chooseEnergy(Energy.Medium)
-        assertEquals("A", vm.suggested())
+        vm.openRandomizer()
         vm.chooseEnergy(Energy.Medium)
 
-        assertEquals("A", vm.suggested())
+        assertEquals(listOf(PickedEntryEvent(only), PickedEntryEvent(only)), picks)
         vm.viewModelScope.cancel()
     }
 
     @Test
     fun `choose another energy returns to the energy question`() = runTest {
-        template("A", Energy.Medium)
-        val vm = viewModel(0)
+        val vm = viewModel()
+        vm.plan("A", Energy.Medium)
         vm.openRandomizer()
-        vm.chooseEnergy(Energy.Medium)
-        vm.another()
-        assertEquals(RandomizerState.NothingFits(Energy.Medium, exhausted = true), vm.randomizer.value)
+        vm.chooseEnergy(Energy.Low)
+        assertEquals(RandomizerState.NothingFits(Energy.Low), vm.randomizer.value)
 
         vm.chooseAnotherEnergy()
 
@@ -162,47 +157,31 @@ class RandomizerViewModelTest {
     }
 
     @Test
-    fun `accepting adds the entry with its frozen reward and closes`() = runTest {
-        store.create("Clean", Tier.Three, Energy.Medium, "Whole room", listOf("A", "B", "C"))
+    fun `picking changes nothing on the list or the balance`() = runTest {
         val vm = viewModel(0)
+        vm.plan("A", Energy.Medium)
+        vm.plan("B", Energy.Low)
+        val before = vm.entries.value
         vm.openRandomizer()
+
         vm.chooseEnergy(Energy.Medium)
 
-        vm.acceptSuggestion()
-
-        val entry = vm.entries.value.single()
-        assertEquals("Clean", entry.name)
-        assertEquals("Whole room", entry.description)
-        assertEquals(20, entry.reward)
-        assertEquals(listOf(7, 7, 6), entry.subtasks.map { it.reward })
-        assertEquals(RandomizerState.Closed, vm.randomizer.value)
+        assertEquals(before, vm.entries.value)
+        assertEquals(0, CoinRules.balance(store.entries.first()))
         vm.viewModelScope.cancel()
     }
 
     @Test
-    fun `nothing is added by suggesting or dismissing`() = runTest {
-        template("A", Energy.Medium)
-        val vm = viewModel(0)
+    fun `not now closes the question without picking`() = runTest {
+        val vm = viewModel()
+        vm.plan("A", Energy.Medium)
+        val picks = collectPicks(vm)
         vm.openRandomizer()
-        vm.chooseEnergy(Energy.Medium)
-        assertTrue(vm.entries.value.isEmpty())
 
         vm.dismissRandomizer()
 
-        assertTrue(vm.entries.value.isEmpty())
-        assertEquals(0, CoinRules.balance(store.entries.first()))
         assertEquals(RandomizerState.Closed, vm.randomizer.value)
-        vm.viewModelScope.cancel()
-    }
-
-    @Test
-    fun `another and accept do nothing when no suggestion is showing`() = runTest {
-        template("A", Energy.Medium)
-        val vm = viewModel()
-        vm.another()
-        vm.acceptSuggestion()
-        assertEquals(RandomizerState.Closed, vm.randomizer.value)
-        assertTrue(vm.entries.value.isEmpty())
+        assertTrue(picks.isEmpty())
         vm.viewModelScope.cancel()
     }
 }

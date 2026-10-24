@@ -51,19 +51,20 @@ data class CriticalHitEvent(val bonus: Int)
 /** A completion that was unchecked, with the [coins] it had paid, all of which were taken back. */
 data class UndoneEvent(val coins: Int)
 
+/** The entry "Pick one for me" chose, for the list to scroll to and highlight. */
+data class PickedEntryEvent(val entryId: String)
+
 /** Where the "Pick one for me" dialog is. */
 sealed interface RandomizerState {
     data object Closed : RandomizerState
 
-    /** There are no task templates at all, so there is nothing to suggest. */
-    data object NoTemplates : RandomizerState
+    /** Every entry on today's list is completed, so there is nothing to pick. */
+    data object NothingPending : RandomizerState
 
     data object ChoosingEnergy : RandomizerState
 
-    data class Suggesting(val energy: Energy, val template: TaskTemplate) : RandomizerState
-
-    /** No suggestion for [energy]: nothing fits it, or [exhausted] when everything that fits has already been shown. */
-    data class NothingFits(val energy: Energy, val exhausted: Boolean) : RandomizerState
+    /** No pending entry on today's list fits [energy]. */
+    data class NothingFits(val energy: Energy) : RandomizerState
 }
 
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -219,51 +220,33 @@ class TodayViewModel(
 
     val randomizer: StateFlow<RandomizerState> = _randomizer
 
-    /** Template ids already suggested for the current energy choice, so "Another" never repeats. */
-    private val shown = mutableSetOf<String>()
+    private val _picked = MutableSharedFlow<PickedEntryEvent>(extraBufferCapacity = 16)
+
+    /** One event per pick, so the screen can scroll to the entry and highlight it. */
+    val picked: SharedFlow<PickedEntryEvent> = _picked
 
     fun openRandomizer() {
-        shown.clear()
-        _randomizer.value = if (templates.value.isEmpty()) RandomizerState.NoTemplates else RandomizerState.ChoosingEnergy
+        _randomizer.value =
+            if (entries.value.none { !it.isCompleted }) RandomizerState.NothingPending else RandomizerState.ChoosingEnergy
     }
 
-    /** Starts a fresh round for [energy]: whatever was shown before is forgotten. */
+    /** Picks a pending entry for [energy] and closes the dialog, or says nothing fits. Nothing on the list changes. */
     fun chooseEnergy(energy: Energy) {
-        shown.clear()
-        suggest(energy)
-    }
-
-    fun another() {
-        val state = _randomizer.value
-        if (state is RandomizerState.Suggesting) suggest(state.energy)
+        val pick = TaskPicker.pick(random, energy, entries.value)
+        if (pick == null) {
+            _randomizer.value = RandomizerState.NothingFits(energy)
+        } else {
+            _randomizer.value = RandomizerState.Closed
+            _picked.tryEmit(PickedEntryEvent(pick.id))
+        }
     }
 
     fun chooseAnotherEnergy() {
-        shown.clear()
         _randomizer.value = RandomizerState.ChoosingEnergy
     }
 
-    /** Adds the suggested template to today exactly like picking it from the list, then closes. */
-    fun acceptSuggestion() {
-        val state = _randomizer.value as? RandomizerState.Suggesting ?: return
-        assign(state.template)
-        dismissRandomizer()
-    }
-
     fun dismissRandomizer() {
-        shown.clear()
         _randomizer.value = RandomizerState.Closed
-    }
-
-    private fun suggest(energy: Energy) {
-        val planned = entries.value.mapNotNull { it.templateId }.toSet()
-        val picked = TaskPicker.pick(random, energy, templates.value, planned + shown)
-        _randomizer.value = if (picked == null) {
-            RandomizerState.NothingFits(energy, exhausted = shown.isNotEmpty())
-        } else {
-            shown += picked.id
-            RandomizerState.Suggesting(energy, picked)
-        }
     }
 
     /** Completes an entry that has no subtasks. */

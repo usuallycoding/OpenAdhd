@@ -2,7 +2,7 @@ package com.usuallycoding.openadhd.domain
 
 import kotlin.random.Random
 
-/** Picks a task template for the user's current energy; see the task-randomizer spec. */
+/** Picks one of today's pending entries for the user's current energy; see the task-randomizer spec. */
 object TaskPicker {
     private fun Energy.rank(): Int = when (this) {
         Energy.Low -> 0
@@ -21,21 +21,16 @@ object TaskPicker {
         else -> 0
     }
 
-    /** The templates that can be suggested, in their given order. */
-    fun eligible(chosen: Energy, templates: List<TaskTemplate>, excludedTemplateIds: Set<String>): List<TaskTemplate> =
-        templates.filter { it.id !in excludedTemplateIds && weight(chosen, it.energy) > 0 }
+    /** The entries that can be picked: not completed, and needing no more than the [chosen] energy, in their given order. */
+    fun eligible(chosen: Energy, entries: List<PlannedTask>): List<PlannedTask> =
+        entries.filter { !it.isCompleted && weight(chosen, it.energy) > 0 }
 
     /**
-     * Picks one eligible template with a chance proportional to its weight, using a single draw over the
-     * templates in their given order. Returns null when nothing is eligible, without drawing.
+     * Picks one eligible entry with a chance proportional to its weight, using a single draw over the
+     * entries in their given order. Returns null when nothing is eligible, without drawing.
      */
-    fun pick(
-        random: Random,
-        chosen: Energy,
-        templates: List<TaskTemplate>,
-        excludedTemplateIds: Set<String> = emptySet(),
-    ): TaskTemplate? {
-        val candidates = eligible(chosen, templates, excludedTemplateIds)
+    fun pick(random: Random, chosen: Energy, entries: List<PlannedTask>): PlannedTask? {
+        val candidates = eligible(chosen, entries)
         if (candidates.isEmpty()) return null
         var remaining = random.nextInt(candidates.sumOf { weight(chosen, it.energy) })
         for (candidate in candidates) {

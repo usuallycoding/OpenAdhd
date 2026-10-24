@@ -51,7 +51,7 @@ When a form is taller than the available height, its fields SHALL scroll while t
 - **THEN** the fields scroll and Save and Cancel remain visible
 
 ### Requirement: Short decisions stay dialogs
-Confirming a redeem or a roll, the roll reveal, and the "Pick one for me" suggestion SHALL remain centered dialogs.
+Confirming a redeem or a roll, the roll reveal, and the "Pick one for me" energy question SHALL remain centered dialogs.
 
 #### Scenario: Confirming a purchase
 - **WHEN** the user taps Redeem on a reward

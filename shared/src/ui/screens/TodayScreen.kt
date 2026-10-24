@@ -2,6 +2,7 @@ package com.usuallycoding.openadhd.ui.screens
 
 import androidx.compose.foundation.clickable
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -16,8 +17,10 @@ import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FloatingActionButton
@@ -38,6 +41,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -51,9 +55,7 @@ import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import com.usuallycoding.openadhd.domain.CoinRules
 import com.usuallycoding.openadhd.domain.ReminderRules
-import com.usuallycoding.openadhd.ui.LocalGameRules
 import com.usuallycoding.openadhd.domain.Energy
 import com.usuallycoding.openadhd.domain.PlannedSubtask
 import com.usuallycoding.openadhd.domain.PlannedTask
@@ -70,6 +72,11 @@ import com.usuallycoding.openadhd.ui.theme.DiceIcon
 import com.usuallycoding.openadhd.ui.today.RandomizerState
 import com.usuallycoding.openadhd.ui.history.HistoryViewModel
 import com.usuallycoding.openadhd.ui.today.TodayViewModel
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.emptyFlow
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.toLocalDateTime
@@ -125,10 +132,9 @@ private fun TodayList(viewModel: TodayViewModel, modifier: Modifier = Modifier) 
         onMoveUp = viewModel::moveUp,
         onMoveDown = viewModel::moveDown,
         randomizer = randomizer,
+        pickedEntryIds = remember(viewModel) { viewModel.picked.map { it.entryId } },
         onPickForMe = viewModel::openRandomizer,
         onChooseEnergy = viewModel::chooseEnergy,
-        onAnother = viewModel::another,
-        onAcceptSuggestion = viewModel::acceptSuggestion,
         onChooseAnotherEnergy = viewModel::chooseAnotherEnergy,
         onDismissRandomizer = viewModel::dismissRandomizer,
         reminders = ReminderActions(
@@ -142,6 +148,9 @@ private fun TodayList(viewModel: TodayViewModel, modifier: Modifier = Modifier) 
         modifier = modifier,
     )
 }
+
+/** How long the entry chosen by "Pick one for me" stays highlighted. */
+private const val PickHighlightMillis = 1500L
 
 @Composable
 fun TodayContent(
@@ -161,16 +170,29 @@ fun TodayContent(
     onMoveUp: (id: String) -> Unit = {},
     onMoveDown: (id: String) -> Unit = {},
     randomizer: RandomizerState = RandomizerState.Closed,
+    /** The ids of entries just picked by "Pick one for me", to scroll to and highlight. */
+    pickedEntryIds: Flow<String> = emptyFlow(),
     onPickForMe: () -> Unit = {},
     onChooseEnergy: (Energy) -> Unit = {},
-    onAnother: () -> Unit = {},
-    onAcceptSuggestion: () -> Unit = {},
     onChooseAnotherEnergy: () -> Unit = {},
     onDismissRandomizer: () -> Unit = {},
     reminders: ReminderActions = ReminderActions.None,
 ) {
     var picking by remember { mutableStateOf(false) }
     var optionsFor by remember { mutableStateOf<String?>(null) }
+    val listState = rememberLazyListState()
+    var highlightedId by remember { mutableStateOf<String?>(null) }
+    val currentEntries by rememberUpdatedState(entries)
+    LaunchedEffect(pickedEntryIds) {
+        pickedEntryIds.collectLatest { id ->
+            val index = currentEntries.indexOfFirst { it.id == id }
+            if (index < 0) return@collectLatest
+            highlightedId = id
+            listState.animateScrollToItem(index)
+            delay(PickHighlightMillis)
+            highlightedId = null
+        }
+    }
 
     Box(modifier.fillMaxSize()) {
         if (entries.isEmpty()) {
@@ -181,16 +203,16 @@ fun TodayContent(
             ) {
                 Text("Nothing planned for today.", style = MaterialTheme.typography.bodyLarge)
                 Button(onClick = { picking = true }) { Text("Add a task") }
-                Button(onClick = onPickForMe) { Text("Pick one for me") }
             }
         } else {
-            LazyColumn(contentPadding = PaddingValues(bottom = 88.dp)) {
+            LazyColumn(state = listState, contentPadding = PaddingValues(bottom = 88.dp)) {
                 val pendingIds = entries.filter { !it.isCompleted }.map { it.id }
                 items(entries, key = { it.id }) { entry ->
                     val pendingIndex = pendingIds.indexOf(entry.id)
                     EntryItem(
                         entry = entry,
                         expanded = entry.id !in collapsedEntryIds,
+                        highlighted = entry.id == highlightedId,
                         reordering = reordering,
                         canMoveUp = pendingIndex > 0,
                         canMoveDown = pendingIndex in 0 until pendingIds.lastIndex,
@@ -227,8 +249,6 @@ fun TodayContent(
     RandomizerDialog(
         state = randomizer,
         onChooseEnergy = onChooseEnergy,
-        onAnother = onAnother,
-        onAccept = onAcceptSuggestion,
         onChooseAnotherEnergy = onChooseAnotherEnergy,
         onDismiss = onDismissRandomizer,
     )
@@ -259,6 +279,8 @@ internal fun EntryItem(
     onToggleExpanded: () -> Unit,
     timeZone: TimeZone,
     modifier: Modifier = Modifier,
+    /** Marks the entry that "Pick one for me" just chose. */
+    highlighted: Boolean = false,
     /** Shows the entry as a record: checkboxes only display state, and nothing can be removed, moved or completed. */
     readOnly: Boolean = false,
     reordering: Boolean = false,
@@ -277,7 +299,11 @@ internal fun EntryItem(
     // While reordering a row is only a name to move: nothing can be completed, removed or expanded.
     val showSubtasks = expanded && !reordering
     val chevronAngle by animateFloatAsState(if (expanded) 0f else -90f)
+    val container by animateColorAsState(
+        if (highlighted) MaterialTheme.colorScheme.tertiaryContainer else MaterialTheme.colorScheme.surface,
+    )
     ListItem(
+        colors = ListItemDefaults.colors(containerColor = container),
         // Tapping the header of an entry with subtasks shows or hides them; entries without subtasks are not tappable.
         modifier = if (hasSubtasks && !reordering) {
             modifier
@@ -367,18 +393,16 @@ internal fun PlannedTask.summary(timeZone: TimeZone): String {
 private fun RandomizerDialog(
     state: RandomizerState,
     onChooseEnergy: (Energy) -> Unit,
-    onAnother: () -> Unit,
-    onAccept: () -> Unit,
     onChooseAnotherEnergy: () -> Unit,
     onDismiss: () -> Unit,
 ) {
     when (state) {
         RandomizerState.Closed -> Unit
 
-        RandomizerState.NoTemplates -> AlertDialog(
+        RandomizerState.NothingPending -> AlertDialog(
             onDismissRequest = onDismiss,
             title = { Text("Pick one for me") },
-            text = { Text("You have no task templates yet. Create one on the Templates tab first.") },
+            text = { Text("There is nothing left to pick today. Add a task with the + button.") },
             confirmButton = { TextButton(onClick = onDismiss) { Text("Close") } },
         )
 
@@ -396,33 +420,10 @@ private fun RandomizerDialog(
             dismissButton = { TextButton(onClick = onDismiss) { Text("Not now") } },
         )
 
-        is RandomizerState.Suggesting -> AlertDialog(
-            onDismissRequest = onDismiss,
-            title = { Text("How about this one?") },
-            text = {
-                val template = state.template
-                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Text(template.name, style = MaterialTheme.typography.titleMedium)
-                    if (template.description.isNotBlank()) Text(template.description)
-                    Text(template.description())
-                    Text("${CoinRules.baseReward(template.tier, LocalGameRules.current)} coins")
-                }
-            },
-            confirmButton = {
-                Row {
-                    TextButton(onClick = onAnother) { Text("Another") }
-                    TextButton(onClick = onAccept) { Text("Add to today") }
-                }
-            },
-            dismissButton = { TextButton(onClick = onDismiss) { Text("Not now") } },
-        )
-
         is RandomizerState.NothingFits -> AlertDialog(
             onDismissRequest = onDismiss,
-            title = {
-                Text(if (state.exhausted) "That was everything that fits" else "Nothing fits ${state.energy.name} energy")
-            },
-            text = { Text("Try a different energy, or pick from your list with the + button.") },
+            title = { Text("Nothing fits ${state.energy.name} energy") },
+            text = { Text("None of today's pending tasks fits. Try a different energy.") },
             confirmButton = { TextButton(onClick = onChooseAnotherEnergy) { Text("Choose another energy") } },
             dismissButton = { TextButton(onClick = onDismiss) { Text("Close") } },
         )
@@ -507,10 +508,7 @@ private fun TodayContentPreview() {
             onRemove = {},
             onCompleteTask = {},
             onCompleteSubtask = {},
-            randomizer = RandomizerState.Suggesting(
-                Energy.Medium,
-                TaskTemplate("t", "Clean the kitchen", Tier.Three, Energy.Medium, "Whole room", listOf("Dishes", "Counters")),
-            ),
+            randomizer = RandomizerState.ChoosingEnergy,
         )
     }
 }

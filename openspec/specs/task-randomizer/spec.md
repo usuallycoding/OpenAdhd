@@ -7,7 +7,7 @@ Takes the decision of what to do next away from the user: given how much energy 
 ## Requirements
 
 ### Requirement: Pick one for me
-The Today screen SHALL offer a "Pick one for me" action that starts a suggestion by asking for the user's current energy: Low, Medium or High. The action MUST be available whether or not today already has entries.
+The Today screen SHALL offer a "Pick one for me" action that starts a pick by asking for the user's current energy: Low, Medium or High. The action MUST be available whether or not today has entries, but the empty-day message MUST offer only "Add a task".
 
 #### Scenario: Starting a suggestion
 - **WHEN** the user taps "Pick one for me"
@@ -17,20 +17,9 @@ The Today screen SHALL offer a "Pick one for me" action that starts a suggestion
 - **WHEN** today already has entries
 - **THEN** the "Pick one for me" action is still offered
 
-### Requirement: Which tasks can be suggested
-A suggestion SHALL be a task template whose energy is not higher than the chosen energy. A template that already has an entry on today's list, pending or completed, MUST NOT be suggested. Reward templates and subtasks MUST NOT be suggested.
-
-#### Scenario: Low energy
-- **WHEN** the user chooses Low and the templates are one Low, one Medium and one High
-- **THEN** only the Low template can be suggested
-
-#### Scenario: Medium energy
-- **WHEN** the user chooses Medium and the templates are one Low, one Medium and one High
-- **THEN** only the Low and Medium templates can be suggested
-
-#### Scenario: Already planned
-- **WHEN** a template already has an entry on today's list, pending or completed
-- **THEN** it is not suggested
+#### Scenario: Empty day
+- **WHEN** today has no entries
+- **THEN** the empty-day message offers "Add a task" and no "Pick one for me" button
 
 ### Requirement: Better fits are more likely
 Among the templates that can be suggested, each SHALL be chosen with a chance proportional to a weight: 4 when its energy equals the chosen energy, 2 when it is one level below and 1 when it is two levels below.
@@ -47,53 +36,43 @@ Among the templates that can be suggested, each SHALL be chosen with a chance pr
 - **WHEN** two eligible templates have the same energy
 - **THEN** they have the same chance
 
-### Requirement: The suggestion
-The suggestion SHALL show the template's name, description when it has one, tier, energy level, the coins it pays, and the number of subtasks when it has any. Nothing MUST be added to today until the user accepts.
+### Requirement: Which tasks can be picked
+A pick SHALL be an entry on today's list that is not completed and whose energy is not higher than the chosen energy. Completed entries and subtasks MUST NOT be picked.
 
-#### Scenario: Suggestion details
-- **WHEN** the app suggests "Clean the kitchen", a tier 3 template with 3 subtasks and a description
-- **THEN** the suggestion shows its name, description, tier 3, its energy, 20 coins and that it has 3 subtasks
+#### Scenario: Low energy
+- **WHEN** the user chooses Low and today has pending entries of Low, Medium and High energy
+- **THEN** only the Low entry can be picked
 
-#### Scenario: Nothing is added by suggesting
-- **WHEN** a suggestion is shown
-- **THEN** today's list is unchanged until the user accepts
+#### Scenario: Medium energy
+- **WHEN** the user chooses Medium and today has pending entries of Low, Medium and High energy
+- **THEN** only the Low and Medium entries can be picked
 
-### Requirement: Accepting a suggestion
-Accepting a suggestion SHALL add the template to today exactly as choosing it from the template list does, with its rewards frozen at that moment, and close the suggestion.
+#### Scenario: Completed entries
+- **WHEN** an entry on today's list is completed
+- **THEN** it is not picked
 
-#### Scenario: Accept
-- **WHEN** the user taps "Add to today" on a suggestion
-- **THEN** a new entry for that template appears on today's list with its description, subtasks and rewards, and the suggestion closes
+### Requirement: The pick is shown in the list
+Once an entry is picked, the energy question SHALL close and the list SHALL scroll so the entry is visible, and the entry SHALL be highlighted for a short while. Nothing MUST be added, changed or spent by picking, and no result dialog is shown. Tapping "Pick one for me" again picks anew, and MAY pick the same entry.
 
-### Requirement: Asking for another
-"Another" SHALL show a different eligible template. A template MUST NOT be suggested again until every eligible template has been shown once for the chosen energy, and choosing the energy again MUST start over.
+#### Scenario: Picked entry is revealed
+- **WHEN** the user chooses an energy and an entry far down the list is picked
+- **THEN** the dialog closes, the list scrolls so that entry is visible and it is highlighted briefly
 
-#### Scenario: No repeats
-- **WHEN** three templates are eligible and the user taps "Another" twice
-- **THEN** three different templates have been shown
+#### Scenario: Nothing is changed by picking
+- **WHEN** an entry is picked
+- **THEN** today's list, its order and the balance are unchanged
 
-#### Scenario: Everything has been shown
-- **WHEN** the user taps "Another" after every eligible template has been shown
-- **THEN** the app says that was everything that fits their energy and offers to choose a different energy, and shows no suggestion
+#### Scenario: Picking again
+- **WHEN** the user picks again after a pick
+- **THEN** a new pick is made among the same eligible entries, and it may be the same entry
 
-#### Scenario: Choosing a different energy
-- **WHEN** the user chooses another energy after seeing suggestions
-- **THEN** the shown templates are forgotten and the new energy's eligible templates can be suggested again
-
-### Requirement: Dismissing
-"Not now" SHALL close the suggestion without adding anything or spending anything.
-
-#### Scenario: Not now
-- **WHEN** the user taps "Not now"
-- **THEN** the suggestion closes and today's list and the balance are unchanged
-
-### Requirement: When there is nothing to suggest
-If there are no task templates, or none is eligible for the chosen energy, the app SHALL say so in plain words and MUST NOT show a suggestion. With no templates at all it SHALL point the user to creating one.
-
-#### Scenario: No templates
-- **WHEN** the user starts a suggestion and there are no task templates
-- **THEN** the app tells them to create a task template first
+### Requirement: When there is nothing to pick
+If no entry is eligible for the chosen energy, the app SHALL say nothing fits that energy and offer to choose a different energy, and MUST NOT scroll or highlight anything. If today has no pending entries at all, the app SHALL say there is nothing left to pick today without asking for an energy.
 
 #### Scenario: Nothing fits
-- **WHEN** the user chooses Low and no Low template is available
+- **WHEN** the user chooses Low and no pending entry on today's list has Low energy
 - **THEN** the app says nothing fits Low energy and offers to choose a different energy
+
+#### Scenario: Nothing pending
+- **WHEN** every entry on today's list is completed and the user taps "Pick one for me"
+- **THEN** the app says there is nothing left to pick today and does not ask for energy
