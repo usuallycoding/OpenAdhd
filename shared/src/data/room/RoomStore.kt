@@ -7,6 +7,7 @@ import com.usuallycoding.openadhd.domain.LedgerEntry
 import com.usuallycoding.openadhd.domain.OpenAdhdStore
 import com.usuallycoding.openadhd.domain.PlannedTask
 import com.usuallycoding.openadhd.domain.Redemption
+import com.usuallycoding.openadhd.domain.Reminder
 import com.usuallycoding.openadhd.domain.RewardTemplate
 import com.usuallycoding.openadhd.domain.RewardTier
 import com.usuallycoding.openadhd.domain.RollResult
@@ -76,6 +77,8 @@ class RoomStore(
     }
 
     override suspend fun remove(id: String) = dao.removePlanned(id)
+
+    override suspend fun setReminder(entryId: String, reminder: Reminder?): Boolean = dao.setReminder(entryId, reminder)
 
     override val rewards: Flow<List<RewardTemplate>> =
         combine(dao.rewards(), settings) { list, settings -> list.map { it.toDomain(settings.rules) } }

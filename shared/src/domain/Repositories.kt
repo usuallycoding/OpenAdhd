@@ -39,6 +39,13 @@ interface PlannerRepository {
     /** Removes an entry; entries with any completed part are left alone so earned coins are never orphaned. */
     suspend fun remove(id: String)
 
+    /**
+     * Sets, replaces or (with null) clears the reminder of an entry. Returns false, changing nothing, if the entry
+     * is unknown or already completed. Completing an entry later keeps its reminder, so unchecking brings it back;
+     * the reminder rules decide what is still to fire.
+     */
+    suspend fun setReminder(entryId: String, reminder: Reminder?): Boolean
+
     /** Puts the entries of [date] in the order of [ids]; other days are untouched. See [reorderedBy]. */
     suspend fun reorderEntries(date: LocalDate, ids: List<String>)
 

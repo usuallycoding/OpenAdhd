@@ -9,6 +9,7 @@ import com.usuallycoding.openadhd.data.room.buildOpenAdhdDatabase
 import com.usuallycoding.openadhd.domain.CoinRules
 import com.usuallycoding.openadhd.domain.Energy
 import com.usuallycoding.openadhd.domain.RedemptionSource
+import com.usuallycoding.openadhd.domain.Reminder
 import com.usuallycoding.openadhd.domain.RewardTier
 import com.usuallycoding.openadhd.domain.SettingKey
 import com.usuallycoding.openadhd.domain.Settings
@@ -22,6 +23,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import kotlin.time.Instant
 
 class RoomMigrationTest {
     private val day = LocalDate(2026, 10, 23)
@@ -321,5 +323,26 @@ class RoomMigrationTest {
         assertNull(store.saveSetting(SettingKey.DebtLimit, "250"))
         assertEquals(250, store.settings.first().rules.debtLimit)
         database.close()
+    }
+
+    @Test
+    fun `upgrading to version 8 keeps entries and gives them no reminder`() = runTest {
+        val file = createVersion1Database()
+        val first = Room.databaseBuilder<OpenAdhdDatabase>(file).buildOpenAdhdDatabase()
+        val store = RoomStore(first)
+
+        val entries = store.entriesFor(day).first()
+        assertEquals(2, entries.size)
+        assertTrue(entries.all { it.reminder == null })
+        assertEquals(20, CoinRules.balance(store.entries.first()))
+
+        val pending = entries.first { !it.isCompleted }
+        val reminder = Reminder(Instant.parse("2026-10-23T15:00:00Z"), 30)
+        assertTrue(store.setReminder(pending.id, reminder))
+        first.close()
+
+        val second = Room.databaseBuilder<OpenAdhdDatabase>(file).buildOpenAdhdDatabase()
+        assertEquals(reminder, RoomStore(second).entriesFor(day).first().first { it.id == pending.id }.reminder)
+        second.close()
     }
 }

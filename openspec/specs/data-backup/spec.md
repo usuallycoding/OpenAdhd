@@ -33,7 +33,7 @@ Export a backup SHALL write one JSON file, saved where the user chooses in the s
 - **THEN** nothing is written and the app shows no error
 
 ### Requirement: Backup contents
-A backup SHALL contain everything the app holds: task templates with their subtasks, reward templates, the Today entries of every day with their subtasks and completion times, the coin ledger, the redemptions, the changed settings, and the order of every list. It MUST record a format version and that it is an OpenAdhd backup.
+A backup SHALL contain everything the app holds: task templates with their subtasks, reward templates, the Today entries of every day with their subtasks, completion times and reminders, the coin ledger, the redemptions, the changed settings, and the order of every list. It MUST record a format version and that it is an OpenAdhd backup.
 
 #### Scenario: Everything is included
 - **WHEN** the app holds templates, entries, completed work, rewards, purchases and a changed debt limit, and the user exports
@@ -46,6 +46,10 @@ A backup SHALL contain everything the app holds: task templates with their subta
 #### Scenario: Only changed settings
 - **WHEN** only the debt limit differs from its default
 - **THEN** the file lists the debt limit as the only setting
+
+#### Scenario: Reminders are kept
+- **WHEN** a pending entry has a reminder and the user exports and then imports the file
+- **THEN** the entry has the same reminder and its upcoming times fire again
 
 ### Requirement: Import a backup
 Import a backup SHALL let the user choose a file, read it, and show what it contains, as the number of task templates, reward templates, Today entries and redemptions and the coin balance, before asking whether to replace all current data with it. Confirming SHALL replace everything at once, with no restart, and cancelling SHALL change nothing.

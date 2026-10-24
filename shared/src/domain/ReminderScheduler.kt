@@ -1,0 +1,69 @@
+package com.usuallycoding.openadhd.domain
+
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.map
+import kotlinx.datetime.LocalDate
+import kotlinx.datetime.TimeZone
+import kotlin.time.Clock
+import kotlin.time.Instant
+
+/** What still has to be shown for one entry: its [text] at each of [times], all in the future when it was worked out. */
+data class UpcomingReminder(val entryId: String, val text: String, val times: List<Instant>)
+
+/**
+ * The only platform-specific part of reminders: asking for permission and arming the system to show
+ * notifications. The shared code works out what should fire, and the platform delivers it.
+ */
+interface ReminderScheduler {
+    /** Whether notifications can be shown right now. */
+    fun hasPermission(): Boolean
+
+    /** Asks the user for permission to show notifications if needed; returns whether it is now granted. */
+    suspend fun ensurePermission(): Boolean
+
+    /**
+     * Makes [upcoming] the whole schedule: everything armed before is cancelled, and each time that is still in
+     * the future is armed. Called again with the full list whenever anything changes.
+     */
+    fun replaceAll(upcoming: List<UpcomingReminder>)
+}
+
+/**
+ * Keeps a [ReminderScheduler] equal to the store: whenever today, today's entries or the stop hour change, the
+ * full list of reminders still to fire is worked out again and handed over. Replacing the whole schedule makes
+ * setting, completing, unchecking, removing and importing all go through one path.
+ */
+class ReminderCoordinator(
+    private val store: OpenAdhdStore,
+    private val scheduler: ReminderScheduler,
+    private val clock: Clock,
+    private val today: Flow<LocalDate>,
+    private val zone: TimeZone = TimeZone.currentSystemDefault(),
+) {
+    /** Runs until cancelled. */
+    suspend fun run() {
+        today
+            .flatMapLatest { date ->
+                combine(store.entriesFor(date), store.settings.map { it.reminderStopHour }.distinctUntilChanged()) { entries, stopHour ->
+                    upcoming(date, entries, stopHour)
+                }
+            }
+            .distinctUntilChanged()
+            .collect { scheduler.replaceAll(it) }
+    }
+
+    /** The reminders of the pending entries of [date] that still have a time to fire, measured from now. */
+    fun upcoming(date: LocalDate, entries: List<PlannedTask>, stopHour: Int): List<UpcomingReminder> {
+        val now = clock.now()
+        return entries
+            .filter { !it.isCompleted }
+            .mapNotNull { entry ->
+                val reminder = entry.reminder ?: return@mapNotNull null
+                val times = ReminderRules.upcoming(reminder, date, stopHour, now, zone)
+                if (times.isEmpty()) null else UpcomingReminder(entry.id, entry.name, times)
+            }
+    }
+}

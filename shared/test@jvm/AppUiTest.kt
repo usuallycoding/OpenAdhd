@@ -113,12 +113,16 @@ class AppUiTest {
         onNodeWithText("+6").assertExists()
         // only the three subtasks are checkable; the entry itself has no checkbox
         onAllNodes(isToggleable()).assertCountEquals(3)
-        onNodeWithContentDescription("Remove Clean the kitchen from today").assertExists()
+        onNodeWithContentDescription("Options for Clean the kitchen").assertExists()
 
         onAllNodes(isToggleable())[0].performClick()
         onNodeWithText("7").assertExists()
         onNodeWithText("Tier 3 · Medium energy · 1 of 3 done").assertExists()
-        onNodeWithContentDescription("Remove Clean the kitchen from today").assertDoesNotExist()
+        // still has options (a reminder), but nothing in it can be deleted any more
+        onNodeWithContentDescription("Options for Clean the kitchen").performClick()
+        onNodeWithText("Delete task").assertDoesNotExist()
+        onNodeWithText("Close").performClick()
+        waitForIdle()
 
         onAllNodes(isToggleable())[1].performClick()
         onAllNodes(isToggleable())[2].performClick()
@@ -783,7 +787,7 @@ class AppUiTest {
         onNodeWithContentDescription("Reorder").performClick()
         // the only toggleable left is the Finish reordering button itself: no completion checkboxes
         onAllNodes(isToggleable()).assertCountEquals(1)
-        onNodeWithContentDescription("Remove Beta from today").assertDoesNotExist()
+        onNodeWithContentDescription("Options for Beta").assertDoesNotExist()
         onNodeWithContentDescription("Add task to today").assertDoesNotExist()
         onNodeWithContentDescription("Move Alpha down").assertDoesNotExist()
         onNodeWithContentDescription("Move Alpha up").assertDoesNotExist()

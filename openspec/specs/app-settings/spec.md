@@ -7,7 +7,7 @@ Lets the user tune the numbers that make up the game, such as the debt limit, co
 ## Requirements
 
 ### Requirement: Settings tab
-The app SHALL have a Settings destination in the bottom bar, after Shop, that lists every setting grouped as Profile, Coins, Subtasks, Shop and Luck, followed by a Data section. Each setting SHALL show its name, its current value and its default.
+The app SHALL have a Settings destination in the bottom bar, after Shop, that lists every setting grouped as Profile, Coins, Subtasks, Shop, Luck and Reminders, followed by a Data section. Each setting SHALL show its name, its current value and its default.
 
 #### Scenario: Opening Settings
 - **WHEN** the user taps Settings in the bottom bar
@@ -23,14 +23,18 @@ The app SHALL have a Settings destination in the bottom bar, after Shop, that li
 
 #### Scenario: Data section last
 - **WHEN** the user scrolls to the end of the Settings list
-- **THEN** the Data section is shown after the Luck group
+- **THEN** the Data section is shown after the Reminders group
 
 ### Requirement: Settings and their defaults
-The settings and their defaults SHALL be: name, empty; debt limit, 500 coins; subtask ceiling, 10; the coins paid by task tiers 1 to 4, 5, 10, 20 and 40; the Shop price of reward tiers 1 to 4, 20, 50, 120 and 300; critical hit chance, 1 in 8; critical hit multiplier, 2; roll upgrade chance, 1 in 6.
+The settings and their defaults SHALL be: name, empty; debt limit, 500 coins; subtask ceiling, 10; the coins paid by task tiers 1 to 4, 5, 10, 20 and 40; the Shop price of reward tiers 1 to 4, 20, 50, 120 and 300; critical hit chance, 1 in 8; critical hit multiplier, 2; roll upgrade chance, 1 in 6; the hour reminders stop at, 22.
 
 #### Scenario: Defaults match the original rules
 - **WHEN** no setting has been changed
 - **THEN** the debt limit, payouts, prices, subtask limit and chances behave as described in the other specs
+
+#### Scenario: Stop time default
+- **WHEN** no setting has been changed
+- **THEN** "Stop reminders at" shows 22
 
 ### Requirement: Editing a setting
 Tapping a setting SHALL open a bottom-sheet form with the current value, and saving a valid value SHALL apply it at once and keep it. A value that is not valid MUST NOT be saved, and the form MUST say what is wrong. Cancelling leaves the value as it was.
@@ -67,7 +71,7 @@ Each setting SHALL have a Restore control that puts its default back and removes
 - **THEN** the setting counts as the default and its Restore control is disabled
 
 ### Requirement: Value limits
-The name SHALL be trimmed and at most 40 characters long. The debt limit SHALL be a whole number from 0 to 100000. The subtask ceiling SHALL be from 1 to 50. A task tier payout SHALL be from 1 to 1000. A reward tier price SHALL be from 1 to 100000. The critical hit chance and the roll upgrade chance SHALL each be 1 in a whole number from 2 to 1000, and the critical hit multiplier a whole number from 2 to 10.
+The name SHALL be trimmed and at most 40 characters long. The debt limit SHALL be a whole number from 0 to 100000. The subtask ceiling SHALL be from 1 to 50. A task tier payout SHALL be from 1 to 1000. A reward tier price SHALL be from 1 to 100000. The critical hit chance and the roll upgrade chance SHALL each be 1 in a whole number from 2 to 1000, and the critical hit multiplier a whole number from 2 to 10. The hour reminders stop at SHALL be a whole number from 1 to 23.
 
 #### Scenario: Debt limit of zero
 - **WHEN** the user saves a debt limit of 0
@@ -80,6 +84,10 @@ The name SHALL be trimmed and at most 40 characters long. The debt limit SHALL b
 #### Scenario: Long name
 - **WHEN** the user tries to save a name of 41 characters
 - **THEN** nothing is saved and the form says the name can be at most 40 characters
+
+#### Scenario: Stop hour out of range
+- **WHEN** the user tries to save 24 as the hour reminders stop at
+- **THEN** nothing is saved and the form says it must be between 1 and 23
 
 ### Requirement: Tiers stay in order
 Each task tier SHALL pay more than the tier below it, and each reward tier price SHALL be higher than the tier below it, so a value that would break that order MUST NOT be saved and the form MUST say which tier it has to stay above or below.

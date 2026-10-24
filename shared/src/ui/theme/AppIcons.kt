@@ -13,6 +13,16 @@ val TemplatesIcon: ImageVector by lazy {
     themeIcon("Templates") { stroked("M4,6h16M4,12h16M4,18h10") }
 }
 
+/** Three dots in a row, for a row's options. */
+val MoreIcon: ImageVector by lazy {
+    themeIcon("More") {
+        filled(
+            "M3.4,12a1.6,1.6 0 1,0 3.2,0a1.6,1.6 0 1,0 -3.2,0z M10.4,12a1.6,1.6 0 1,0 3.2,0a1.6,1.6 0 1,0 -3.2,0z " +
+                "M17.4,12a1.6,1.6 0 1,0 3.2,0a1.6,1.6 0 1,0 -3.2,0z",
+        )
+    }
+}
+
 val SettingsIcon: ImageVector by lazy {
     themeIcon("Settings") {
         stroked("M4,7h9M17,7h3M4,17h3M11,17h9")

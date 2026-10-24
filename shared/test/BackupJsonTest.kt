@@ -8,6 +8,7 @@ import com.usuallycoding.openadhd.domain.LedgerReason
 import com.usuallycoding.openadhd.domain.PlannedSubtask
 import com.usuallycoding.openadhd.domain.PlannedTask
 import com.usuallycoding.openadhd.domain.Redemption
+import com.usuallycoding.openadhd.domain.Reminder
 import com.usuallycoding.openadhd.domain.RedemptionSource
 import com.usuallycoding.openadhd.domain.RewardTemplate
 import com.usuallycoding.openadhd.domain.RewardTier
@@ -15,6 +16,11 @@ import com.usuallycoding.openadhd.domain.StoreState
 import com.usuallycoding.openadhd.domain.TaskTemplate
 import com.usuallycoding.openadhd.domain.Tier
 import kotlinx.datetime.LocalDate
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonObject
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -36,6 +42,7 @@ class BackupJsonTest {
             PlannedTask(
                 "p1", day, "Clean", Tier.Three, Energy.Low, "t1", null, "Whole flat", 20,
                 listOf(PlannedSubtask("s1", "Dishes", 10, at), PlannedSubtask("s2", "Floor", 10)),
+                Reminder(Instant.parse("2026-10-24T15:00:00Z"), 30),
             ),
             PlannedTask("p2", day, "Taxes", Tier.Four, Energy.High, null, at, reward = 40),
         ),
@@ -203,5 +210,31 @@ class BackupJsonTest {
     @Test
     fun `a valid file has no refusal message`() {
         assertNull((BackupJson.decode(BackupJson.encode(full, at)) as? BackupResult.Invalid)?.message)
+    }
+
+    @Test
+    fun `reminders round trip with and without a repeat`() {
+        val noRepeat = full.copy(planned = listOf(full.planned[0].copy(reminder = Reminder(at, null)), full.planned[1]))
+        val decoded = valid(BackupJson.encode(noRepeat, at)).state
+        assertEquals(Reminder(at, null), decoded.planned[0].reminder)
+        assertNull(decoded.planned[1].reminder)
+        assertEquals(Reminder(Instant.parse("2026-10-24T15:00:00Z"), 30), valid(BackupJson.encode(full, at)).state.planned[0].reminder)
+    }
+
+    @Test
+    fun `a file written before reminders existed still imports`() {
+        val root = Json.parseToJsonElement(BackupJson.encode(full, at)).jsonObject
+        val planned = JsonArray(root.getValue("planned").jsonArray.map { JsonObject(it.jsonObject - "reminderAt" - "reminderRepeatMinutes") })
+        val text = JsonObject(root + ("planned" to planned)).toString()
+        assertFalse(text.contains("reminderAt"))
+        val decoded = valid(text).state
+        assertNull(decoded.planned[0].reminder)
+        assertEquals(full.planned[0].copy(reminder = null), decoded.planned[0])
+    }
+
+    @Test
+    fun `a reminder that repeats at an invalid interval is refused`() {
+        val message = refusal(tampered("\"reminderRepeatMinutes\": 30", "\"reminderRepeatMinutes\": 0"))
+        assertEquals("A reminder repeats at an invalid interval (0).", message)
     }
 }

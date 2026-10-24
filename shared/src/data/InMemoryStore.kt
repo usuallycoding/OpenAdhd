@@ -11,6 +11,7 @@ import com.usuallycoding.openadhd.domain.OpenAdhdStore
 import com.usuallycoding.openadhd.domain.PlannedTask
 import com.usuallycoding.openadhd.domain.Redemption
 import com.usuallycoding.openadhd.domain.RedemptionSource
+import com.usuallycoding.openadhd.domain.Reminder
 import com.usuallycoding.openadhd.domain.GameRules
 import com.usuallycoding.openadhd.domain.RewardTemplate
 import com.usuallycoding.openadhd.domain.RewardTier
@@ -84,6 +85,13 @@ internal class StoreLogic(
     fun assign(state: StoreState, template: TaskTemplate, date: LocalDate): Pair<StoreState, PlannedTask> {
         val task = template.toPlannedTask(date, state.rules)
         return state.copy(planned = state.planned + task) to task
+    }
+
+    /** The state with [reminder] on the entry, or null when the entry is unknown or already completed. */
+    fun setReminder(state: StoreState, id: String, reminder: Reminder?): StoreState? {
+        val entry = state.planned.firstOrNull { it.id == id } ?: return null
+        if (entry.isCompleted) return null
+        return state.copy(planned = state.planned.map { if (it.id == id) it.copy(reminder = reminder) else it })
     }
 
     fun remove(state: StoreState, id: String): StoreState =
@@ -279,6 +287,9 @@ class InMemoryStore(
     }
 
     override suspend fun remove(id: String) = state.update { logic.remove(it, id) }
+
+    override suspend fun setReminder(entryId: String, reminder: Reminder?): Boolean =
+        transition { logic.setReminder(it, entryId, reminder) }
 
     override suspend fun reorderEntries(date: LocalDate, ids: List<String>) =
         state.update { logic.reorderEntries(it, date, ids) }

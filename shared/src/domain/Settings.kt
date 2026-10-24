@@ -36,7 +36,12 @@ data class GameRules(
 }
 
 /** The user's settings: a name, and the [rules] of the game. */
-data class Settings(val name: String = "", val rules: GameRules = GameRules.Default) {
+data class Settings(
+    val name: String = "",
+    val rules: GameRules = GameRules.Default,
+    /** The hour of the day, 1 to 23, at which reminders stop for the day. */
+    val reminderStopHour: Int = 22,
+) {
     /** The title of the top bar. */
     val title: String get() = if (name.isBlank()) "OpenAdhd" else "$name's OpenAdhd"
 
@@ -62,12 +67,14 @@ data class Settings(val name: String = "", val rules: GameRules = GameRules.Defa
         SettingKey.CriticalOneIn -> rules.criticalOneIn.toString()
         SettingKey.CriticalMultiplier -> rules.criticalMultiplier.toString()
         SettingKey.UpgradeOneIn -> rules.upgradeOneIn.toString()
+        SettingKey.ReminderStopHour -> reminderStopHour.toString()
     }
 
     /** These settings with [key] set to [value], which must already be valid (a number for every key but the name). */
     fun with(key: SettingKey, value: String): Settings {
         if (key == SettingKey.Name) return copy(name = value)
         val number = value.toInt()
+        if (key == SettingKey.ReminderStopHour) return copy(reminderStopHour = number)
         fun <T> List<T>.set(index: Int, item: T) = toMutableList().also { it[index] = item }
         return copy(
             rules = when (key) {
@@ -84,7 +91,7 @@ data class Settings(val name: String = "", val rules: GameRules = GameRules.Defa
                 SettingKey.CriticalOneIn -> rules.copy(criticalOneIn = number)
                 SettingKey.CriticalMultiplier -> rules.copy(criticalMultiplier = number)
                 SettingKey.UpgradeOneIn -> rules.copy(upgradeOneIn = number)
-                SettingKey.Name -> rules
+                SettingKey.Name, SettingKey.ReminderStopHour -> rules
             },
         )
     }
@@ -105,7 +112,7 @@ data class Settings(val name: String = "", val rules: GameRules = GameRules.Defa
 }
 
 enum class SettingGroup(val label: String) {
-    Profile("Profile"), Coins("Coins"), Subtasks("Subtasks"), Shop("Shop"), Luck("Luck")
+    Profile("Profile"), Coins("Coins"), Subtasks("Subtasks"), Shop("Shop"), Luck("Luck"), Reminders("Reminders")
 }
 
 /** One editable setting. [storageKey] is the key of its row in the database; [range] is null for the name. */
@@ -128,7 +135,8 @@ enum class SettingKey(
     PriceTier4("reward_price_4", "Tier 4 reward price", SettingGroup.Shop, 1..100_000),
     CriticalOneIn("critical_one_in", "Critical hit chance, 1 in", SettingGroup.Luck, 2..1000),
     CriticalMultiplier("critical_multiplier", "Critical hit multiplier", SettingGroup.Luck, 2..10),
-    UpgradeOneIn("upgrade_one_in", "Roll upgrade chance, 1 in", SettingGroup.Luck, 2..1000);
+    UpgradeOneIn("upgrade_one_in", "Roll upgrade chance, 1 in", SettingGroup.Luck, 2..1000),
+    ReminderStopHour("reminder_stop_hour", "Stop reminders at", SettingGroup.Reminders, 1..23);
 
     val isText: Boolean get() = range == null
 

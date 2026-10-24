@@ -163,6 +163,8 @@ private class PlannedDto(
     val description: String = "",
     val reward: Int,
     val subtasks: List<PlannedSubtaskDto> = emptyList(),
+    val reminderAt: Long? = null,
+    val reminderRepeatMinutes: Int? = null,
 ) {
     fun toDomain(): PlannedTask {
         val day = try {
@@ -171,6 +173,7 @@ private class PlannedDto(
             refuse("A Today entry has a date that is not a date ($date).")
         }
         if (reward < 0 || subtasks.any { it.reward < 0 }) refuse("A Today entry has a negative amount of coins.")
+        if (reminderRepeatMinutes != null && reminderRepeatMinutes <= 0) refuse("A reminder repeats at an invalid interval ($reminderRepeatMinutes).")
         return PlannedTask(
             id = id,
             date = day,
@@ -182,6 +185,7 @@ private class PlannedDto(
             description = description,
             reward = reward,
             subtasks = subtasks.map { PlannedSubtask(it.id, it.title, it.reward, it.completedAt?.let(::instantOf)) },
+            reminder = reminderAt?.let { Reminder(instantOf(it), reminderRepeatMinutes) },
         )
     }
 
@@ -190,6 +194,7 @@ private class PlannedDto(
             t.id, t.date.toString(), t.name, t.tier.level, t.energy.name, t.templateId,
             t.completedAt?.toEpochMilliseconds(), t.description, t.reward,
             t.subtasks.map { PlannedSubtaskDto(it.id, it.title, it.reward, it.completedAt?.toEpochMilliseconds()) },
+            t.reminder?.startAt?.toEpochMilliseconds(), t.reminder?.repeatMinutes,
         )
     }
 }

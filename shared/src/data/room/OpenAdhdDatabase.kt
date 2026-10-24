@@ -21,7 +21,7 @@ import kotlinx.coroutines.Dispatchers
         RedemptionEntity::class,
         SettingEntity::class,
     ],
-    version = 7,
+    version = 8,
     exportSchema = false,
 )
 @ConstructedBy(OpenAdhdDatabaseConstructor::class)
@@ -129,8 +129,16 @@ val Migration6To7: Migration = object : Migration(6, 7) {
     }
 }
 
+/** Version 8 adds an optional reminder to Today entries. Two nullable columns, so existing entries simply have none. */
+val Migration7To8: Migration = object : Migration(7, 8) {
+    override fun migrate(connection: SQLiteConnection) {
+        connection.execSQL("ALTER TABLE planned_tasks ADD COLUMN reminderAtMillis INTEGER")
+        connection.execSQL("ALTER TABLE planned_tasks ADD COLUMN reminderRepeatMinutes INTEGER")
+    }
+}
+
 fun RoomDatabase.Builder<OpenAdhdDatabase>.buildOpenAdhdDatabase(): OpenAdhdDatabase =
     setDriver(BundledSQLiteDriver())
         .setQueryCoroutineContext(Dispatchers.Default)
-        .addMigrations(Migration1To2, Migration2To3, Migration3To4, Migration4To5, Migration5To6, Migration6To7)
+        .addMigrations(Migration1To2, Migration2To3, Migration3To4, Migration4To5, Migration5To6, Migration6To7, Migration7To8)
         .build()

@@ -26,6 +26,16 @@ Two scripts leave their results in `dist/` (ignored by git):
 - macOS: `scripts/package-mac.sh` builds `OpenAdhd.app` and `OpenAdhd.dmg`, with its own Java runtime. It needs a JDK 25 or newer with `jpackage`: it uses `JAVA_HOME` if that is one, otherwise the JDK the Kotlin toolchain downloaded. The app is not signed, so the first time, right-click it and choose Open. Your data stays in `~/.openadhd/` when you replace the app.
 - Android: `scripts/package-android.sh` builds `OpenAdhd.apk` and checks its signature. It is the debug build, signed with the debug key in `~/.android/debug.keystore`. Install it with `adb install -r dist/OpenAdhd.apk`, or copy it to the phone. Build it on the same Mac every time: an APK signed with a different key will not install over the old one.
 
+### Reminders
+
+On Today, a task that is not done yet has a "..." button. Its sheet lets you set one reminder for the task and delete it (while nothing in it is done):
+
+- **Start:** In 30 minutes, In 1 hour, This evening (18:00) or a time you pick.
+- **Repeat:** off, or every 15, 30, 60 or 120 minutes. A reminder repeats until the task is done or the stop time is reached. "Stop reminders at" is in Settings (default 22).
+- Completing the task stops its reminders, unchecking it brings back the ones still to come, and they all end at midnight.
+- The first time you save a reminder the system asks to allow notifications.
+- **Android and iOS** show the notification even when the app is closed (Android also after a restart). On **macOS** the app must be running: a reminder that comes due while it is closed is not shown later.
+
 ### Backup
 
 In Settings, under Data, you can save everything to one JSON file and bring it back:

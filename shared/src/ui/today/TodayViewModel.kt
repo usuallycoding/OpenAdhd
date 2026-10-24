@@ -6,6 +6,11 @@ import com.usuallycoding.openadhd.domain.CompletionResult
 import com.usuallycoding.openadhd.domain.Energy
 import com.usuallycoding.openadhd.domain.OpenAdhdStore
 import com.usuallycoding.openadhd.domain.PlannedTask
+import com.usuallycoding.openadhd.domain.Reminder
+import com.usuallycoding.openadhd.domain.ReminderPreset
+import com.usuallycoding.openadhd.domain.ReminderRules
+import com.usuallycoding.openadhd.domain.ReminderScheduler
+import com.usuallycoding.openadhd.domain.Settings
 import com.usuallycoding.openadhd.domain.TaskPicker
 import com.usuallycoding.openadhd.domain.TaskTemplate
 import com.usuallycoding.openadhd.domain.collapsedIds
@@ -27,12 +32,15 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.datetime.LocalDate
+import kotlinx.datetime.LocalTime
 import kotlinx.datetime.TimeZone
+import kotlinx.datetime.toLocalDateTime
 import kotlinx.datetime.todayIn
 import kotlin.random.Random
 import kotlin.time.Clock
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.seconds
+import kotlin.time.Instant
 
 /** How often the current date is re-checked so the list rolls over at midnight. */
 val DefaultDateCheckInterval = 30.seconds
@@ -59,12 +67,25 @@ sealed interface RandomizerState {
 }
 
 @OptIn(ExperimentalCoroutinesApi::class)
+/** How saving a reminder ended. */
+sealed interface ReminderSaveResult {
+    data object Saved : ReminderSaveResult
+
+    /** Saved, but the system does not let the app show notifications. */
+    data object SavedNotificationsOff : ReminderSaveResult
+
+    data class Refused(val message: String) : ReminderSaveResult
+}
+
+@OptIn(ExperimentalCoroutinesApi::class)
 class TodayViewModel(
     private val store: OpenAdhdStore,
     private val clock: Clock = Clock.System,
     private val timeZone: TimeZone = TimeZone.currentSystemDefault(),
     dateCheckInterval: Duration? = DefaultDateCheckInterval,
     private val random: Random = Random.Default,
+    /** Delivers reminders, or null where there is no way to; then the sheet offers no reminder controls. */
+    private val reminders: ReminderScheduler? = null,
 ) : ViewModel() {
     /** The current local date; re-checked every [dateCheckInterval], or only once when it is null. */
     val today: StateFlow<LocalDate> = flow {
@@ -154,6 +175,44 @@ class TodayViewModel(
 
     fun remove(id: String) {
         viewModelScope.launch { store.remove(id) }
+    }
+
+    /** Whether this platform can deliver reminders at all. */
+    val canRemind: Boolean = reminders != null
+
+    private val reminderStopHour: StateFlow<Int> =
+        store.settings.map { it.reminderStopHour }.stateIn(viewModelScope, SharingStarted.Eagerly, Settings.Default.reminderStopHour)
+
+    /** In 30 minutes, In 1 hour and This evening, measured from now, with the ones that cannot work marked. */
+    fun reminderPresets(): List<ReminderPreset> =
+        ReminderRules.presets(clock.now(), today.value, reminderStopHour.value, timeZone)
+
+    /** The instant of [hour]:[minute] today, for a time picked on the clock. */
+    fun reminderStartAt(hour: Int, minute: Int): Instant = ReminderRules.at(today.value, hour, minute, timeZone)
+
+    /** The current local time, where the clock picker starts. */
+    fun currentTime(): LocalTime = clock.now().toLocalDateTime(timeZone).time
+
+    /**
+     * Saves a reminder for [entryId], starting at [start] and repeating every [repeatMinutes] (or once when null).
+     * A start that cannot work is refused with the reason; otherwise the reminder is saved and, the first time,
+     * permission to show notifications is asked for. A refused permission still saves the reminder.
+     */
+    fun saveReminder(entryId: String, start: Instant, repeatMinutes: Int?, onResult: (ReminderSaveResult) -> Unit) {
+        val problem = ReminderRules.check(start, clock.now(), today.value, reminderStopHour.value, timeZone)
+        if (problem != null) return onResult(ReminderSaveResult.Refused(problem.message))
+        viewModelScope.launch {
+            if (!store.setReminder(entryId, Reminder(start, repeatMinutes))) {
+                onResult(ReminderSaveResult.Refused("This task can no longer have a reminder"))
+                return@launch
+            }
+            val granted = reminders?.ensurePermission() ?: true
+            onResult(if (granted) ReminderSaveResult.Saved else ReminderSaveResult.SavedNotificationsOff)
+        }
+    }
+
+    fun clearReminder(entryId: String) {
+        viewModelScope.launch { store.setReminder(entryId, null) }
     }
 
     private val _randomizer = MutableStateFlow<RandomizerState>(RandomizerState.Closed)

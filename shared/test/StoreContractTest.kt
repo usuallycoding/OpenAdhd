@@ -7,6 +7,7 @@ import com.usuallycoding.openadhd.domain.Energy
 import com.usuallycoding.openadhd.domain.LedgerReason
 import com.usuallycoding.openadhd.domain.OpenAdhdStore
 import com.usuallycoding.openadhd.domain.RedemptionSource
+import com.usuallycoding.openadhd.domain.Reminder
 import com.usuallycoding.openadhd.domain.RewardTier
 import com.usuallycoding.openadhd.domain.SettingKey
 import com.usuallycoding.openadhd.domain.Settings
@@ -28,6 +29,7 @@ import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlin.time.Clock
+import kotlin.time.Duration.Companion.hours
 import kotlin.time.Instant
 
 class FakeClock(var current: Instant = Instant.parse("2026-10-23T10:00:00Z")) : Clock {
@@ -1334,7 +1336,8 @@ abstract class StoreContractTest {
         store.reorderEntries(day1, listOf(cleanEntry.id, store.entriesFor(day1).first().last().id))
         val todayEntry = store.assign(taxes, today)
         store.completeTask(todayEntry.id)
-        store.assign(clean, today)
+        val pendingToday = store.assign(clean, today)
+        check(store.setReminder(pendingToday.id, Reminder(clock.now() + 2.hours, 30)))
 
         val tea = store.createReward("Tea", RewardTier.One, Energy.Low, "Green")
         store.createReward("Dinner", RewardTier.Two, Energy.Medium)
@@ -1445,5 +1448,101 @@ abstract class StoreContractTest {
         val template = store.create("Fresh", Tier.One, Energy.Low)
         assertNotNull(store.completeTask(store.assign(template, today).id))
         assertEquals(5, CoinRules.balance(store.entries.first()))
+    }
+
+    // ---- reminders
+
+    private val reminder get() = Reminder(clock.now() + 2.hours, 30)
+
+    private suspend fun OpenAdhdStore.pendingEntry(subtasks: List<String> = emptyList()) =
+        assign(create("Reminded", Tier.Two, Energy.Low, subtasks = subtasks), today)
+
+    @Test
+    fun `an entry has no reminder until one is set`() = runTest {
+        val store = newStore(clock)
+        assertNull(store.pendingEntry().reminder)
+        assertNull(store.entriesFor(today).first().single().reminder)
+    }
+
+    @Test
+    fun `a reminder is set replaced and removed`() = runTest {
+        val store = newStore(clock)
+        val entry = store.pendingEntry()
+
+        assertTrue(store.setReminder(entry.id, reminder))
+        assertEquals(reminder, store.entriesFor(today).first().single().reminder)
+
+        val other = Reminder(clock.now() + 3.hours, null)
+        assertTrue(store.setReminder(entry.id, other))
+        assertEquals(other, store.entriesFor(today).first().single().reminder)
+
+        assertTrue(store.setReminder(entry.id, null))
+        assertNull(store.entriesFor(today).first().single().reminder)
+    }
+
+    @Test
+    fun `a reminder is refused for an unknown or completed entry`() = runTest {
+        val store = newStore(clock)
+        assertFalse(store.setReminder("missing", reminder))
+
+        val entry = store.pendingEntry()
+        store.completeTask(entry.id)
+        assertFalse(store.setReminder(entry.id, reminder))
+        assertNull(store.entriesFor(today).first().single().reminder)
+    }
+
+    @Test
+    fun `an entry in progress can still get a reminder`() = runTest {
+        val store = newStore(clock)
+        val entry = store.pendingEntry(listOf("A", "B"))
+        store.completeSubtask(entry.subtasks[0].id)
+
+        assertTrue(store.setReminder(entry.id, reminder))
+        assertEquals(reminder, store.entriesFor(today).first().single().reminder)
+    }
+
+    @Test
+    fun `completing keeps the reminder and unchecking brings it back`() = runTest {
+        val store = newStore(clock)
+        val entry = store.pendingEntry()
+        store.setReminder(entry.id, reminder)
+
+        store.completeTask(entry.id)
+        assertEquals(reminder, store.entriesFor(today).first().single().reminder)
+
+        store.uncompleteTask(entry.id)
+        assertEquals(reminder, store.entriesFor(today).first().single().reminder)
+    }
+
+    @Test
+    fun `reminders belong to their entry only`() = runTest {
+        val store = newStore(clock)
+        val first = store.pendingEntry()
+        val second = store.pendingEntry()
+        store.setReminder(first.id, reminder)
+
+        val entries = store.entriesFor(today).first().associateBy { it.id }
+        assertEquals(reminder, entries.getValue(first.id).reminder)
+        assertNull(entries.getValue(second.id).reminder)
+    }
+
+    @Test
+    fun `a removed entry takes its reminder with it`() = runTest {
+        val store = newStore(clock)
+        val entry = store.pendingEntry()
+        store.setReminder(entry.id, reminder)
+        store.remove(entry.id)
+        assertTrue(store.entriesFor(today).first().isEmpty())
+        assertTrue(store.exportData().planned.isEmpty())
+    }
+
+    @Test
+    fun `an exported reminder is imported again`() = runTest {
+        val source = newStore(clock)
+        val entry = source.pendingEntry()
+        source.setReminder(entry.id, reminder)
+        val target = newStore(clock)
+        target.importData(source.exportData())
+        assertEquals(reminder, target.entriesFor(today).first().single().reminder)
     }
 }

@@ -28,6 +28,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.usuallycoding.openadhd.data.AppContainer
 import com.usuallycoding.openadhd.data.InMemoryStore
+import com.usuallycoding.openadhd.domain.ReminderCoordinator
 import com.usuallycoding.openadhd.domain.Settings
 import com.usuallycoding.openadhd.ui.LocalGameRules
 import com.usuallycoding.openadhd.ui.components.ThemeChooser
@@ -74,7 +75,7 @@ fun App(container: AppContainer) {
     var themeMode by rememberSaveable { mutableStateOf(ThemeMode.System) }
     var destination by rememberSaveable { mutableStateOf(Destination.Today) }
 
-    val todayViewModel = viewModel { TodayViewModel(container.store, container.clock, dateCheckInterval = container.dateCheckInterval, random = container.random) }
+    val todayViewModel = viewModel { TodayViewModel(container.store, container.clock, dateCheckInterval = container.dateCheckInterval, random = container.random, reminders = container.reminders) }
     val templatesViewModel = viewModel { TemplatesViewModel(container.store, container.store.settings) }
     val rewardTemplatesViewModel = viewModel { RewardTemplatesViewModel(container.store, container.store.settings) }
     val historyViewModel = viewModel { HistoryViewModel(container.store, todayViewModel.today) }
@@ -84,6 +85,12 @@ fun App(container: AppContainer) {
     val settingsViewModel = viewModel { SettingsViewModel(container.store, container.files, container.clock) }
     val balance by walletViewModel.balance.collectAsStateWithLifecycle()
     val settings by container.store.settings.collectAsStateWithLifecycle(Settings.Default)
+
+    // Keeps the platform's notifications equal to the reminders in the store, for as long as the app is shown.
+    LaunchedEffect(container) {
+        val scheduler = container.reminders ?: return@LaunchedEffect
+        ReminderCoordinator(container.store, scheduler, container.clock, todayViewModel.today).run()
+    }
 
     // App never leaves composition, so these keep each screen's selected tab while the app runs.
     val todayPager = rememberPagerState { 2 }
@@ -121,6 +128,11 @@ fun App(container: AppContainer) {
         todayViewModel.criticalHits.collect { hit ->
             snackbarHostState.showSnackbar("Critical hit! +${hit.bonus} bonus coins")
         }
+    }
+
+    // Where the platform cannot show a system notification (the desktop without a system tray), reminders show here.
+    LaunchedEffect(container) {
+        container.reminderNotices.collect { text -> snackbarHostState.showSnackbar("Still to do: $text") }
     }
 
     LaunchedEffect(todayViewModel) {

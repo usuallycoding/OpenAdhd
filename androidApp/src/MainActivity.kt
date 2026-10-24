@@ -9,7 +9,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import com.usuallycoding.openadhd.data.createAndroidContainer
 
 class MainActivity : ComponentActivity() {
-    private val container by lazy { createAndroidContainer(this, AndroidDataFiles(this)) }
+    private val container by lazy { createAndroidContainer(this, AndroidDataFiles(this), AndroidReminderScheduler(this)) }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge()

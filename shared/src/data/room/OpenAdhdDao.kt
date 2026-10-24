@@ -15,6 +15,7 @@ import com.usuallycoding.openadhd.domain.Settings
 import com.usuallycoding.openadhd.domain.checkSetting
 import com.usuallycoding.openadhd.domain.LedgerReason
 import com.usuallycoding.openadhd.domain.RedemptionSource
+import com.usuallycoding.openadhd.domain.Reminder
 import com.usuallycoding.openadhd.domain.RewardRules
 import com.usuallycoding.openadhd.domain.RewardTier
 import com.usuallycoding.openadhd.domain.StoreState
@@ -232,6 +233,22 @@ abstract class OpenAdhdDao {
     @Transaction
     @Query("SELECT * FROM planned_tasks WHERE date = :date ORDER BY position, rowid")
     abstract fun plannedFor(date: String): Flow<List<PlannedWithSubtasks>>
+
+    @Transaction
+    @Query("SELECT * FROM planned_tasks WHERE id = :id")
+    abstract suspend fun plannedById(id: String): PlannedWithSubtasks?
+
+    @Query("UPDATE planned_tasks SET reminderAtMillis = :at, reminderRepeatMinutes = :repeatMinutes WHERE id = :id")
+    abstract suspend fun updateReminder(id: String, at: Long?, repeatMinutes: Int?)
+
+    /** Sets or clears an entry's reminder; false, changing nothing, when the entry is unknown or already completed. */
+    @Transaction
+    open suspend fun setReminder(id: String, reminder: Reminder?): Boolean {
+        val entry = plannedById(id)?.toDomain() ?: return false
+        if (entry.isCompleted) return false
+        updateReminder(id, reminder?.startAt?.toEpochMilliseconds(), reminder?.repeatMinutes)
+        return true
+    }
 
     @Query("SELECT DISTINCT date FROM planned_tasks")
     abstract fun plannedDates(): Flow<List<String>>

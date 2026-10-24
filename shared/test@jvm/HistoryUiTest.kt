@@ -129,7 +129,7 @@ class HistoryUiTest {
         openHistory(store)
 
         onAllNodes(isToggleable() and isEnabled()).assertCountEquals(0)
-        onNodeWithContentDescription("Remove Water plants from today").assertDoesNotExist()
+        onNodeWithContentDescription("Options for Water plants").assertDoesNotExist()
         onNodeWithContentDescription("Move Water plants up").assertDoesNotExist()
         onNodeWithContentDescription("Move Water plants down").assertDoesNotExist()
         onNodeWithContentDescription("Add task to today").assertDoesNotExist()

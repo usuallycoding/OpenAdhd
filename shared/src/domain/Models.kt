@@ -49,6 +49,8 @@ data class PlannedTask(
     val description: String = "",
     val reward: Int = CoinRules.baseReward(tier),
     val subtasks: List<PlannedSubtask> = emptyList(),
+    /** A reminder that fires until the task is done; kept while the task is completed, so unchecking brings it back. */
+    val reminder: Reminder? = null,
 ) {
     val isCompleted: Boolean
         get() = if (subtasks.isEmpty()) completedAt != null else subtasks.all { it.isCompleted }

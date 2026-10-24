@@ -11,6 +11,7 @@ import com.usuallycoding.openadhd.domain.LedgerReason
 import com.usuallycoding.openadhd.domain.PlannedSubtask
 import com.usuallycoding.openadhd.domain.PlannedTask
 import com.usuallycoding.openadhd.domain.Redemption
+import com.usuallycoding.openadhd.domain.Reminder
 import com.usuallycoding.openadhd.domain.RedemptionSource
 import com.usuallycoding.openadhd.domain.GameRules
 import com.usuallycoding.openadhd.domain.RewardRules
@@ -59,6 +60,8 @@ data class PlannedTaskEntity(
     @ColumnInfo(defaultValue = "''") val description: String,
     @ColumnInfo(defaultValue = "0") val reward: Int,
     @ColumnInfo(defaultValue = "0") val position: Int = 0,
+    val reminderAtMillis: Long? = null,
+    val reminderRepeatMinutes: Int? = null,
 )
 
 @Entity(tableName = "planned_subtasks")
@@ -145,11 +148,14 @@ internal fun PlannedWithSubtasks.toDomain() = PlannedTask(
     subtasks = subtasks.sortedBy { it.position }.map {
         PlannedSubtask(it.id, it.title, it.reward, it.completedAtMillis?.let(Instant::fromEpochMilliseconds))
     },
+    reminder = task.reminderAtMillis?.let { Reminder(Instant.fromEpochMilliseconds(it), task.reminderRepeatMinutes) },
 )
 
 internal fun PlannedTask.toEntity() = PlannedTaskEntity(
     id, date.toString(), name, tier.level, energy.name, templateId,
     completedAt?.toEpochMilliseconds(), description, reward,
+    reminderAtMillis = reminder?.startAt?.toEpochMilliseconds(),
+    reminderRepeatMinutes = reminder?.repeatMinutes,
 )
 
 internal fun PlannedTask.subtaskEntities() = subtasks.mapIndexed { index, subtask ->

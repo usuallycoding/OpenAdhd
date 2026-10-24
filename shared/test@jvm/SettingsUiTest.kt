@@ -62,11 +62,14 @@ class SettingsUiTest {
     @Test
     fun `the later groups are further down the list`() = runComposeUiTest {
         openSettings()
-        for (label in listOf("Most subtasks per task", "Tier 4 reward price", "Critical hit multiplier", "Roll upgrade chance, 1 in")) {
+        for (label in listOf("Most subtasks per task", "Tier 4 reward price", "Critical hit multiplier", "Roll upgrade chance, 1 in", "Stop reminders at")) {
             onNode(hasScrollAction()).performScrollToNode(hasText(label))
             onNodeWithText(label).assertExists()
         }
         onNodeWithText("Luck").assertExists()
+        onNode(hasScrollAction()).performScrollToNode(hasText("Stop reminders at"))
+        onNodeWithText("Reminders").assertExists()
+        onNodeWithText("22").assertExists()
     }
 
     @Test

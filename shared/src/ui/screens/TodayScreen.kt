@@ -52,6 +52,7 @@ import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.usuallycoding.openadhd.domain.CoinRules
+import com.usuallycoding.openadhd.domain.ReminderRules
 import com.usuallycoding.openadhd.ui.LocalGameRules
 import com.usuallycoding.openadhd.domain.Energy
 import com.usuallycoding.openadhd.domain.PlannedSubtask
@@ -64,7 +65,7 @@ import com.usuallycoding.openadhd.ui.components.MoveButtons
 import com.usuallycoding.openadhd.ui.theme.AddIcon
 import com.usuallycoding.openadhd.ui.theme.ChevronIcon
 import com.usuallycoding.openadhd.ui.theme.ClearIcon
-import com.usuallycoding.openadhd.ui.theme.DeleteIcon
+import com.usuallycoding.openadhd.ui.theme.MoreIcon
 import com.usuallycoding.openadhd.ui.theme.DiceIcon
 import com.usuallycoding.openadhd.ui.today.RandomizerState
 import com.usuallycoding.openadhd.ui.history.HistoryViewModel
@@ -130,6 +131,14 @@ private fun TodayList(viewModel: TodayViewModel, modifier: Modifier = Modifier) 
         onAcceptSuggestion = viewModel::acceptSuggestion,
         onChooseAnotherEnergy = viewModel::chooseAnotherEnergy,
         onDismissRandomizer = viewModel::dismissRandomizer,
+        reminders = ReminderActions(
+            available = viewModel.canRemind,
+            presets = viewModel::reminderPresets,
+            startAt = viewModel::reminderStartAt,
+            currentTime = viewModel::currentTime,
+            save = viewModel::saveReminder,
+            clear = viewModel::clearReminder,
+        ),
         modifier = modifier,
     )
 }
@@ -158,8 +167,10 @@ fun TodayContent(
     onAcceptSuggestion: () -> Unit = {},
     onChooseAnotherEnergy: () -> Unit = {},
     onDismissRandomizer: () -> Unit = {},
+    reminders: ReminderActions = ReminderActions.None,
 ) {
     var picking by remember { mutableStateOf(false) }
+    var optionsFor by remember { mutableStateOf<String?>(null) }
 
     Box(modifier.fillMaxSize()) {
         if (entries.isEmpty()) {
@@ -186,7 +197,7 @@ fun TodayContent(
                         onMoveUp = { onMoveUp(entry.id) },
                         onMoveDown = { onMoveDown(entry.id) },
                         onToggleExpanded = { onToggleCollapsed(entry.id) },
-                        onRemove = onRemove,
+                        onOptions = { optionsFor = it },
                         onCompleteTask = onCompleteTask,
                         onCompleteSubtask = onCompleteSubtask,
                         onUncompleteTask = onUncompleteTask,
@@ -222,6 +233,16 @@ fun TodayContent(
         onDismiss = onDismissRandomizer,
     )
 
+    entries.firstOrNull { it.id == optionsFor && !it.isCompleted }?.let { entry ->
+        EntrySheet(
+            entry = entry,
+            reminders = reminders,
+            timeZone = timeZone,
+            onDelete = { onRemove(entry.id) },
+            onDismiss = { optionsFor = null },
+        )
+    }
+
     if (picking) {
         TemplatePickerDialog(
             templates = templates,
@@ -245,7 +266,8 @@ internal fun EntryItem(
     canMoveDown: Boolean = false,
     onMoveUp: () -> Unit = {},
     onMoveDown: () -> Unit = {},
-    onRemove: (String) -> Unit = {},
+    /** Opens the entry's options; the "..." button is shown only while this is set and the entry is not completed. */
+    onOptions: ((String) -> Unit)? = null,
     onCompleteTask: (String) -> Unit = {},
     onCompleteSubtask: (String) -> Unit = {},
     onUncompleteTask: (String) -> Unit = {},
@@ -284,15 +306,17 @@ internal fun EntryItem(
             Column {
                 if (entry.description.isNotBlank()) Text(entry.description)
                 Text(entry.summary(timeZone))
+                val reminder = entry.reminder
+                if (reminder != null && !entry.isCompleted && !readOnly) Text(ReminderRules.summary(reminder, timeZone))
             }
         },
         trailingContent = if (reordering) {
             if (entry.isCompleted) null else ({ MoveButtons(entry.name, canMoveUp, canMoveDown, onMoveUp, onMoveDown) })
-        } else if (readOnly || entry.hasProgress) {
+        } else if (readOnly || entry.isCompleted || onOptions == null) {
             null
         } else ({
-            IconButton(onClick = { onRemove(entry.id) }) {
-                Icon(DeleteIcon, contentDescription = "Remove ${entry.name} from today")
+            IconButton(onClick = { onOptions(entry.id) }) {
+                Icon(MoreIcon, contentDescription = "Options for ${entry.name}")
             }
         }),
     )

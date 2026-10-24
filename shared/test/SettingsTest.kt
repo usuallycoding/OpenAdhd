@@ -62,6 +62,26 @@ class SettingsTest {
     }
 
     @Test
+    fun `the reminder stop hour defaults to 22 and accepts 1 to 23`() {
+        assertEquals(22, defaults.reminderStopHour)
+        assertEquals("22", defaults.text(SettingKey.ReminderStopHour))
+        assertEquals(1, accepted(SettingKey.ReminderStopHour, "1").reminderStopHour)
+        assertEquals(23, accepted(SettingKey.ReminderStopHour, "23").reminderStopHour)
+        assertEquals("Stop reminders at must be between 1 and 23", refusal(SettingKey.ReminderStopHour, "24"))
+        assertEquals("Stop reminders at must be between 1 and 23", refusal(SettingKey.ReminderStopHour, "0"))
+        assertEquals("Enter a whole number", refusal(SettingKey.ReminderStopHour, "late"))
+    }
+
+    @Test
+    fun `a saved stop hour is read back from the overrides and leaves the rules alone`() {
+        val settings = Settings.fromOverrides(mapOf("reminder_stop_hour" to "18"))
+        assertEquals(18, settings.reminderStopHour)
+        assertEquals(GameRules.Default, settings.rules)
+        assertEquals(mapOf("reminder_stop_hour" to "18"), settings.overrides)
+        assertEquals(22, Settings.fromOverrides(mapOf("reminder_stop_hour" to "30")).reminderStopHour)
+    }
+
+    @Test
     fun `the title carries the name`() {
         assertEquals("Sam's OpenAdhd", Settings(name = "Sam").title)
         assertEquals("OpenAdhd", Settings(name = "  ").title)
