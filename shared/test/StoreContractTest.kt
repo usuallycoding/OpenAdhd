@@ -101,6 +101,22 @@ abstract class StoreContractTest {
     }
 
     @Test
+    fun `days with entries follow the entries`() = runTest {
+        val store = newStore(clock)
+        assertTrue(store.daysWithEntries.first().isEmpty())
+        val template = store.create("Walk", Tier.One, Energy.Low)
+        val yesterday = today.minus(1, DateTimeUnit.DAY)
+        val first = store.assign(template, yesterday)
+        val second = store.assign(template, yesterday)
+        store.assign(template, today)
+        assertEquals(setOf(yesterday, today), store.daysWithEntries.first())
+        store.remove(first.id)
+        assertEquals(setOf(yesterday, today), store.daysWithEntries.first())
+        store.remove(second.id)
+        assertEquals(setOf(today), store.daysWithEntries.first())
+    }
+
+    @Test
     fun `completing awards the tier reward and records a ledger entry`() = runTest {
         val store = newStore(clock)
         val template = store.create("Taxes", Tier.Three, Energy.High)

@@ -227,6 +227,8 @@ class InMemoryStore(
     override fun entriesFor(date: LocalDate): Flow<List<PlannedTask>> =
         state.map { s -> s.planned.filter { it.date == date } }
 
+    override val daysWithEntries: Flow<Set<LocalDate>> = state.map { s -> s.planned.map { it.date }.toSet() }
+
     override suspend fun create(
         name: String,
         tier: Tier,

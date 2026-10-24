@@ -9,6 +9,9 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.PagerState
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -23,12 +26,15 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SmallFloatingActionButton
+import androidx.compose.material3.Tab
+import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -52,14 +58,43 @@ import com.usuallycoding.openadhd.ui.theme.ChevronIcon
 import com.usuallycoding.openadhd.ui.theme.DeleteIcon
 import com.usuallycoding.openadhd.ui.theme.DiceIcon
 import com.usuallycoding.openadhd.ui.today.RandomizerState
+import com.usuallycoding.openadhd.ui.history.HistoryViewModel
 import com.usuallycoding.openadhd.ui.today.TodayViewModel
+import kotlinx.coroutines.launch
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.toLocalDateTime
 import kotlinx.datetime.TimeZone
 import kotlin.time.Instant
 
 @Composable
-fun TodayScreen(viewModel: TodayViewModel, modifier: Modifier = Modifier) {
+fun TodayScreen(
+    viewModel: TodayViewModel,
+    historyViewModel: HistoryViewModel,
+    modifier: Modifier = Modifier,
+    pagerState: PagerState = rememberPagerState { 2 },
+) {
+    val scope = rememberCoroutineScope()
+    Column(modifier) {
+        TabRow(selectedTabIndex = pagerState.currentPage) {
+            Tab(
+                selected = pagerState.currentPage == 0,
+                onClick = { scope.launch { pagerState.animateScrollToPage(0) } },
+                text = { Text("Today") },
+            )
+            Tab(
+                selected = pagerState.currentPage == 1,
+                onClick = { scope.launch { pagerState.animateScrollToPage(1) } },
+                text = { Text("History") },
+            )
+        }
+        HorizontalPager(state = pagerState, modifier = Modifier.fillMaxSize()) { page ->
+            if (page == 0) TodayList(viewModel) else HistoryScreen(historyViewModel)
+        }
+    }
+}
+
+@Composable
+private fun TodayList(viewModel: TodayViewModel, modifier: Modifier = Modifier) {
     val entries by viewModel.entries.collectAsStateWithLifecycle()
     val templates by viewModel.templates.collectAsStateWithLifecycle()
     val randomizer by viewModel.randomizer.collectAsStateWithLifecycle()
@@ -188,21 +223,24 @@ fun TodayContent(
 }
 
 @Composable
-private fun EntryItem(
+internal fun EntryItem(
     entry: PlannedTask,
     expanded: Boolean,
-    reordering: Boolean,
-    canMoveUp: Boolean,
-    canMoveDown: Boolean,
-    onMoveUp: () -> Unit,
-    onMoveDown: () -> Unit,
     onToggleExpanded: () -> Unit,
-    onRemove: (String) -> Unit,
-    onCompleteTask: (String) -> Unit,
-    onCompleteSubtask: (String) -> Unit,
-    onUncompleteTask: (String) -> Unit,
-    onUncompleteSubtask: (String) -> Unit,
     timeZone: TimeZone,
+    modifier: Modifier = Modifier,
+    /** Shows the entry as a record: checkboxes only display state, and nothing can be removed, moved or completed. */
+    readOnly: Boolean = false,
+    reordering: Boolean = false,
+    canMoveUp: Boolean = false,
+    canMoveDown: Boolean = false,
+    onMoveUp: () -> Unit = {},
+    onMoveDown: () -> Unit = {},
+    onRemove: (String) -> Unit = {},
+    onCompleteTask: (String) -> Unit = {},
+    onCompleteSubtask: (String) -> Unit = {},
+    onUncompleteTask: (String) -> Unit = {},
+    onUncompleteSubtask: (String) -> Unit = {},
 ) {
     val hasSubtasks = entry.subtasks.isNotEmpty()
     // While reordering a row is only a name to move: nothing can be completed, removed or expanded.
@@ -211,11 +249,11 @@ private fun EntryItem(
     ListItem(
         // Tapping the header of an entry with subtasks shows or hides them; entries without subtasks are not tappable.
         modifier = if (hasSubtasks && !reordering) {
-            Modifier
+            modifier
                 .clickable(onClickLabel = if (expanded) "Collapse" else "Expand", onClick = onToggleExpanded)
                 .semantics { stateDescription = if (expanded) "Expanded" else "Collapsed" }
         } else {
-            Modifier
+            modifier
         },
         leadingContent = if (reordering) {
             null
@@ -224,7 +262,10 @@ private fun EntryItem(
         } else ({
             Checkbox(
                 checked = entry.isCompleted,
-                onCheckedChange = { if (entry.isCompleted) onUncompleteTask(entry.id) else onCompleteTask(entry.id) },
+                onCheckedChange = if (readOnly) null else { _ ->
+                    if (entry.isCompleted) onUncompleteTask(entry.id) else onCompleteTask(entry.id)
+                },
+                enabled = !readOnly,
             )
         }),
         headlineContent = {
@@ -238,7 +279,7 @@ private fun EntryItem(
         },
         trailingContent = if (reordering) {
             if (entry.isCompleted) null else ({ MoveButtons(entry.name, canMoveUp, canMoveDown, onMoveUp, onMoveDown) })
-        } else if (entry.hasProgress) {
+        } else if (readOnly || entry.hasProgress) {
             null
         } else ({
             IconButton(onClick = { onRemove(entry.id) }) {
@@ -251,6 +292,7 @@ private fun EntryItem(
             entry.subtasks.forEach { subtask ->
                 SubtaskItem(
                     subtask,
+                    readOnly = readOnly,
                     onToggle = { if (subtask.isCompleted) onUncompleteSubtask(subtask.id) else onCompleteSubtask(subtask.id) },
                 )
             }
@@ -259,12 +301,13 @@ private fun EntryItem(
 }
 
 @Composable
-private fun SubtaskItem(subtask: PlannedSubtask, onToggle: () -> Unit) {
+private fun SubtaskItem(subtask: PlannedSubtask, readOnly: Boolean, onToggle: () -> Unit) {
     ListItem(
         leadingContent = {
             Checkbox(
                 checked = subtask.isCompleted,
-                onCheckedChange = { onToggle() },
+                onCheckedChange = if (readOnly) null else { _ -> onToggle() },
+                enabled = !readOnly,
             )
         },
         headlineContent = {
@@ -275,7 +318,7 @@ private fun SubtaskItem(subtask: PlannedSubtask, onToggle: () -> Unit) {
     )
 }
 
-private fun PlannedTask.summary(timeZone: TimeZone): String {
+internal fun PlannedTask.summary(timeZone: TimeZone): String {
     val base = "Tier ${tier.level} · ${energy.name} energy"
     val progress = if (subtasks.isEmpty()) {
         "$base · +$reward coins"

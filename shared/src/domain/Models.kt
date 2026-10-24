@@ -117,3 +117,16 @@ data class Redemption(
     /** A roll that gave a reward from a higher tier than the one rolled. */
     val isLuckyUpgrade: Boolean get() = rolledTier != null && tier.level > rolledTier.level
 }
+
+/** Pending entries first in the order the user put them, then completed ones, the most recently done first. */
+fun List<PlannedTask>.pendingThenDone(): List<PlannedTask> {
+    val (done, pending) = partition { it.isCompleted }
+    return pending + done.sortedByDescending { it.doneAt }
+}
+
+/**
+ * Ids of entries with subtasks whose subtasks are hidden. A pending entry is expanded and a completed one
+ * collapsed unless its id is in [flipped], which turns that default around.
+ */
+fun List<PlannedTask>.collapsedIds(flipped: Set<String>): Set<String> =
+    filter { it.subtasks.isNotEmpty() && (it.id in flipped) == !it.isCompleted }.map { it.id }.toSet()

@@ -30,6 +30,9 @@ interface TemplateRepository {
 interface PlannerRepository {
     fun entriesFor(date: LocalDate): Flow<List<PlannedTask>>
 
+    /** Every day that has at least one entry, today included. */
+    val daysWithEntries: Flow<Set<LocalDate>>
+
     /** Copies the template onto [date], freezing the coin reward of the task and of each subtask. */
     suspend fun assign(template: TaskTemplate, date: LocalDate): PlannedTask
 

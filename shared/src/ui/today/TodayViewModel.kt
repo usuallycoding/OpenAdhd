@@ -8,7 +8,9 @@ import com.usuallycoding.openadhd.domain.OpenAdhdStore
 import com.usuallycoding.openadhd.domain.PlannedTask
 import com.usuallycoding.openadhd.domain.TaskPicker
 import com.usuallycoding.openadhd.domain.TaskTemplate
+import com.usuallycoding.openadhd.domain.collapsedIds
 import com.usuallycoding.openadhd.domain.moved
+import com.usuallycoding.openadhd.domain.pendingThenDone
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -76,10 +78,7 @@ class TodayViewModel(
     /** Pending entries first in the order the user put them, then completed ones, the most recently done first. */
     val entries: StateFlow<List<PlannedTask>> =
         today.flatMapLatest { store.entriesFor(it) }
-            .map { list ->
-                val (done, pending) = list.partition { it.isCompleted }
-                pending + done.sortedByDescending { it.doneAt }
-            }
+            .map { it.pendingThenDone() }
             .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
 
     /** Whether at least two entries are pending, so there is an order to change. */
@@ -130,9 +129,7 @@ class TodayViewModel(
      * collapsed; tapping flips an entry away from that, and it goes back to its default whenever it becomes
      * completed or pending again. Kept in memory only.
      */
-    val collapsedEntryIds: StateFlow<Set<String>> = combine(flippedEntryIds, entries) { flipped, list ->
-        list.filter { it.subtasks.isNotEmpty() && (it.id in flipped) == !it.isCompleted }.map { it.id }.toSet()
-    }.stateIn(viewModelScope, SharingStarted.Eagerly, emptySet())
+    val collapsedEntryIds: StateFlow<Set<String>> = combine(flippedEntryIds, entries) { flipped, list -> list.collapsedIds(flipped) }.stateIn(viewModelScope, SharingStarted.Eagerly, emptySet())
 
     fun toggleCollapsed(entryId: String) {
         flippedEntryIds.update { if (entryId in it) it - entryId else it + entryId }

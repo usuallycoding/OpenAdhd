@@ -35,6 +35,9 @@ class RoomStore(
     override fun entriesFor(date: LocalDate): Flow<List<PlannedTask>> =
         dao.plannedFor(date.toString()).map { list -> list.map { it.toDomain() } }
 
+    override val daysWithEntries: Flow<Set<LocalDate>> =
+        dao.plannedDates().map { list -> list.map { LocalDate.parse(it) }.toSet() }
+
     override suspend fun create(
         name: String,
         tier: Tier,

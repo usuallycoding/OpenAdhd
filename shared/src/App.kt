@@ -42,6 +42,7 @@ import com.usuallycoding.openadhd.ui.theme.ShopIcon
 import com.usuallycoding.openadhd.ui.theme.TemplatesIcon
 import com.usuallycoding.openadhd.ui.theme.ThemeMode
 import com.usuallycoding.openadhd.ui.theme.TodayIcon
+import com.usuallycoding.openadhd.ui.history.HistoryViewModel
 import com.usuallycoding.openadhd.ui.today.TodayViewModel
 import com.usuallycoding.openadhd.ui.wallet.WalletViewModel
 import org.jetbrains.compose.reload.DevelopmentEntryPoint
@@ -69,15 +70,17 @@ fun App(container: AppContainer) {
     val todayViewModel = viewModel { TodayViewModel(container.store, container.clock, dateCheckInterval = container.dateCheckInterval, random = container.random) }
     val templatesViewModel = viewModel { TemplatesViewModel(container.store) }
     val rewardTemplatesViewModel = viewModel { RewardTemplatesViewModel(container.store) }
+    val historyViewModel = viewModel { HistoryViewModel(container.store, todayViewModel.today) }
     val shopViewModel = viewModel { ShopViewModel(container.store) }
     val walletViewModel = viewModel { WalletViewModel(container.store) }
     val balance by walletViewModel.balance.collectAsStateWithLifecycle()
 
     // App never leaves composition, so these keep each screen's selected tab while the app runs.
+    val todayPager = rememberPagerState { 2 }
     val templatesPager = rememberPagerState { 2 }
     val shopPager = rememberPagerState { 2 }
 
-    // The Reorder toggle in the top bar belongs to whichever list is on screen: Today, or the shown Templates tab.
+    // The Reorder toggle in the top bar belongs to whichever list is on screen: Today (not its History tab), or the shown Templates tab.
     val todayReordering by todayViewModel.reordering.collectAsStateWithLifecycle()
     val todayCanReorder by todayViewModel.canReorder.collectAsStateWithLifecycle()
     val templatesReordering by templatesViewModel.reordering.collectAsStateWithLifecycle()
@@ -85,7 +88,8 @@ fun App(container: AppContainer) {
     val rewardsReordering by rewardTemplatesViewModel.reordering.collectAsStateWithLifecycle()
     val rewardsCanReorder by rewardTemplatesViewModel.canReorder.collectAsStateWithLifecycle()
     val reorderToggle: ReorderToggle? = when (destination) {
-        Destination.Today -> ReorderToggle(todayReordering, todayCanReorder, todayViewModel::setReordering)
+        Destination.Today ->
+            if (todayPager.currentPage == 0) ReorderToggle(todayReordering, todayCanReorder, todayViewModel::setReordering) else null
         Destination.Templates ->
             if (templatesPager.currentPage == 0) {
                 ReorderToggle(templatesReordering, templatesCanReorder, templatesViewModel::setReordering)
@@ -95,7 +99,7 @@ fun App(container: AppContainer) {
         Destination.Shop -> null
     }
     // Leaving a list ends its Reorder mode, so it is never left on out of sight.
-    LaunchedEffect(destination, templatesPager.currentPage) {
+    LaunchedEffect(destination, todayPager.currentPage, templatesPager.currentPage) {
         todayViewModel.setReordering(false)
         templatesViewModel.setReordering(false)
         rewardTemplatesViewModel.setReordering(false)
@@ -157,7 +161,7 @@ fun App(container: AppContainer) {
         ) { innerPadding ->
             val screenModifier = Modifier.padding(innerPadding)
             when (destination) {
-                Destination.Today -> TodayScreen(todayViewModel, screenModifier)
+                Destination.Today -> TodayScreen(todayViewModel, historyViewModel, screenModifier, todayPager)
                 Destination.Templates -> TemplatesScreen(templatesViewModel, rewardTemplatesViewModel, screenModifier, templatesPager)
                 Destination.Shop -> ShopScreen(shopViewModel, screenModifier, shopPager)
             }

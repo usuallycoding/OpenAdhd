@@ -84,6 +84,9 @@ abstract class OpenAdhdDao {
     @Query("SELECT * FROM planned_tasks WHERE date = :date ORDER BY position, rowid")
     abstract fun plannedFor(date: String): Flow<List<PlannedWithSubtasks>>
 
+    @Query("SELECT DISTINCT date FROM planned_tasks")
+    abstract fun plannedDates(): Flow<List<String>>
+
     @Insert
     abstract suspend fun insertPlanned(task: PlannedTaskEntity)
 
