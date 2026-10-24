@@ -60,7 +60,7 @@ internal class StoreLogic(
         subtasks: List<String>,
     ): Pair<StoreState, TaskTemplate> {
         val template = TaskTemplate(newId(), name, tier, energy, description, subtasks).validated()
-        return state.copy(templates = state.templates + template) to template
+        return state.copy(templates = listOf(template) + state.templates) to template
     }
 
     fun update(state: StoreState, template: TaskTemplate): StoreState {
@@ -147,7 +147,7 @@ internal class StoreLogic(
         customPrice: Int?,
     ): Pair<StoreState, RewardTemplate> {
         val reward = RewardTemplate(newId(), name, tier, energy, description, customPrice).validated()
-        return state.copy(rewards = state.rewards + reward) to reward
+        return state.copy(rewards = listOf(reward) + state.rewards) to reward
     }
 
     fun updateReward(state: StoreState, reward: RewardTemplate): StoreState {

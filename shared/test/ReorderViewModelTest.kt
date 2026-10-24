@@ -41,9 +41,10 @@ class ReorderViewModelTest {
 
     @Test
     fun `task templates move up and down and the order is saved`() = runTest {
-        val a = store.create("A", Tier.One, Energy.Low)
-        val b = store.create("B", Tier.One, Energy.Low)
+        // New templates go to the top, so they are created last to first to get the list A, B, C.
         val c = store.create("C", Tier.One, Energy.Low)
+        val b = store.create("B", Tier.One, Energy.Low)
+        val a = store.create("A", Tier.One, Energy.Low)
         val vm = TemplatesViewModel(store)
         vm.moveDown(a.id)
         assertEquals(listOf("B", "A", "C"), vm.templates.value.map { it.name })
@@ -78,8 +79,8 @@ class ReorderViewModelTest {
 
     @Test
     fun `reward templates move and the mode follows the item count`() = runTest {
-        val a = store.createReward("A", RewardTier.One, Energy.Low)
         store.createReward("B", RewardTier.Two, Energy.Low)
+        val a = store.createReward("A", RewardTier.One, Energy.Low)
         val vm = RewardTemplatesViewModel(store)
         vm.setReordering(true)
         assertTrue(vm.reordering.value)

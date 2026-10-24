@@ -226,7 +226,7 @@ class RoomMigrationTest {
     }
 
     @Test
-    fun `upgrading from version 4 keeps every list in its order and puts new items last`() = runTest {
+    fun `upgrading from version 4 keeps every list in its order and puts new templates first`() = runTest {
         val database = Room.databaseBuilder<OpenAdhdDatabase>(createVersion4Database()).buildOpenAdhdDatabase()
         val store = RoomStore(database)
 
@@ -238,12 +238,13 @@ class RoomMigrationTest {
         store.create("New", Tier.One, Energy.Low)
         store.createReward("Walk", RewardTier.One, Energy.Low)
         store.assign(store.templates.first().first(), day)
-        assertEquals(listOf("Zeta", "Mu", "Alpha", "New"), store.templates.first().map { it.name })
-        assertEquals(listOf("Movie", "Tea", "Walk"), store.rewards.first().map { it.name })
-        assertEquals(listOf("Third", "Second", "Zeta"), store.entriesFor(day).first().map { it.name })
+        assertEquals(listOf("New", "Zeta", "Mu", "Alpha"), store.templates.first().map { it.name })
+        assertEquals(listOf("Walk", "Movie", "Tea"), store.rewards.first().map { it.name })
+        // a task added to today still goes after the entries already there
+        assertEquals(listOf("Third", "Second", "New"), store.entriesFor(day).first().map { it.name })
 
         store.reorderTemplates(listOf("a"))
-        assertEquals(listOf("Alpha", "Zeta", "Mu", "New"), store.templates.first().map { it.name })
+        assertEquals(listOf("Alpha", "New", "Zeta", "Mu"), store.templates.first().map { it.name })
         database.close()
     }
 

@@ -38,8 +38,12 @@ class RandomizerViewModelTest {
     private fun viewModel(vararg draws: Int) =
         TodayViewModel(store, clock, TimeZone.UTC, dateCheckInterval = null, random = ScriptedRandom(*draws))
 
-    private suspend fun template(name: String, energy: Energy, tier: Tier = Tier.Two): TaskTemplate =
-        store.create(name, tier, energy)
+    /** Creates a template and moves it to the end, so the templates stay in the order the tests write them. */
+    private suspend fun template(name: String, energy: Energy, tier: Tier = Tier.Two): TaskTemplate {
+        val created = store.create(name, tier, energy)
+        store.reorderTemplates(store.templates.first().map { it.id }.filterNot { it == created.id } + created.id)
+        return created
+    }
 
     private fun TodayViewModel.suggested(): String? = (randomizer.value as? RandomizerState.Suggesting)?.template?.name
 

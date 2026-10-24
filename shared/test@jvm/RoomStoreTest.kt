@@ -87,7 +87,8 @@ class RoomStoreTest : StoreContractTest() {
         firstDb.close()
 
         val second = RoomStore(Room.databaseBuilder<OpenAdhdDatabase>(file).buildOpenAdhdDatabase(), clock)
-        assertEquals(listOf(simple, big, extraTemplate), second.templates.first())
+        // newest first: new templates go to the top
+        assertEquals(listOf(extraTemplate, big, simple), second.templates.first())
 
         val restored = second.entriesFor(today).first().associateBy { it.name }
         assertTrue(restored.getValue("Taxes").isCompleted)
@@ -98,7 +99,7 @@ class RoomStoreTest : StoreContractTest() {
         assertTrue(restoredBig.hasProgress)
         assertTrue(!restoredBig.isCompleted)
         assertEquals(27, CoinRules.balance(second.entries.first()))
-        assertEquals(listOf(treat, saved), second.rewards.first())
+        assertEquals(listOf(saved, treat), second.rewards.first())
         val history = second.redemptions.first()
         assertEquals(2, history.size)
         val purchase = history.last()

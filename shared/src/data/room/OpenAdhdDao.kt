@@ -41,8 +41,9 @@ abstract class OpenAdhdDao {
     @Query("DELETE FROM templates WHERE id = :id")
     abstract suspend fun deleteTemplateRow(id: String)
 
-    @Query("SELECT COALESCE(MAX(position), -1) + 1 FROM templates")
-    abstract suspend fun nextTemplatePosition(): Int
+    /** One before the first template, so a new template goes to the top; positions may be negative until the next reorder. */
+    @Query("SELECT COALESCE(MIN(position), 1) - 1 FROM templates")
+    abstract suspend fun firstTemplatePosition(): Int
 
     @Query("SELECT position FROM templates WHERE id = :id")
     abstract suspend fun templatePosition(id: String): Int?
@@ -60,7 +61,7 @@ abstract class OpenAdhdDao {
 
     @Transaction
     open suspend fun insertTemplateWithSubtasks(template: TemplateEntity, subtasks: List<TemplateSubtaskEntity>) {
-        insertTemplate(template.copy(position = nextTemplatePosition()))
+        insertTemplate(template.copy(position = firstTemplatePosition()))
         insertTemplateSubtasks(subtasks)
     }
 
@@ -147,8 +148,9 @@ abstract class OpenAdhdDao {
     @Update
     abstract suspend fun updateReward(reward: RewardTemplateEntity)
 
-    @Query("SELECT COALESCE(MAX(position), -1) + 1 FROM reward_templates")
-    abstract suspend fun nextRewardPosition(): Int
+    /** One before the first reward, so a new reward goes to the top; positions may be negative until the next reorder. */
+    @Query("SELECT COALESCE(MIN(position), 1) - 1 FROM reward_templates")
+    abstract suspend fun firstRewardPosition(): Int
 
     @Query("SELECT position FROM reward_templates WHERE id = :id")
     abstract suspend fun rewardPosition(id: String): Int?
@@ -160,8 +162,8 @@ abstract class OpenAdhdDao {
     abstract suspend fun setRewardPosition(id: String, position: Int)
 
     @Transaction
-    open suspend fun insertRewardLast(reward: RewardTemplateEntity) {
-        insertReward(reward.copy(position = nextRewardPosition()))
+    open suspend fun insertRewardFirst(reward: RewardTemplateEntity) {
+        insertReward(reward.copy(position = firstRewardPosition()))
     }
 
     /** Keeps the stored position, because @Update writes every column. */

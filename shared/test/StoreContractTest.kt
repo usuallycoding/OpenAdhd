@@ -197,7 +197,7 @@ abstract class StoreContractTest {
         val store = newStore(clock)
         store.create("Small", Tier.One, Energy.Low, subtasks = List(5) { "Step $it" })
         store.create("Large", Tier.Four, Energy.Low, subtasks = List(10) { "Step $it" })
-        assertEquals(listOf(5, 10), store.templates.first().map { it.subtasks.size })
+        assertEquals(listOf(10, 5), store.templates.first().map { it.subtasks.size })
         assertFailsWith<IllegalArgumentException> {
             store.create("Too many small", Tier.One, Energy.Low, subtasks = List(6) { "Step $it" })
         }
@@ -357,7 +357,7 @@ abstract class StoreContractTest {
 
         store.createReward("Cheap", RewardTier.Five, Energy.Low, customPrice = 301)
         store.createReward("Headphones", RewardTier.Five, Energy.Low, customPrice = 500)
-        assertEquals(listOf(301, 500), store.rewards.first().map { it.price })
+        assertEquals(listOf(500, 301), store.rewards.first().map { it.price })
     }
 
     @Test
@@ -840,7 +840,44 @@ abstract class StoreContractTest {
     private suspend fun OpenAdhdStore.rewardNames() = rewards.first().map { it.name }
 
     @Test
-    fun `templates follow the order they are reordered into and new ones go last`() = runTest {
+    fun `a new template or reward goes first and the others keep their order`() = runTest {
+        val store = newStore(clock)
+        store.create("Old", Tier.One, Energy.Low)
+        val second = store.create("Second", Tier.One, Energy.Low)
+        assertEquals(listOf("Second", "Old"), store.templateNames())
+
+        store.create("Newest", Tier.One, Energy.Low)
+        assertEquals(listOf("Newest", "Second", "Old"), store.templateNames())
+
+        store.createReward("R1", RewardTier.One, Energy.Low)
+        store.createReward("R2", RewardTier.Five, Energy.Low, customPrice = 500)
+        assertEquals(listOf("R2", "R1"), store.rewardNames())
+
+        // editing keeps the place, and a template added to today still goes last among that day's entries
+        store.update(second.copy(name = "Second2"))
+        assertEquals(listOf("Newest", "Second2", "Old"), store.templateNames())
+        val first = store.assign(store.templates.first().first(), today)
+        store.assign(store.templates.first().last(), today)
+        assertEquals(listOf("Newest", "Old"), store.entryNames(today))
+        assertEquals(first.id, store.entriesFor(today).first().first().id)
+    }
+
+    @Test
+    fun `a new template is first after reordering and after earlier new ones`() = runTest {
+        val store = newStore(clock)
+        val a = store.create("A", Tier.One, Energy.Low)
+        val b = store.create("B", Tier.One, Energy.Low)
+        store.reorderTemplates(listOf(a.id, b.id))
+        store.create("C", Tier.One, Energy.Low)
+        store.create("D", Tier.One, Energy.Low)
+        assertEquals(listOf("D", "C", "A", "B"), store.templateNames())
+        store.reorderTemplates(listOf("B", "A").map { n -> store.templates.first().first { it.name == n }.id })
+        store.create("E", Tier.One, Energy.Low)
+        assertEquals(listOf("E", "B", "A", "D", "C"), store.templateNames())
+    }
+
+    @Test
+    fun `templates follow the order they are reordered into and new ones go first`() = runTest {
         val store = newStore(clock)
         val a = store.create("A", Tier.One, Energy.Low)
         val b = store.create("B", Tier.One, Energy.Low)
@@ -848,7 +885,7 @@ abstract class StoreContractTest {
         store.reorderTemplates(listOf(c.id, a.id, b.id))
         assertEquals(listOf("C", "A", "B"), store.templateNames())
         store.create("D", Tier.One, Energy.Low)
-        assertEquals(listOf("C", "A", "B", "D"), store.templateNames())
+        assertEquals(listOf("D", "C", "A", "B"), store.templateNames())
     }
 
     @Test
@@ -875,18 +912,18 @@ abstract class StoreContractTest {
         store.delete(c.id)
         assertEquals(listOf("A2", "B"), store.templateNames())
         store.create("D", Tier.One, Energy.Low)
-        assertEquals(listOf("A2", "B", "D"), store.templateNames())
+        assertEquals(listOf("D", "A2", "B"), store.templateNames())
     }
 
     @Test
-    fun `rewards follow the order they are reordered into and new ones go last`() = runTest {
+    fun `rewards follow the order they are reordered into and new ones go first`() = runTest {
         val store = newStore(clock)
         val a = store.createReward("A", RewardTier.One, Energy.Low)
         val b = store.createReward("B", RewardTier.Two, Energy.Low)
         store.reorderRewards(listOf(b.id, a.id))
         assertEquals(listOf("B", "A"), store.rewardNames())
         store.createReward("C", RewardTier.One, Energy.Low)
-        assertEquals(listOf("B", "A", "C"), store.rewardNames())
+        assertEquals(listOf("C", "B", "A"), store.rewardNames())
     }
 
     @Test

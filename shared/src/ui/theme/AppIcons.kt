@@ -17,6 +17,10 @@ val AddIcon: ImageVector by lazy {
     themeIcon("Add") { stroked("M12,5v14M5,12h14") }
 }
 
+val ClearIcon: ImageVector by lazy {
+    themeIcon("Clear") { stroked("M6,6l12,12M18,6l-12,12") }
+}
+
 val EditIcon: ImageVector by lazy {
     themeIcon("Edit") { stroked("M4,20l4,-1l11,-11l-3,-3l-11,11z") }
 }

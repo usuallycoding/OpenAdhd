@@ -442,10 +442,11 @@ class AppUiTest {
     private fun randomizerStore(vararg templates: Pair<String, Energy>, withKitchen: Boolean = false): InMemoryStore {
         val store = InMemoryStore()
         runBlocking {
-            templates.forEach { (name, energy) -> store.create(name, Tier.Two, energy) }
+            // New templates go to the top, so they are created last to first to list them in the given order.
             if (withKitchen) {
                 store.create("Clean the kitchen", Tier.Three, Energy.High, "Whole room", listOf("Dishes", "Counters", "Trash"))
             }
+            templates.reversed().forEach { (name, energy) -> store.create(name, Tier.Two, energy) }
         }
         return store
     }
@@ -700,10 +701,9 @@ class AppUiTest {
         val store = InMemoryStore()
         runBlocking {
             val today = kotlin.time.Clock.System.todayIn(TimeZone.currentSystemDefault())
-            templates.forEach {
-                val template = store.create(it, Tier.One, Energy.Low)
-                if (planToday) store.assign(template, today)
-            }
+            // New templates go to the top, so they are created last to first to list them in the given order.
+            val created = templates.reversed().map { store.create(it, Tier.One, Energy.Low) }.reversed()
+            if (planToday) created.forEach { store.assign(it, today) }
         }
         return store
     }
@@ -749,8 +749,8 @@ class AppUiTest {
     fun `reorder mode on reward templates moves a reward and each tab has its own mode`() = runComposeUiTest {
         val store = reorderStore()
         runBlocking {
-            store.createReward("Tea", RewardTier.One, Energy.Low)
             store.createReward("Cake", RewardTier.One, Energy.Low)
+            store.createReward("Tea", RewardTier.One, Energy.Low)
         }
         setContent { App(AppContainer(store, dateCheckInterval = null)) }
         onNodeWithText("Templates").performClick()
@@ -814,8 +814,8 @@ class AppUiTest {
     fun `the picker and the shop follow the new order`() = runComposeUiTest {
         val store = reorderStore()
         runBlocking {
-            store.createReward("Tea", RewardTier.One, Energy.Low)
             store.createReward("Cake", RewardTier.One, Energy.Low)
+            store.createReward("Tea", RewardTier.One, Energy.Low)
         }
         setContent { App(AppContainer(store, dateCheckInterval = null)) }
 

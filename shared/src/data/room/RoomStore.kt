@@ -82,7 +82,7 @@ class RoomStore(
         customPrice: Int?,
     ): RewardTemplate {
         val reward = RewardTemplate(newId(), name, tier, energy, description, customPrice).validated()
-        dao.insertRewardLast(reward.toEntity())
+        dao.insertRewardFirst(reward.toEntity())
         return reward
     }
 

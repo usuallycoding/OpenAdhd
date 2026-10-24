@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.PagerState
 import androidx.compose.foundation.pager.rememberPagerState
@@ -25,12 +26,14 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.SmallFloatingActionButton
 import androidx.compose.material3.Tab
 import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -40,6 +43,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.style.TextDecoration
@@ -50,11 +56,13 @@ import com.usuallycoding.openadhd.domain.Energy
 import com.usuallycoding.openadhd.domain.PlannedSubtask
 import com.usuallycoding.openadhd.domain.PlannedTask
 import com.usuallycoding.openadhd.domain.TaskTemplate
+import com.usuallycoding.openadhd.domain.matching
 import com.usuallycoding.openadhd.domain.Tier
 import com.usuallycoding.openadhd.ui.components.FormSheet
 import com.usuallycoding.openadhd.ui.components.MoveButtons
 import com.usuallycoding.openadhd.ui.theme.AddIcon
 import com.usuallycoding.openadhd.ui.theme.ChevronIcon
+import com.usuallycoding.openadhd.ui.theme.ClearIcon
 import com.usuallycoding.openadhd.ui.theme.DeleteIcon
 import com.usuallycoding.openadhd.ui.theme.DiceIcon
 import com.usuallycoding.openadhd.ui.today.RandomizerState
@@ -410,13 +418,42 @@ private fun TemplatePickerDialog(
         if (templates.isEmpty()) {
             Text("You have no task templates yet. Create one on the Templates tab first.")
         } else {
-            // The sheet body already scrolls, so a plain column (not a LazyColumn) keeps long lists reachable.
-            templates.forEach { template ->
-                ListItem(
-                    headlineContent = { Text(template.name) },
-                    supportingContent = { Text(template.description()) },
-                    modifier = Modifier.clickable { onPick(template) },
-                )
+            // The query lives in the sheet, so it starts empty every time the sheet opens.
+            var query by remember { mutableStateOf("") }
+            val focusRequester = remember { FocusRequester() }
+            val keyboard = LocalSoftwareKeyboardController.current
+            LaunchedEffect(Unit) {
+                focusRequester.requestFocus()
+                keyboard?.show()
+            }
+            OutlinedTextField(
+                value = query,
+                onValueChange = { query = it },
+                label = { Text("Search tasks") },
+                singleLine = true,
+                trailingIcon = if (query.isNotEmpty()) {
+                    {
+                        IconButton(onClick = { query = "" }) {
+                            Icon(ClearIcon, contentDescription = "Clear search")
+                        }
+                    }
+                } else {
+                    null
+                },
+                modifier = Modifier.fillMaxWidth().focusRequester(focusRequester),
+            )
+            val shown = templates.matching(query)
+            if (shown.isEmpty()) {
+                Text("No task matches ${query.trim()}")
+            } else {
+                // The sheet body already scrolls, so a plain column (not a LazyColumn) keeps long lists reachable.
+                shown.forEach { template ->
+                    ListItem(
+                        headlineContent = { Text(template.name) },
+                        supportingContent = { Text(template.description()) },
+                        modifier = Modifier.clickable { onPick(template) },
+                    )
+                }
             }
         }
     }
