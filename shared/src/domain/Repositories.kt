@@ -51,6 +51,16 @@ interface PlannerRepository {
      * Returns null, changing nothing and not drawing, if the subtask is unknown or already completed.
      */
     suspend fun completeSubtask(id: String): CompletionResult?
+
+    /**
+     * Unchecks a completed task that has no subtasks and appends one ledger entry taking back everything it has
+     * paid (reward and critical-hit bonus, less earlier undos), as one operation. Returns the coins taken back,
+     * or null, changing nothing, if the entry is unknown, has subtasks, or is not completed.
+     */
+    suspend fun uncompleteTask(id: String): Int?
+
+    /** Unchecks a completed subtask with the same one-entry reversal. Returns null, changing nothing, if it is unknown or not completed. */
+    suspend fun uncompleteSubtask(id: String): Int?
 }
 
 interface LedgerRepository {

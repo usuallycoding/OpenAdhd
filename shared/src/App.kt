@@ -108,6 +108,13 @@ fun App(container: AppContainer) {
         }
     }
 
+    LaunchedEffect(todayViewModel) {
+        todayViewModel.undone.collect { undone ->
+            val coins = if (undone.coins == 1) "1 coin" else "${undone.coins} coins"
+            snackbarHostState.showSnackbar(if (undone.coins == 0) "Undone" else "Undone, -$coins")
+        }
+    }
+
     AppTheme(themeMode) {
         Scaffold(
             modifier = Modifier.fillMaxSize(),

@@ -258,6 +258,39 @@ abstract class OpenAdhdDao {
     @Query("SELECT reward FROM planned_subtasks WHERE id = :id")
     abstract suspend fun subtaskReward(id: String): Int
 
+    @Query(
+        """UPDATE planned_tasks SET completedAtMillis = NULL WHERE id = :id AND completedAtMillis IS NOT NULL
+           AND NOT EXISTS (SELECT 1 FROM planned_subtasks WHERE plannedTaskId = :id)""",
+    )
+    abstract suspend fun clearTaskCompletion(id: String): Int
+
+    @Query("UPDATE planned_subtasks SET completedAtMillis = NULL WHERE id = :id AND completedAtMillis IS NOT NULL")
+    abstract suspend fun clearSubtaskCompletion(id: String): Int
+
+    /** Everything recorded in the ledger for a task or subtask: its reward, any critical-hit bonus and earlier undos. */
+    @Query("SELECT COALESCE(SUM(amount), 0) FROM ledger WHERE refId = :refId")
+    abstract suspend fun netFor(refId: String): Int
+
+    /** Unchecks a subtask-less task and appends the reversal of its net payout in one transaction; null if nothing changed. */
+    @Transaction
+    open suspend fun uncompleteTask(id: String, at: Long, ledgerId: String): Int? {
+        if (clearTaskCompletion(id) == 0) return null
+        return reverse(id, at, ledgerId)
+    }
+
+    /** Unchecks a subtask with the same reversal; null if nothing changed. */
+    @Transaction
+    open suspend fun uncompleteSubtask(id: String, at: Long, ledgerId: String): Int? {
+        if (clearSubtaskCompletion(id) == 0) return null
+        return reverse(id, at, ledgerId)
+    }
+
+    private suspend fun reverse(refId: String, at: Long, ledgerId: String): Int {
+        val net = netFor(refId)
+        if (net != 0) insertLedger(LedgerEntity(ledgerId, -net, at, LedgerReason.Undone.name, refId))
+        return net
+    }
+
     /**
      * Marks a subtask-less task completed and appends its reward in one transaction; null if nothing changed.
      * [criticalHits] is asked only after the task was really completed, and a critical hit appends its bonus

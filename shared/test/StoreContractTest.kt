@@ -825,4 +825,142 @@ abstract class StoreContractTest {
         store.completeTask(b.id)
         assertEquals(listOf("B", "A"), store.entryNames(today))
     }
+
+    // ---- unchecking
+
+    @Test
+    fun `unchecking a task takes back its reward with one reversal entry and makes it pending`() = runTest {
+        val store = newStore(clock)
+        val entry = store.assign(store.create("Taxes", Tier.Three, Energy.High), today)
+        store.completeTask(entry.id)
+
+        assertEquals(20, store.uncompleteTask(entry.id))
+
+        val ledger = store.entries.first()
+        assertEquals(listOf(20, -20), ledger.map { it.amount })
+        assertEquals(LedgerReason.Undone, ledger.last().reason)
+        assertEquals(entry.id, ledger.last().refId)
+        assertEquals(0, CoinRules.balance(ledger))
+        assertFalse(store.entriesFor(today).first().single().isCompleted)
+    }
+
+    @Test
+    fun `unchecking a critical subtask takes back the reward and the bonus`() = runTest {
+        val store = newStore(clock, criticalHits = ScriptedCrits(true))
+        val entry = store.assign(store.create("Clean", Tier.Three, Energy.Low, subtasks = listOf("A", "B", "C")), today)
+        val first = entry.subtasks.first()
+        store.completeSubtask(first.id)
+
+        assertEquals(14, store.uncompleteSubtask(first.id))
+
+        assertEquals(0, CoinRules.balance(store.entries.first()))
+        assertEquals(listOf(7, 7, -14), store.entries.first().map { it.amount })
+    }
+
+    @Test
+    fun `unchecking one subtask of a finished entry makes it pending and takes back only that share`() = runTest {
+        val store = newStore(clock)
+        val entry = store.assign(store.create("Clean", Tier.Three, Energy.Low, subtasks = listOf("A", "B", "C")), today)
+        entry.subtasks.forEach { store.completeSubtask(it.id) }
+        assertTrue(store.entriesFor(today).first().single().isCompleted)
+
+        assertEquals(6, store.uncompleteSubtask(entry.subtasks.last().id))
+
+        val after = store.entriesFor(today).first().single()
+        assertFalse(after.isCompleted)
+        assertEquals(listOf(true, true, false), after.subtasks.map { it.isCompleted })
+        assertEquals(14, CoinRules.balance(store.entries.first()))
+    }
+
+    @Test
+    fun `an entry whose only completed subtask is unchecked can be removed again`() = runTest {
+        val store = newStore(clock)
+        val entry = store.assign(store.create("Clean", Tier.Three, Energy.Low, subtasks = listOf("A", "B")), today)
+        store.completeSubtask(entry.subtasks.first().id)
+        store.remove(entry.id)
+        assertEquals(1, store.entriesFor(today).first().size)
+
+        store.uncompleteSubtask(entry.subtasks.first().id)
+        store.remove(entry.id)
+        assertTrue(store.entriesFor(today).first().isEmpty())
+    }
+
+    @Test
+    fun `checking and unchecking in a loop always returns to the starting balance`() = runTest {
+        val store = newStore(clock, criticalHits = ScriptedCrits(true, false, true, false))
+        val entry = store.assign(store.create("Taxes", Tier.Three, Energy.High), today)
+        repeat(3) {
+            store.completeTask(entry.id)
+            store.uncompleteTask(entry.id)
+            assertEquals(0, CoinRules.balance(store.entries.first()))
+        }
+        // a later, non-critical completion pays exactly its reward: earlier rounds left nothing behind
+        store.completeTask(entry.id)
+        assertEquals(20, CoinRules.balance(store.entries.first()))
+    }
+
+    @Test
+    fun `unchecking something pending or unknown or a task with subtasks changes nothing`() = runTest {
+        val store = newStore(clock)
+        val plain = store.assign(store.create("Taxes", Tier.Three, Energy.High), today)
+        val withSubtasks = store.assign(store.create("Clean", Tier.Three, Energy.Low, subtasks = listOf("A", "B")), today)
+        store.completeSubtask(withSubtasks.subtasks.first().id)
+
+        assertNull(store.uncompleteTask(plain.id))
+        assertNull(store.uncompleteTask("nope"))
+        assertNull(store.uncompleteSubtask("nope"))
+        assertNull(store.uncompleteSubtask(withSubtasks.subtasks.last().id))
+        assertNull(store.uncompleteTask(withSubtasks.id))
+        assertEquals(listOf(10), store.entries.first().map { it.amount })
+    }
+
+    @Test
+    fun `unchecking twice takes the coins back once`() = runTest {
+        val store = newStore(clock)
+        val entry = store.assign(store.create("Taxes", Tier.Three, Energy.High), today)
+        store.completeTask(entry.id)
+        assertEquals(20, store.uncompleteTask(entry.id))
+        assertNull(store.uncompleteTask(entry.id))
+        assertEquals(listOf(20, -20), store.entries.first().map { it.amount })
+    }
+
+    @Test
+    fun `the balance can go negative and spending is then refused`() = runTest {
+        val store = newStore(clock)
+        val reward = store.createReward("Treat", RewardTier.One, Energy.Low)
+        val entry = store.assign(store.create("Taxes", Tier.Three, Energy.High), today)
+        store.completeTask(entry.id)
+        assertTrue(store.redeem(reward.id))
+        assertEquals(0, CoinRules.balance(store.entries.first()))
+
+        store.uncompleteTask(entry.id)
+
+        assertEquals(-20, CoinRules.balance(store.entries.first()))
+        assertFalse(store.redeem(reward.id))
+        assertNull(store.mysteryRoll(RewardTier.One))
+        assertEquals(-20, CoinRules.balance(store.entries.first()))
+    }
+
+    @Test
+    fun `done time is the completion time of a task or of the latest subtask`() = runTest {
+        val store = newStore(clock)
+        val task = store.assign(store.create("Taxes", Tier.One, Energy.Low), today)
+        val entry = store.assign(store.create("Clean", Tier.Two, Energy.Low, subtasks = listOf("A", "B")), today)
+        assertNull(store.entriesFor(today).first().first { it.id == task.id }.doneAt)
+
+        clock.current = Instant.parse("2026-10-23T10:00:00Z")
+        store.completeSubtask(entry.subtasks[0].id)
+        assertNull(store.entriesFor(today).first().first { it.id == entry.id }.doneAt)
+        clock.current = Instant.parse("2026-10-23T10:30:00Z")
+        store.completeSubtask(entry.subtasks[1].id)
+        clock.current = Instant.parse("2026-10-23T10:15:00Z")
+        store.completeTask(task.id)
+
+        val entries = store.entriesFor(today).first().associateBy { it.id }
+        assertEquals(Instant.parse("2026-10-23T10:15:00Z"), entries.getValue(task.id).doneAt)
+        assertEquals(Instant.parse("2026-10-23T10:30:00Z"), entries.getValue(entry.id).doneAt)
+
+        store.uncompleteSubtask(entry.subtasks[1].id)
+        assertNull(store.entriesFor(today).first().first { it.id == entry.id }.doneAt)
+    }
 }

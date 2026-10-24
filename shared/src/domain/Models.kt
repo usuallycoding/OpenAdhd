@@ -53,12 +53,19 @@ data class PlannedTask(
     val isCompleted: Boolean
         get() = if (subtasks.isEmpty()) completedAt != null else subtasks.all { it.isCompleted }
 
+    /**
+     * When the task was done: its own completion time, or for a task with subtasks the time its most recently
+     * completed subtask was completed. Null while the task is not completed.
+     */
+    val doneAt: Instant?
+        get() = if (subtasks.isEmpty()) completedAt else if (isCompleted) subtasks.maxOf { it.completedAt!! } else null
+
     /** True once any part of the task has paid out coins. */
     val hasProgress: Boolean
         get() = if (subtasks.isEmpty()) completedAt != null else subtasks.any { it.isCompleted }
 }
 
-enum class LedgerReason { TaskCompleted, SubtaskCompleted, RewardRedeemed, MysteryRoll, CriticalHit }
+enum class LedgerReason { TaskCompleted, SubtaskCompleted, RewardRedeemed, MysteryRoll, CriticalHit, Undone }
 
 data class LedgerEntry(
     val id: String,

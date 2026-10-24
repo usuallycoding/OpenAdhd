@@ -38,6 +38,9 @@ val DefaultDateCheckInterval = 30.seconds
 /** A completion that turned out to be a critical hit, with the bonus coins it paid. */
 data class CriticalHitEvent(val bonus: Int)
 
+/** A completion that was unchecked, with the [coins] it had paid, all of which were taken back. */
+data class UndoneEvent(val coins: Int)
+
 /** Where the "Pick one for me" dialog is. */
 sealed interface RandomizerState {
     data object Closed : RandomizerState
@@ -70,10 +73,13 @@ class TodayViewModel(
         }
     }.distinctUntilChanged().stateIn(viewModelScope, SharingStarted.Eagerly, clock.todayIn(timeZone))
 
-    /** Pending entries first, then completed ones, each group in the order the user put them (the sort is stable). */
+    /** Pending entries first in the order the user put them, then completed ones, the most recently done first. */
     val entries: StateFlow<List<PlannedTask>> =
         today.flatMapLatest { store.entriesFor(it) }
-            .map { list -> list.sortedBy { it.isCompleted } }
+            .map { list ->
+                val (done, pending) = list.partition { it.isCompleted }
+                pending + done.sortedByDescending { it.doneAt }
+            }
             .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
 
     /** Whether at least two entries are pending, so there is an order to change. */
@@ -107,18 +113,42 @@ class TodayViewModel(
     val templates: StateFlow<List<TaskTemplate>> =
         store.templates.stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
 
+    private val _undone = MutableSharedFlow<UndoneEvent>(extraBufferCapacity = 16)
+
+    /** One event per uncheck, with the coins taken back, so the screen can say so. */
+    val undone: SharedFlow<UndoneEvent> = _undone
+
     private val _criticalHits = MutableSharedFlow<CriticalHitEvent>(extraBufferCapacity = 16)
 
     /** One event per critical hit, for a short celebration; a small buffer keeps quick successive hits from being lost. */
     val criticalHits: SharedFlow<CriticalHitEvent> = _criticalHits
 
-    private val _collapsedEntryIds = MutableStateFlow<Set<String>>(emptySet())
+    private val flippedEntryIds = MutableStateFlow<Set<String>>(emptySet())
 
-    /** Entries whose subtasks are hidden. Entries start expanded, so an id is only here once toggled; kept in memory only. */
-    val collapsedEntryIds: StateFlow<Set<String>> = _collapsedEntryIds
+    /**
+     * Entries with subtasks whose subtasks are hidden. A pending entry starts expanded and a completed one
+     * collapsed; tapping flips an entry away from that, and it goes back to its default whenever it becomes
+     * completed or pending again. Kept in memory only.
+     */
+    val collapsedEntryIds: StateFlow<Set<String>> = combine(flippedEntryIds, entries) { flipped, list ->
+        list.filter { it.subtasks.isNotEmpty() && (it.id in flipped) == !it.isCompleted }.map { it.id }.toSet()
+    }.stateIn(viewModelScope, SharingStarted.Eagerly, emptySet())
 
     fun toggleCollapsed(entryId: String) {
-        _collapsedEntryIds.update { if (entryId in it) it - entryId else it + entryId }
+        flippedEntryIds.update { if (entryId in it) it - entryId else it + entryId }
+    }
+
+    init {
+        // An entry that was finished or reopened goes back to its default, so finishing folds it and unchecking opens it.
+        viewModelScope.launch {
+            var completedBefore = emptyMap<String, Boolean>()
+            entries.collect { list ->
+                val now = list.associate { it.id to it.isCompleted }
+                val changed = now.filter { (id, completed) -> completedBefore[id]?.let { it != completed } == true }.keys
+                if (changed.isNotEmpty()) flippedEntryIds.update { it - changed }
+                completedBefore = now
+            }
+        }
     }
 
     fun assign(template: TaskTemplate) {
@@ -187,6 +217,15 @@ class TodayViewModel(
 
     fun completeSubtask(id: String) {
         viewModelScope.launch { announce(store.completeSubtask(id)) }
+    }
+
+    /** Unchecks a completed entry that has no subtasks, taking back what it paid. */
+    fun uncompleteTask(id: String) {
+        viewModelScope.launch { store.uncompleteTask(id)?.let { _undone.emit(UndoneEvent(it)) } }
+    }
+
+    fun uncompleteSubtask(id: String) {
+        viewModelScope.launch { store.uncompleteSubtask(id)?.let { _undone.emit(UndoneEvent(it)) } }
     }
 
     /** Tells the screen about a critical hit; usual and refused completions say nothing. */

@@ -54,6 +54,8 @@ import com.usuallycoding.openadhd.ui.theme.DiceIcon
 import com.usuallycoding.openadhd.ui.today.RandomizerState
 import com.usuallycoding.openadhd.ui.today.TodayViewModel
 import kotlinx.datetime.LocalDate
+import kotlinx.datetime.toLocalDateTime
+import kotlinx.datetime.TimeZone
 import kotlin.time.Instant
 
 @Composable
@@ -70,6 +72,8 @@ fun TodayScreen(viewModel: TodayViewModel, modifier: Modifier = Modifier) {
         onRemove = viewModel::remove,
         onCompleteTask = viewModel::completeTask,
         onCompleteSubtask = viewModel::completeSubtask,
+        onUncompleteTask = viewModel::uncompleteTask,
+        onUncompleteSubtask = viewModel::uncompleteSubtask,
         collapsedEntryIds = collapsed,
         onToggleCollapsed = viewModel::toggleCollapsed,
         reordering = reordering,
@@ -95,6 +99,9 @@ fun TodayContent(
     onCompleteTask: (id: String) -> Unit,
     onCompleteSubtask: (id: String) -> Unit,
     modifier: Modifier = Modifier,
+    onUncompleteTask: (id: String) -> Unit = {},
+    onUncompleteSubtask: (id: String) -> Unit = {},
+    timeZone: TimeZone = TimeZone.currentSystemDefault(),
     collapsedEntryIds: Set<String> = emptySet(),
     onToggleCollapsed: (id: String) -> Unit = {},
     reordering: Boolean = false,
@@ -138,6 +145,9 @@ fun TodayContent(
                         onRemove = onRemove,
                         onCompleteTask = onCompleteTask,
                         onCompleteSubtask = onCompleteSubtask,
+                        onUncompleteTask = onUncompleteTask,
+                        onUncompleteSubtask = onUncompleteSubtask,
+                        timeZone = timeZone,
                     )
                     HorizontalDivider()
                 }
@@ -190,6 +200,9 @@ private fun EntryItem(
     onRemove: (String) -> Unit,
     onCompleteTask: (String) -> Unit,
     onCompleteSubtask: (String) -> Unit,
+    onUncompleteTask: (String) -> Unit,
+    onUncompleteSubtask: (String) -> Unit,
+    timeZone: TimeZone,
 ) {
     val hasSubtasks = entry.subtasks.isNotEmpty()
     // While reordering a row is only a name to move: nothing can be completed, removed or expanded.
@@ -211,8 +224,7 @@ private fun EntryItem(
         } else ({
             Checkbox(
                 checked = entry.isCompleted,
-                enabled = !entry.isCompleted,
-                onCheckedChange = { onCompleteTask(entry.id) },
+                onCheckedChange = { if (entry.isCompleted) onUncompleteTask(entry.id) else onCompleteTask(entry.id) },
             )
         }),
         headlineContent = {
@@ -221,7 +233,7 @@ private fun EntryItem(
         supportingContent = {
             Column {
                 if (entry.description.isNotBlank()) Text(entry.description)
-                Text(entry.summary())
+                Text(entry.summary(timeZone))
             }
         },
         trailingContent = if (reordering) {
@@ -237,20 +249,22 @@ private fun EntryItem(
     AnimatedVisibility(visible = showSubtasks) {
         Column {
             entry.subtasks.forEach { subtask ->
-                SubtaskItem(subtask, onComplete = { onCompleteSubtask(subtask.id) })
+                SubtaskItem(
+                    subtask,
+                    onToggle = { if (subtask.isCompleted) onUncompleteSubtask(subtask.id) else onCompleteSubtask(subtask.id) },
+                )
             }
         }
     }
 }
 
 @Composable
-private fun SubtaskItem(subtask: PlannedSubtask, onComplete: () -> Unit) {
+private fun SubtaskItem(subtask: PlannedSubtask, onToggle: () -> Unit) {
     ListItem(
         leadingContent = {
             Checkbox(
                 checked = subtask.isCompleted,
-                enabled = !subtask.isCompleted,
-                onCheckedChange = { onComplete() },
+                onCheckedChange = { onToggle() },
             )
         },
         headlineContent = {
@@ -261,13 +275,16 @@ private fun SubtaskItem(subtask: PlannedSubtask, onComplete: () -> Unit) {
     )
 }
 
-private fun PlannedTask.summary(): String {
+private fun PlannedTask.summary(timeZone: TimeZone): String {
     val base = "Tier ${tier.level} · ${energy.name} energy"
-    return if (subtasks.isEmpty()) {
+    val progress = if (subtasks.isEmpty()) {
         "$base · +$reward coins"
     } else {
         "$base · ${subtasks.count { it.isCompleted }} of ${subtasks.size} done"
     }
+    val doneAt = doneAt ?: return progress
+    val time = doneAt.toLocalDateTime(timeZone).time
+    return "$progress · Done ${time.hour.toString().padStart(2, '0')}:${time.minute.toString().padStart(2, '0')}"
 }
 
 @Composable

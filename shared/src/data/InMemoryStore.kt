@@ -104,6 +104,40 @@ internal class StoreLogic(
         return next to result
     }
 
+    /** The reversal of everything recorded for [refId], or none when it nets to zero. */
+    private fun reversal(ledger: List<LedgerEntry>, refId: String): Pair<List<LedgerEntry>, Int> {
+        val net = ledger.filter { it.refId == refId }.sumOf { it.amount }
+        if (net == 0) return emptyList<LedgerEntry>() to 0
+        return listOf(LedgerEntry(newId(), -net, clock.now(), LedgerReason.Undone, refId)) to net
+    }
+
+    /** Returns the new state and the coins taken back, or null when the entry is unknown, has subtasks, or is not completed. */
+    fun uncompleteTask(state: StoreState, id: String): Pair<StoreState, Int>? {
+        val task = state.planned.firstOrNull { it.id == id } ?: return null
+        if (task.subtasks.isNotEmpty() || !task.isCompleted) return null
+        val (entries, taken) = reversal(state.ledger, id)
+        val next = state.copy(
+            planned = state.planned.map { if (it.id == id) it.copy(completedAt = null) else it },
+            ledger = state.ledger + entries,
+        )
+        return next to taken
+    }
+
+    /** Returns the new state and the coins taken back, or null when the subtask is unknown or not completed. */
+    fun uncompleteSubtask(state: StoreState, id: String): Pair<StoreState, Int>? {
+        val task = state.planned.firstOrNull { entry -> entry.subtasks.any { it.id == id } } ?: return null
+        if (!task.subtasks.first { it.id == id }.isCompleted) return null
+        val (entries, taken) = reversal(state.ledger, id)
+        val next = state.copy(
+            planned = state.planned.map { entry ->
+                if (entry.id != task.id) entry
+                else entry.copy(subtasks = entry.subtasks.map { if (it.id == id) it.copy(completedAt = null) else it })
+            },
+            ledger = state.ledger + entries,
+        )
+        return next to taken
+    }
+
     fun createReward(
         state: StoreState,
         name: String,
@@ -271,6 +305,18 @@ class InMemoryStore(
     override suspend fun completeTask(id: String): CompletionResult? = completion { logic.completeTask(it, id) }
 
     override suspend fun completeSubtask(id: String): CompletionResult? = completion { logic.completeSubtask(it, id) }
+
+    override suspend fun uncompleteTask(id: String): Int? = undo { logic.uncompleteTask(it, id) }
+
+    override suspend fun uncompleteSubtask(id: String): Int? = undo { logic.uncompleteSubtask(it, id) }
+
+    private fun undo(next: (StoreState) -> Pair<StoreState, Int>?): Int? {
+        while (true) {
+            val before = state.value
+            val (after, taken) = next(before) ?: return null
+            if (state.compareAndSet(before, after)) return taken
+        }
+    }
 
     private fun completion(next: (StoreState) -> Pair<StoreState, CompletionResult>?): CompletionResult? {
         while (true) {

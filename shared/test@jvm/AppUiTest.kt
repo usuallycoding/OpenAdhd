@@ -1,6 +1,7 @@
 package com.usuallycoding.openadhd
 
 import androidx.compose.ui.test.ComposeUiTest
+import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsEnabled
@@ -38,6 +39,7 @@ import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
+import kotlin.time.Instant
 import kotlin.test.assertEquals
 
 @OptIn(ExperimentalTestApi::class, ExperimentalCoroutinesApi::class)
@@ -121,7 +123,9 @@ class AppUiTest {
         onAllNodes(isToggleable())[1].performClick()
         onAllNodes(isToggleable())[2].performClick()
         onNodeWithText("20").assertExists()
-        onNodeWithText("Tier 3 · Medium energy · 3 of 3 done").assertExists()
+        // the finished entry folds away and reports when it was done
+        onNodeWithText("Tier 3 · Medium energy · 3 of 3 done · Done ", substring = true).assertExists()
+        onAllNodes(isToggleable()).assertCountEquals(0)
     }
 
     @Test
@@ -832,5 +836,90 @@ class AppUiTest {
 
         onNodeWithText("Shop").performClick()
         assertOrder("Cake", "Tea")
+    }
+
+    // ---- unchecking and done order
+
+    private fun ComposeUiTest.checkboxes() =
+        onAllNodes(isToggleable().and(hasContentDescription("Reorder").not()))
+
+    private fun uncheckStore(clock: FakeClock, vararg names: String, subtasks: List<String> = emptyList(), tier: Tier = Tier.Three): InMemoryStore {
+        val store = InMemoryStore(clock)
+        runBlocking {
+            val today = clock.todayIn(TimeZone.currentSystemDefault())
+            names.forEach { store.assign(store.create(it, tier, Energy.Low, subtasks = subtasks), today) }
+        }
+        return store
+    }
+
+    @Test
+    fun `unchecking a task takes its coins back and says so`() = runComposeUiTest {
+        val clock = FakeClock()
+        setContent { App(AppContainer(uncheckStore(clock, "Taxes"), clock, dateCheckInterval = null)) }
+
+        checkboxes()[0].performClick()
+        onNodeWithText("20").assertExists()
+        onNodeWithText("Tier 3 · Low energy · +20 coins · Done ", substring = true).assertExists()
+
+        checkboxes()[0].performClick()
+        onNodeWithText("Undone, -20 coins").assertExists()
+        onNodeWithText("0").assertExists()
+        onNodeWithText("Tier 3 · Low energy · +20 coins").assertExists()
+    }
+
+    @Test
+    fun `unchecking a subtask of a finished entry opens it again as in progress`() = runComposeUiTest {
+        val clock = FakeClock()
+        setContent { App(AppContainer(uncheckStore(clock, "Clean", subtasks = listOf("A", "B", "C")), clock, dateCheckInterval = null)) }
+
+        checkboxes()[0].performClick()
+        checkboxes()[1].performClick()
+        checkboxes()[2].performClick()
+        onNodeWithText("20").assertExists()
+        // finished: folded, subtasks hidden
+        onNodeWithText("A").assertDoesNotExist()
+        onNodeWithText("Clean").performClick()
+        onNodeWithText("A").assertExists()
+
+        checkboxes()[2].performClick()
+        onNodeWithText("Undone, -6 coins").assertExists()
+        onNodeWithText("14").assertExists()
+        onNodeWithText("Tier 3 · Low energy · 2 of 3 done").assertExists()
+        // pending again, so it is expanded and shows no done time
+        onNodeWithText("C").assertExists()
+    }
+
+    @Test
+    fun `done entries are listed newest first below the pending ones`() = runComposeUiTest {
+        val clock = FakeClock()
+        val store = uncheckStore(clock, "Alpha", "Beta", "Gamma", tier = Tier.One)
+        setContent { App(AppContainer(store, clock, dateCheckInterval = null)) }
+
+        clock.current = Instant.parse("2026-10-23T10:00:00Z")
+        checkboxes()[0].performClick()
+        // Alpha is done and moved down; Beta is now the first checkbox
+        clock.current = Instant.parse("2026-10-23T11:00:00Z")
+        checkboxes()[0].performClick()
+
+        assertOrder("Gamma", "Beta", "Alpha")
+    }
+
+    @Test
+    fun `unchecking spent coins shows a negative balance and blocks spending`() = runComposeUiTest {
+        val clock = FakeClock()
+        val store = uncheckStore(clock, "Taxes")
+        runBlocking { store.createReward("Treat", RewardTier.One, Energy.Low) }
+        setContent { App(AppContainer(store, clock, dateCheckInterval = null)) }
+
+        checkboxes()[0].performClick()
+        onNodeWithText("Shop").performClick()
+        onNodeWithContentDescription("Redeem Treat").performClick()
+        onNodeWithText("Confirm").performClick()
+        onNodeWithText("Today").performClick()
+        checkboxes()[0].performClick()
+
+        onNodeWithText("-20").assertExists()
+        onNodeWithText("Shop").performClick()
+        onNodeWithContentDescription("Redeem Treat").assertIsNotEnabled()
     }
 }

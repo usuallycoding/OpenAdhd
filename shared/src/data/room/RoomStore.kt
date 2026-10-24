@@ -103,4 +103,10 @@ class RoomStore(
 
     override suspend fun completeSubtask(id: String): CompletionResult? =
         dao.completeSubtask(id, clock.now().toEpochMilliseconds(), newId(), newId(), criticalHits)
+
+    override suspend fun uncompleteTask(id: String): Int? =
+        dao.uncompleteTask(id, clock.now().toEpochMilliseconds(), newId())
+
+    override suspend fun uncompleteSubtask(id: String): Int? =
+        dao.uncompleteSubtask(id, clock.now().toEpochMilliseconds(), newId())
 }

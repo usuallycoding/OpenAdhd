@@ -18,7 +18,7 @@ Every task SHALL have a reward pool determined by its tier: 5 coins for tier 1, 
 - **THEN** the coins awarded for that entry in total equal 20 and nothing extra is awarded for the entry itself
 
 ### Requirement: Append-only coin ledger
-Every change to the user's coins SHALL be recorded as a ledger entry with an amount, a timestamp and a reason identifying what earned or spent it, and existing entries MUST NOT be edited or removed.
+Every change to the user's coins SHALL be recorded as a ledger entry with an amount, a timestamp and a reason identifying what earned, spent or took back the coins, and existing entries MUST NOT be edited or removed.
 
 #### Scenario: Reward recorded
 - **WHEN** a tier 2 entry named "Reply to emails" without subtasks is completed
@@ -44,8 +44,12 @@ Every change to the user's coins SHALL be recorded as a ledger entry with an amo
 - **WHEN** the source template of a ledger entry is deleted
 - **THEN** the ledger entry remains unchanged
 
+#### Scenario: Undo recorded
+- **WHEN** a subtask that paid 7 coins is unchecked
+- **THEN** a separate ledger entry of -7 with an undone reason referencing that subtask is added, and the earlier entries are unchanged
+
 ### Requirement: Balance
-The coin balance SHALL equal the sum of all ledger entry amounts, earnings and spending alike, and be shown in the topbar.
+The coin balance SHALL equal the sum of all ledger entry amounts, earnings, spending and coins taken back alike, and be shown in the topbar. The balance MAY be negative.
 
 #### Scenario: Balance after rewards
 - **WHEN** the user completes a tier 1 entry and a tier 4 entry
@@ -58,6 +62,14 @@ The coin balance SHALL equal the sum of all ledger entry amounts, earnings and s
 #### Scenario: Balance after spending
 - **WHEN** the user has earned 100 coins and redeems a reward costing 50
 - **THEN** the balance is 50 and the topbar shows 50
+
+#### Scenario: Balance below zero
+- **WHEN** the user has earned 20 coins, redeemed a reward costing 20, and then unchecks the task that paid 20
+- **THEN** the balance is -20 and the topbar shows -20
+
+#### Scenario: Spending while negative
+- **WHEN** the balance is -20 and a spend of 5 is attempted
+- **THEN** the spend is refused and nothing is recorded
 
 ### Requirement: Reward pool split across subtasks
 The pool of an entry with subtasks SHALL be divided among its subtasks in order: each gets the pool divided by the number of subtasks, rounded down, and the leftover coins go one each to the first subtasks. Because a task never has more subtasks than its pool, every subtask is worth at least 1 coin and the shares add up exactly to the pool. Shares MUST be fixed when the entry is assigned.
@@ -92,3 +104,22 @@ A spend SHALL be refused, with no change to the ledger or the balance, when its 
 #### Scenario: Spend the whole balance
 - **WHEN** the balance is 50 and a spend of 50 is attempted
 - **THEN** the spend is recorded and the balance is 0
+
+### Requirement: Undoing a completion takes back what it paid
+Unchecking a completed task or subtask SHALL add one ledger entry whose amount is minus the net total already recorded for that task or subtask (its reward and any critical-hit bonus, less earlier undos). Unchecking an item whose net total is zero MUST NOT add an entry.
+
+#### Scenario: Reward only
+- **WHEN** a 20-coin task is unchecked
+- **THEN** one entry of -20 is added
+
+#### Scenario: Reward and bonus
+- **WHEN** a subtask that paid 7 and a 7 bonus is unchecked
+- **THEN** one entry of -14 is added
+
+#### Scenario: Second round
+- **WHEN** a 20-coin task is checked, unchecked, checked and unchecked again
+- **THEN** the ledger holds +20, -20, +20, -20 and the balance is where it started
+
+#### Scenario: Nothing to take back
+- **WHEN** an item is unchecked that has no recorded payout
+- **THEN** no ledger entry is added
