@@ -137,14 +137,51 @@ private class TemplateDto(
     val energy: String,
     val description: String = "",
     val subtasks: List<String> = emptyList(),
+    val schedule: String? = null,
+    val scheduleStart: String? = null,
+    val scheduleEnd: String? = null,
+    val scheduleDays: List<String> = emptyList(),
+    val reminderMinuteOfDay: Int? = null,
+    val reminderRepeatMinutes: Int? = null,
+    val lastGenerated: String? = null,
 ) {
     fun toDomain(): TaskTemplate {
         if (name.isBlank()) refuse("A task template has no name.")
-        return TaskTemplate(id, name, taskTierOf(tier, "task template"), energyOf(energy, "task template"), description, subtasks)
+        val schedule = scheduleOf()
+        val reminder = reminderMinuteOfDay?.let { TemplateReminder(it, reminderRepeatMinutes) }
+        if (ScheduleRules.check(schedule, reminder) != null) refuse("A task template has an invalid schedule or reminder.")
+        val generated = lastGenerated?.let { dateOf(it, "a task template's last generated day") }
+        return TaskTemplate(
+            id, name, taskTierOf(tier, "task template"), energyOf(energy, "task template"), description, subtasks,
+            schedule, reminder, generated,
+        )
     }
 
+    private fun scheduleOf(): TaskSchedule = when (schedule) {
+        null, "None" -> TaskSchedule.None
+        "Date" -> TaskSchedule.OnDate(dateOf(scheduleStart, "a task template's schedule"))
+        "Weekly" -> TaskSchedule.Weekly(
+            scheduleDays.map { name -> ScheduleRules.Weekdays.firstOrNull { it.name == name } ?: refuse("A task template has an unknown weekday ($name).") }.toSet(),
+        )
+        "Period" -> TaskSchedule.Period(dateOf(scheduleStart, "a task template's schedule"), dateOf(scheduleEnd, "a task template's schedule"))
+        "Daily" -> TaskSchedule.Daily
+        else -> refuse("A task template has an unknown schedule ($schedule).")
+    }
+
+    private fun dateOf(text: String?, what: String): LocalDate =
+        text?.let { runCatching { LocalDate.parse(it) }.getOrNull() } ?: refuse("The date of $what is not a date (${text.orEmpty()}).")
+
     companion object {
-        fun from(t: TaskTemplate) = TemplateDto(t.id, t.name, t.tier.level, t.energy.name, t.description, t.subtasks)
+        fun from(t: TaskTemplate): TemplateDto {
+            val stored = ScheduleRules.encode(t.schedule)
+            return TemplateDto(
+                t.id, t.name, t.tier.level, t.energy.name, t.description, t.subtasks,
+                schedule = stored.kind, scheduleStart = stored.start, scheduleEnd = stored.end,
+                scheduleDays = (t.schedule as? TaskSchedule.Weekly)?.let { w -> ScheduleRules.Weekdays.filter { it in w.days }.map { it.name } }.orEmpty(),
+                reminderMinuteOfDay = t.reminder?.minuteOfDay, reminderRepeatMinutes = t.reminder?.repeatMinutes,
+                lastGenerated = t.lastGenerated?.toString(),
+            )
+        }
     }
 }
 

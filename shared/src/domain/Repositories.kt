@@ -2,13 +2,14 @@ package com.usuallycoding.openadhd.domain
 
 import kotlinx.coroutines.flow.Flow
 import kotlinx.datetime.LocalDate
+import kotlinx.datetime.TimeZone
 
 interface TemplateRepository {
     val templates: Flow<List<TaskTemplate>>
 
     /**
      * Description and subtask titles are trimmed.
-     * @throws IllegalArgumentException if [name] or a subtask title is blank, or there are more subtasks than the tier's coin pool or the subtask ceiling allow ([CoinRules.maxSubtasks]).
+     * @throws IllegalArgumentException if [name] or a subtask title is blank, there are more subtasks than the tier's coin pool or the subtask ceiling allow ([CoinRules.maxSubtasks]), or the schedule or reminder is invalid ([ScheduleRules.check]).
      */
     suspend fun create(
         name: String,
@@ -16,9 +17,14 @@ interface TemplateRepository {
         energy: Energy,
         description: String = "",
         subtasks: List<String> = emptyList(),
+        schedule: TaskSchedule = TaskSchedule.None,
+        reminder: TemplateReminder? = null,
     ): TaskTemplate
 
-    /** @throws IllegalArgumentException for the same invalid input as [create]. */
+    /**
+     * @throws IllegalArgumentException for the same invalid input as [create].
+     * The stored [TaskTemplate.lastGenerated] is kept whatever [template] says.
+     */
     suspend fun update(template: TaskTemplate)
 
     suspend fun delete(id: String)
@@ -35,6 +41,13 @@ interface PlannerRepository {
 
     /** Copies the template onto [date], freezing the coin reward of the task and of each subtask. */
     suspend fun assign(template: TaskTemplate, date: LocalDate): PlannedTask
+
+    /**
+     * Adds one entry to [today] for each template that is due that day and has not been generated for it yet,
+     * with the template's reminder (at its time of day in [zone]), and marks the templates generated, as one
+     * operation. Returns the entries added. Calling it again the same day, or after an entry was deleted, adds nothing.
+     */
+    suspend fun generateDue(today: LocalDate, zone: TimeZone): List<PlannedTask>
 
     /** Removes an entry; entries with any completed part are left alone so earned coins are never orphaned. */
     suspend fun remove(id: String)

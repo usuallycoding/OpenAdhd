@@ -30,6 +30,7 @@ import com.usuallycoding.openadhd.domain.formatCoins
 import com.usuallycoding.openadhd.data.AppContainer
 import com.usuallycoding.openadhd.data.InMemoryStore
 import com.usuallycoding.openadhd.domain.ReminderCoordinator
+import com.usuallycoding.openadhd.domain.ScheduledEntries
 import com.usuallycoding.openadhd.domain.Settings
 import com.usuallycoding.openadhd.ui.LocalGameRules
 import com.usuallycoding.openadhd.ui.screens.SettingsScreen
@@ -83,6 +84,11 @@ fun App(container: AppContainer) {
     val settingsViewModel = viewModel { SettingsViewModel(container.store, container.files, container.clock) }
     val balance by walletViewModel.balance.collectAsStateWithLifecycle()
     val settings by container.store.settings.collectAsStateWithLifecycle(container.initialSettings)
+
+    // Adds the entries of scheduled templates to Today when the app starts, when the date changes and when a template changes.
+    LaunchedEffect(container) {
+        ScheduledEntries(container.store, todayViewModel.today).run()
+    }
 
     // Keeps the platform's notifications equal to the reminders in the store, for as long as the app is shown.
     LaunchedEffect(container) {

@@ -13,8 +13,11 @@ import com.usuallycoding.openadhd.domain.RedemptionSource
 import com.usuallycoding.openadhd.domain.RewardTemplate
 import com.usuallycoding.openadhd.domain.RewardTier
 import com.usuallycoding.openadhd.domain.StoreState
+import com.usuallycoding.openadhd.domain.TaskSchedule
 import com.usuallycoding.openadhd.domain.TaskTemplate
+import com.usuallycoding.openadhd.domain.TemplateReminder
 import com.usuallycoding.openadhd.domain.Tier
+import kotlinx.datetime.DayOfWeek
 import kotlinx.datetime.LocalDate
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
@@ -245,5 +248,49 @@ class BackupJsonTest {
 
         val text = BackupJson.encode(StoreState(), at).replace("\"settings\": {}", "\"settings\": {\"theme\": \"Neon\"}")
         assertEquals(emptyMap(), valid(text).state.overrides)
+    }
+
+    @Test
+    fun `every schedule mode round trips with a reminder`() {
+        val schedules = listOf(
+            TaskSchedule.None,
+            TaskSchedule.OnDate(day),
+            TaskSchedule.Weekly(setOf(DayOfWeek.SUNDAY, DayOfWeek.TUESDAY)),
+            TaskSchedule.Period(day, LocalDate(2026, 11, 2)),
+            TaskSchedule.Daily,
+        )
+        schedules.forEach { schedule ->
+            val state = StoreState(templates = listOf(TaskTemplate("t", "T", Tier.One, Energy.Low, schedule = schedule, reminder = TemplateReminder(75, null), lastGenerated = day)))
+            assertEquals(state.templates, valid(BackupJson.encode(state, at)).state.templates)
+        }
+    }
+
+    private val scheduled = StoreState(
+        templates = listOf(
+            TaskTemplate("t3", "Laundry", Tier.One, Energy.Low, schedule = TaskSchedule.Weekly(setOf(DayOfWeek.MONDAY, DayOfWeek.THURSDAY)),
+                reminder = TemplateReminder(9 * 60, 30), lastGenerated = day),
+        ),
+    )
+
+    @Test
+    fun `a file written before schedules existed imports as manual templates`() {
+        val root = Json.parseToJsonElement(BackupJson.encode(scheduled, at)).jsonObject
+        val fields = listOf("schedule", "scheduleStart", "scheduleEnd", "scheduleDays", "reminderMinuteOfDay", "reminderRepeatMinutes", "lastGenerated")
+        val templates = JsonArray(root.getValue("templates").jsonArray.map { JsonObject(it.jsonObject - fields.toSet()) })
+        val text = JsonObject(root + ("templates" to templates)).toString()
+        assertFalse(text.contains("scheduleStart"))
+        val decoded = valid(text).state.templates.single()
+        assertEquals(TaskSchedule.None, decoded.schedule)
+        assertNull(decoded.reminder)
+        assertNull(decoded.lastGenerated)
+    }
+
+    @Test
+    fun `an invalid schedule in a file is refused`() {
+        val text = BackupJson.encode(scheduled, at)
+        assertEquals("A task template has an invalid schedule or reminder.", refusal(text.replace("\"MONDAY\",", "").replace("\"THURSDAY\"", "")))
+        assertEquals("A task template has an unknown schedule (Sometimes).", refusal(text.replace("\"Weekly\"", "\"Sometimes\"")))
+        assertEquals("A task template has an unknown weekday (FUNDAY).", refusal(text.replace("\"MONDAY\"", "\"FUNDAY\"")))
+        assertEquals("A task template has an invalid schedule or reminder.", refusal(text.replace("\"reminderRepeatMinutes\": 30", "\"reminderRepeatMinutes\": 20")))
     }
 }

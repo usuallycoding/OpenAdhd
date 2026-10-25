@@ -21,6 +21,12 @@ data class TaskTemplate(
     val energy: Energy,
     val description: String = "",
     val subtasks: List<String> = emptyList(),
+    /** When the template is added to Today by itself. */
+    val schedule: TaskSchedule = TaskSchedule.None,
+    /** The reminder given to the entries the schedule generates. */
+    val reminder: TemplateReminder? = null,
+    /** The last day an entry was generated for; stops a deleted entry coming back. Kept by the store, not set by the user. */
+    val lastGenerated: LocalDate? = null,
 )
 
 /** One step of a [PlannedTask], worth [reward] coins when completed. */

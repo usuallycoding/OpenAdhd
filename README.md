@@ -40,6 +40,16 @@ On Today, a task that is not done yet has a "..." button. Its sheet lets you set
 - The first time you save a reminder the system asks to allow notifications.
 - **Android and iOS** show the notification even when the app is closed (Android also after a restart). On **macOS** the app must be running: a reminder that comes due while it is closed is not shown later.
 
+### Scheduled templates
+
+In the template form, "Add to Today" lets a template put itself on Today:
+
+- **None:** only when you add it by hand. **Date:** one day. **Weekly:** the weekdays you tick. **Period:** every day from one date to a later one. **Daily:** every day.
+- **Reminder on the generated task:** an optional time of day and, once a time is set, a repeat (off, or every 15, 30, 60 or 120 minutes). The task you get on Today carries that reminder, and you can still change or remove it from its "..." sheet without touching the template. A time that has already passed is skipped, so a repeating reminder resumes at its next time.
+- The task is added when the app starts, when the date changes while it is running, and right away when you save a template that is due today. Only today is filled in: days you did not open the app are not made up.
+- A template adds at most one task a day. If you delete the generated task, it does not come back. Adding the template by hand does not carry its reminder.
+- Because the task is added when the app runs, its reminders start once you have opened the app that day.
+
 ### Backup
 
 In Settings, under Data, you can save everything to one JSON file and bring it back:

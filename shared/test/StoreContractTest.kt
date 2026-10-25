@@ -8,18 +8,23 @@ import com.usuallycoding.openadhd.domain.LedgerReason
 import com.usuallycoding.openadhd.domain.OpenAdhdStore
 import com.usuallycoding.openadhd.domain.RedemptionSource
 import com.usuallycoding.openadhd.domain.Reminder
+import com.usuallycoding.openadhd.domain.ReminderRules
 import com.usuallycoding.openadhd.domain.RewardTier
 import com.usuallycoding.openadhd.domain.SettingKey
 import com.usuallycoding.openadhd.domain.Settings
 import com.usuallycoding.openadhd.domain.StoreState
 import com.usuallycoding.openadhd.domain.ThemeMode
+import com.usuallycoding.openadhd.domain.TaskSchedule
+import com.usuallycoding.openadhd.domain.TemplateReminder
 import com.usuallycoding.openadhd.domain.Tier
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import kotlinx.datetime.DateTimeUnit
+import kotlinx.datetime.DayOfWeek
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.minus
+import kotlinx.datetime.plus
 import kotlinx.datetime.todayIn
 import kotlin.random.Random
 import kotlin.test.Test
@@ -1588,4 +1593,227 @@ abstract class StoreContractTest {
         target.deleteAllData()
         assertEquals(ThemeMode.System, target.settings.first().themeMode)
     }
+
+    // ---- schedules and generation
+
+    private val everyDay = TaskSchedule.Daily
+    private val nineOClock = TemplateReminder(9 * 60, 30)
+
+    @Test
+    fun `a template keeps its schedule and reminder`() = runTest {
+        val store = newStore(clock)
+        val weekly = TaskSchedule.Weekly(setOf(DayOfWeek.MONDAY, DayOfWeek.FRIDAY))
+        store.create("Laundry", Tier.One, Energy.Low, schedule = weekly, reminder = nineOClock)
+        val template = store.templates.first().single()
+        assertEquals(weekly, template.schedule)
+        assertEquals(nineOClock, template.reminder)
+        assertNull(template.lastGenerated)
+    }
+
+    @Test
+    fun `a template defaults to no schedule and no reminder`() = runTest {
+        val store = newStore(clock)
+        store.create("Laundry", Tier.One, Energy.Low)
+        val template = store.templates.first().single()
+        assertEquals(TaskSchedule.None, template.schedule)
+        assertNull(template.reminder)
+    }
+
+    @Test
+    fun `each schedule mode can be saved and changed`() = runTest {
+        val store = newStore(clock)
+        val schedules = listOf(
+            TaskSchedule.OnDate(today),
+            TaskSchedule.Weekly(setOf(DayOfWeek.SUNDAY)),
+            TaskSchedule.Period(today, today.plus(2, DateTimeUnit.DAY)),
+            TaskSchedule.Daily,
+            TaskSchedule.None,
+        )
+        val template = store.create("Laundry", Tier.One, Energy.Low)
+        schedules.forEach { schedule ->
+            store.update(store.templates.first().single().copy(schedule = schedule))
+            assertEquals(schedule, store.templates.first().single().schedule)
+        }
+        assertEquals(template.id, store.templates.first().single().id)
+    }
+
+    @Test
+    fun `invalid schedules are rejected on create and on update`() = runTest {
+        val store = newStore(clock)
+        assertFailsWith<IllegalArgumentException> {
+            store.create("Laundry", Tier.One, Energy.Low, schedule = TaskSchedule.Weekly(emptySet()))
+        }
+        assertFailsWith<IllegalArgumentException> {
+            store.create("Laundry", Tier.One, Energy.Low, schedule = TaskSchedule.Period(today, today))
+        }
+        assertTrue(store.templates.first().isEmpty())
+
+        val template = store.create("Laundry", Tier.One, Energy.Low)
+        assertFailsWith<IllegalArgumentException> {
+            store.update(template.copy(schedule = TaskSchedule.Period(today, today.minus(1, DateTimeUnit.DAY))))
+        }
+        assertFailsWith<IllegalArgumentException> { store.update(template.copy(reminder = TemplateReminder(540, 7))) }
+        assertEquals(TaskSchedule.None, store.templates.first().single().schedule)
+    }
+
+    @Test
+    fun `clearing the reminder removes its time and repeat`() = runTest {
+        val store = newStore(clock)
+        val template = store.create("Laundry", Tier.One, Energy.Low, schedule = everyDay, reminder = nineOClock)
+        store.update(template.copy(reminder = null))
+        assertNull(store.templates.first().single().reminder)
+    }
+
+    @Test
+    fun `a due template gets one entry copied from it`() = runTest {
+        val store = newStore(clock)
+        store.create("Clean", Tier.Three, Energy.Low, "Whole room", listOf("A", "B"), schedule = everyDay)
+        val added = store.generateDue(today, TimeZone.UTC)
+        val entry = store.entriesFor(today).first().single()
+        assertEquals(added, listOf(entry))
+        assertEquals("Clean", entry.name)
+        assertEquals("Whole room", entry.description)
+        assertEquals(listOf("A", "B"), entry.subtasks.map { it.title })
+        assertFalse(entry.isCompleted)
+        assertNull(entry.reminder)
+        assertEquals(today, store.templates.first().single().lastGenerated)
+    }
+
+    @Test
+    fun `a template that is not due or has no schedule adds nothing`() = runTest {
+        val store = newStore(clock)
+        store.create("Manual", Tier.One, Energy.Low)
+        store.create("Other day", Tier.One, Energy.Low, schedule = TaskSchedule.OnDate(today.plus(1, DateTimeUnit.DAY)))
+        store.create("Other weekday", Tier.One, Energy.Low, schedule = TaskSchedule.Weekly(setOf(today.dayOfWeek.next())))
+        assertTrue(store.generateDue(today, TimeZone.UTC).isEmpty())
+        assertTrue(store.entriesFor(today).first().isEmpty())
+        assertTrue(store.templates.first().all { it.lastGenerated == null })
+    }
+
+    @Test
+    fun `an ended period never generates`() = runTest {
+        val store = newStore(clock)
+        store.create("Old", Tier.One, Energy.Low, schedule = TaskSchedule.Period(today.minus(9, DateTimeUnit.DAY), today.minus(2, DateTimeUnit.DAY)))
+        assertTrue(store.generateDue(today, TimeZone.UTC).isEmpty())
+    }
+
+    @Test
+    fun `generating twice the same day adds one entry`() = runTest {
+        val store = newStore(clock)
+        store.create("Daily", Tier.One, Energy.Low, schedule = everyDay)
+        assertEquals(1, store.generateDue(today, TimeZone.UTC).size)
+        assertTrue(store.generateDue(today, TimeZone.UTC).isEmpty())
+        assertEquals(1, store.entriesFor(today).first().size)
+    }
+
+    @Test
+    fun `a deleted generated entry does not come back`() = runTest {
+        val store = newStore(clock)
+        store.create("Daily", Tier.One, Energy.Low, schedule = everyDay)
+        store.generateDue(today, TimeZone.UTC)
+        store.remove(store.entriesFor(today).first().single().id)
+        assertTrue(store.generateDue(today, TimeZone.UTC).isEmpty())
+        assertTrue(store.entriesFor(today).first().isEmpty())
+    }
+
+    @Test
+    fun `a new day generates again`() = runTest {
+        val store = newStore(clock)
+        store.create("Daily", Tier.One, Energy.Low, schedule = everyDay)
+        store.generateDue(today, TimeZone.UTC)
+        val tomorrow = today.plus(1, DateTimeUnit.DAY)
+        assertEquals(1, store.generateDue(tomorrow, TimeZone.UTC).size)
+        assertEquals(1, store.entriesFor(tomorrow).first().size)
+    }
+
+    @Test
+    fun `only today is generated and missed days stay empty`() = runTest {
+        val store = newStore(clock)
+        store.create("Daily", Tier.One, Energy.Low, schedule = everyDay)
+        store.generateDue(today, TimeZone.UTC)
+        assertTrue(store.entriesFor(today.minus(1, DateTimeUnit.DAY)).first().isEmpty())
+        assertEquals(setOf(today), store.daysWithEntries.first())
+    }
+
+    @Test
+    fun `adding by hand does not stop or double the generation`() = runTest {
+        val store = newStore(clock)
+        val template = store.create("Daily", Tier.One, Energy.Low, schedule = everyDay)
+        store.assign(template, today)
+        assertEquals(1, store.generateDue(today, TimeZone.UTC).size)
+        store.assign(template, today)
+        assertTrue(store.generateDue(today, TimeZone.UTC).isEmpty())
+        assertEquals(3, store.entriesFor(today).first().size)
+    }
+
+    @Test
+    fun `editing a template keeps the generated day`() = runTest {
+        val store = newStore(clock)
+        store.create("Daily", Tier.One, Energy.Low, schedule = everyDay)
+        store.generateDue(today, TimeZone.UTC)
+        store.remove(store.entriesFor(today).first().single().id)
+
+        // The caller's copy has no marker, as if it had been built before the generation.
+        store.update(store.templates.first().single().copy(name = "Renamed", lastGenerated = null))
+        assertEquals(today, store.templates.first().single().lastGenerated)
+        assertTrue(store.generateDue(today, TimeZone.UTC).isEmpty())
+    }
+
+    @Test
+    fun `a template edited to include today generates once`() = runTest {
+        val store = newStore(clock)
+        val template = store.create("Weekly", Tier.One, Energy.Low, schedule = TaskSchedule.Weekly(setOf(today.dayOfWeek.next())))
+        assertTrue(store.generateDue(today, TimeZone.UTC).isEmpty())
+        store.update(template.copy(schedule = TaskSchedule.Weekly(setOf(today.dayOfWeek))))
+        assertEquals(1, store.generateDue(today, TimeZone.UTC).size)
+        assertTrue(store.generateDue(today, TimeZone.UTC).isEmpty())
+    }
+
+    @Test
+    fun `a generated entry carries the template reminder on that day`() = runTest {
+        val store = newStore(clock)
+        store.create("Daily", Tier.One, Energy.Low, schedule = everyDay, reminder = TemplateReminder(9 * 60 + 15, 60))
+        val entry = store.generateDue(today, TimeZone.UTC).single()
+        assertEquals(Reminder(Instant.parse("2026-10-23T09:15:00Z"), 60), entry.reminder)
+        assertEquals(entry.reminder, store.entriesFor(today).first().single().reminder)
+    }
+
+    @Test
+    fun `a generated reminder uses the given time zone`() = runTest {
+        val store = newStore(clock)
+        store.create("Daily", Tier.One, Energy.Low, schedule = everyDay, reminder = TemplateReminder(9 * 60, null))
+        val entry = store.generateDue(today, TimeZone.of("Europe/Bucharest")).single()
+        assertEquals(Instant.parse("2026-10-23T06:00:00Z"), entry.reminder!!.startAt)
+    }
+
+    @Test
+    fun `a reminder time that has passed leaves only the later repeats`() = runTest {
+        val store = newStore(clock)
+        store.create("Daily", Tier.One, Energy.Low, schedule = everyDay, reminder = TemplateReminder(9 * 60, 30))
+        val entry = store.generateDue(today, TimeZone.UTC).single()
+        val now = Instant.parse("2026-10-23T14:10:00Z")
+        val next = ReminderRules.upcoming(entry.reminder!!, today, 22, now, TimeZone.UTC).first()
+        assertEquals(Instant.parse("2026-10-23T14:30:00Z"), next)
+
+        val once = newStore(clock)
+        once.create("Daily", Tier.One, Energy.Low, schedule = everyDay, reminder = TemplateReminder(9 * 60, null))
+        val single = once.generateDue(today, TimeZone.UTC).single()
+        assertTrue(ReminderRules.upcoming(single.reminder!!, today, 22, now, TimeZone.UTC).isEmpty())
+    }
+
+    @Test
+    fun `schedules reminders and the generated day travel in a backup`() = runTest {
+        val source = newStore(clock)
+        source.create("Weekly", Tier.One, Energy.Low, schedule = TaskSchedule.Weekly(setOf(DayOfWeek.MONDAY)), reminder = nineOClock)
+        source.create("Daily", Tier.One, Energy.Low, schedule = everyDay)
+        source.generateDue(today, TimeZone.UTC)
+        val data = source.exportData()
+
+        val target = newStore(clock)
+        target.importData(data)
+        assertEquals(source.templates.first(), target.templates.first())
+        assertTrue(target.generateDue(today, TimeZone.UTC).isEmpty())
+    }
 }
+
+private fun DayOfWeek.next(): DayOfWeek = DayOfWeek.entries[(ordinal + 1) % 7]

@@ -14,7 +14,9 @@ import com.usuallycoding.openadhd.domain.RollResult
 import com.usuallycoding.openadhd.domain.SettingKey
 import com.usuallycoding.openadhd.domain.StoreState
 import com.usuallycoding.openadhd.domain.Settings
+import com.usuallycoding.openadhd.domain.TaskSchedule
 import com.usuallycoding.openadhd.domain.TaskTemplate
+import com.usuallycoding.openadhd.domain.TemplateReminder
 import com.usuallycoding.openadhd.domain.Tier
 import com.usuallycoding.openadhd.domain.newId
 import com.usuallycoding.openadhd.domain.toPlannedTask
@@ -24,6 +26,7 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.combine
 import kotlinx.datetime.LocalDate
+import kotlinx.datetime.TimeZone
 import kotlin.random.Random
 import kotlin.time.Clock
 
@@ -51,8 +54,10 @@ class RoomStore(
         energy: Energy,
         description: String,
         subtasks: List<String>,
+        schedule: TaskSchedule,
+        reminder: TemplateReminder?,
     ): TaskTemplate {
-        val template = TaskTemplate(newId(), name, tier, energy, description, subtasks).validated(dao.currentSettings().rules)
+        val template = TaskTemplate(newId(), name, tier, energy, description, subtasks, schedule, reminder).validated(dao.currentSettings().rules)
         dao.insertTemplateWithSubtasks(template.toEntity(), template.subtaskEntities())
         return template
     }
@@ -75,6 +80,9 @@ class RoomStore(
         dao.insertPlannedWithSubtasks(task.toEntity(), task.subtaskEntities())
         return task
     }
+
+    override suspend fun generateDue(today: LocalDate, zone: TimeZone): List<PlannedTask> =
+        dao.generateDue(today, zone)
 
     override suspend fun remove(id: String) = dao.removePlanned(id)
 

@@ -15,7 +15,11 @@ import com.usuallycoding.openadhd.domain.Settings
 import com.usuallycoding.openadhd.domain.checkSetting
 import com.usuallycoding.openadhd.domain.LedgerReason
 import com.usuallycoding.openadhd.domain.RedemptionSource
+import com.usuallycoding.openadhd.domain.PlannedTask
 import com.usuallycoding.openadhd.domain.Reminder
+import com.usuallycoding.openadhd.domain.generatedTask
+import kotlinx.datetime.LocalDate
+import kotlinx.datetime.TimeZone
 import com.usuallycoding.openadhd.domain.RewardRules
 import com.usuallycoding.openadhd.domain.RewardTier
 import com.usuallycoding.openadhd.domain.StoreState
@@ -197,6 +201,25 @@ abstract class OpenAdhdDao {
     @Query("SELECT position FROM templates WHERE id = :id")
     abstract suspend fun templatePosition(id: String): Int?
 
+    @Query("SELECT lastGenerated FROM templates WHERE id = :id")
+    abstract suspend fun templateLastGenerated(id: String): String?
+
+    @Query("UPDATE templates SET lastGenerated = :date WHERE id = :id")
+    abstract suspend fun setTemplateLastGenerated(id: String, date: String)
+
+    /** See [com.usuallycoding.openadhd.domain.PlannerRepository.generateDue]; one transaction, so two callers cannot both generate. */
+    @Transaction
+    open suspend fun generateDue(today: LocalDate, zone: TimeZone): List<PlannedTask> {
+        val rules = currentSettings().rules
+        val due = templatesOnce().map { it.toDomain() }.filter { it.schedule.isDue(today) && it.lastGenerated != today }
+        return due.map { template ->
+            val task = template.generatedTask(today, zone, rules)
+            insertPlannedWithSubtasks(task.toEntity(), task.subtaskEntities())
+            setTemplateLastGenerated(template.id, today.toString())
+            task
+        }
+    }
+
     @Query("SELECT id FROM templates ORDER BY position, rowid")
     abstract suspend fun templateIds(): List<String>
 
@@ -216,8 +239,14 @@ abstract class OpenAdhdDao {
 
     @Transaction
     open suspend fun updateTemplateWithSubtasks(template: TemplateEntity, subtasks: List<TemplateSubtaskEntity>) {
-        // @Update writes every column, so carry the stored position over or an edit would move the template.
-        updateTemplate(template.copy(position = templatePosition(template.id) ?: template.position))
+        // @Update writes every column, so carry the stored position and generated day over or an edit would move the
+        // template and let a deleted entry come back.
+        updateTemplate(
+            template.copy(
+                position = templatePosition(template.id) ?: template.position,
+                lastGenerated = templateLastGenerated(template.id),
+            ),
+        )
         deleteTemplateSubtasks(template.id)
         insertTemplateSubtasks(subtasks)
     }

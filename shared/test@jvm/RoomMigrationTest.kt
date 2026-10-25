@@ -13,10 +13,13 @@ import com.usuallycoding.openadhd.domain.Reminder
 import com.usuallycoding.openadhd.domain.RewardTier
 import com.usuallycoding.openadhd.domain.SettingKey
 import com.usuallycoding.openadhd.domain.Settings
+import com.usuallycoding.openadhd.domain.TaskSchedule
+import com.usuallycoding.openadhd.domain.TemplateReminder
 import com.usuallycoding.openadhd.domain.Tier
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import kotlinx.datetime.LocalDate
+import kotlinx.datetime.TimeZone
 import kotlin.io.path.createTempDirectory
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -343,6 +346,29 @@ class RoomMigrationTest {
 
         val second = Room.databaseBuilder<OpenAdhdDatabase>(file).buildOpenAdhdDatabase()
         assertEquals(reminder, RoomStore(second).entriesFor(day).first().first { it.id == pending.id }.reminder)
+        second.close()
+    }
+
+    @Test
+    fun `upgrading to version 9 keeps templates with no schedule and accepts a schedule`() = runTest {
+        val file = createVersion1Database()
+        val first = Room.databaseBuilder<OpenAdhdDatabase>(file).buildOpenAdhdDatabase()
+        val store = RoomStore(first)
+
+        val template = store.templates.first().single()
+        assertEquals(TaskSchedule.None, template.schedule)
+        assertNull(template.reminder)
+        assertNull(template.lastGenerated)
+
+        store.update(template.copy(schedule = TaskSchedule.Daily, reminder = TemplateReminder(540, 30)))
+        assertEquals(1, store.generateDue(day, TimeZone.UTC).size)
+        first.close()
+
+        val second = Room.databaseBuilder<OpenAdhdDatabase>(file).buildOpenAdhdDatabase()
+        val reopened = RoomStore(second).templates.first().single()
+        assertEquals(TaskSchedule.Daily, reopened.schedule)
+        assertEquals(TemplateReminder(540, 30), reopened.reminder)
+        assertEquals(day, reopened.lastGenerated)
         second.close()
     }
 }

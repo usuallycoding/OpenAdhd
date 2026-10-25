@@ -22,7 +22,10 @@ import com.usuallycoding.openadhd.domain.SettingKey
 import com.usuallycoding.openadhd.domain.Settings
 import com.usuallycoding.openadhd.domain.checkSetting
 import com.usuallycoding.openadhd.domain.RollRules
+import com.usuallycoding.openadhd.domain.TaskSchedule
 import com.usuallycoding.openadhd.domain.TaskTemplate
+import com.usuallycoding.openadhd.domain.TemplateReminder
+import com.usuallycoding.openadhd.domain.generatedTask
 import com.usuallycoding.openadhd.domain.reorderedBy
 import com.usuallycoding.openadhd.domain.Tier
 import com.usuallycoding.openadhd.domain.newId
@@ -34,6 +37,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
 import kotlinx.datetime.LocalDate
+import kotlinx.datetime.TimeZone
 import kotlin.random.Random
 import kotlin.time.Clock
 
@@ -57,14 +61,29 @@ internal class StoreLogic(
         energy: Energy,
         description: String,
         subtasks: List<String>,
+        schedule: TaskSchedule = TaskSchedule.None,
+        reminder: TemplateReminder? = null,
     ): Pair<StoreState, TaskTemplate> {
-        val template = TaskTemplate(newId(), name, tier, energy, description, subtasks).validated(state.rules)
+        val template = TaskTemplate(newId(), name, tier, energy, description, subtasks, schedule, reminder).validated(state.rules)
         return state.copy(templates = listOf(template) + state.templates) to template
     }
 
     fun update(state: StoreState, template: TaskTemplate): StoreState {
         val valid = template.validated(state.rules)
-        return state.copy(templates = state.templates.map { if (it.id == valid.id) valid else it })
+        // The stored marker is kept whatever the caller's copy says, so an edit can never make a deleted entry come back.
+        return state.copy(templates = state.templates.map { if (it.id == valid.id) valid.copy(lastGenerated = it.lastGenerated) else it })
+    }
+
+    /** Adds an entry for each template due on [today] that has not been generated for it yet, and marks them generated. */
+    fun generateDue(state: StoreState, today: LocalDate, zone: TimeZone): Pair<StoreState, List<PlannedTask>> {
+        val due = state.templates.filter { it.schedule.isDue(today) && it.lastGenerated != today }
+        if (due.isEmpty()) return state to emptyList()
+        val tasks = due.map { it.generatedTask(today, zone, state.rules) }
+        val ids = due.map { it.id }.toSet()
+        return state.copy(
+            templates = state.templates.map { if (it.id in ids) it.copy(lastGenerated = today) else it },
+            planned = state.planned + tasks,
+        ) to tasks
     }
 
     fun delete(state: StoreState, id: String): StoreState =
@@ -263,12 +282,14 @@ class InMemoryStore(
         energy: Energy,
         description: String,
         subtasks: List<String>,
+        schedule: TaskSchedule,
+        reminder: TemplateReminder?,
     ): TaskTemplate {
         // Validate before touching the state so invalid input throws to the caller.
-        TaskTemplate("", name, tier, energy, description, subtasks).validated(state.value.rules)
+        TaskTemplate("", name, tier, energy, description, subtasks, schedule, reminder).validated(state.value.rules)
         var created: TaskTemplate? = null
         state.update { s ->
-            logic.create(s, name, tier, energy, description, subtasks).also { created = it.second }.first
+            logic.create(s, name, tier, energy, description, subtasks, schedule, reminder).also { created = it.second }.first
         }
         return created!!
     }
@@ -284,6 +305,12 @@ class InMemoryStore(
         var assigned: PlannedTask? = null
         state.update { s -> logic.assign(s, template, date).also { assigned = it.second }.first }
         return assigned!!
+    }
+
+    override suspend fun generateDue(today: LocalDate, zone: TimeZone): List<PlannedTask> {
+        var generated: List<PlannedTask> = emptyList()
+        state.update { s -> logic.generateDue(s, today, zone).also { generated = it.second }.first }
+        return generated
     }
 
     override suspend fun remove(id: String) = state.update { logic.remove(it, id) }

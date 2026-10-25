@@ -19,6 +19,8 @@ internal fun TaskTemplate.validated(rules: GameRules = GameRules.Default): TaskT
     }
     val limit = CoinRules.maxSubtasks(tier, rules)
     require(titles.size <= limit) { "A tier ${tier.level} task can have at most $limit subtasks" }
+    val problem = ScheduleRules.check(schedule, reminder)
+    require(problem == null) { problem!!.message }
     return copy(name = requireValidName(name), description = description.trim(), subtasks = titles)
 }
 
@@ -38,6 +40,15 @@ internal fun TaskTemplate.toPlannedTask(date: kotlinx.datetime.LocalDate, rules:
         subtasks = subtasks.mapIndexed { index, title -> PlannedSubtask(newId(), title, shares[index]) },
     )
 }
+
+/** The entry a schedule adds on [date]: the template as [toPlannedTask] copies it, plus the template's reminder on that day. */
+internal fun TaskTemplate.generatedTask(
+    date: kotlinx.datetime.LocalDate,
+    zone: kotlinx.datetime.TimeZone,
+    rules: GameRules = GameRules.Default,
+): PlannedTask = toPlannedTask(date, rules).copy(
+    reminder = reminder?.let { Reminder(ReminderRules.at(date, it.hour, it.minute, zone), it.repeatMinutes) },
+)
 
 /** Trims text fields, clears the custom price outside tier 5, and rejects invalid input. */
 internal fun RewardTemplate.validated(rules: GameRules = GameRules.Default): RewardTemplate {

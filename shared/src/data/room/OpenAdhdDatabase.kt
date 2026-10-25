@@ -21,7 +21,7 @@ import kotlinx.coroutines.Dispatchers
         RedemptionEntity::class,
         SettingEntity::class,
     ],
-    version = 8,
+    version = 9,
     exportSchema = false,
 )
 @ConstructedBy(OpenAdhdDatabaseConstructor::class)
@@ -137,8 +137,24 @@ val Migration7To8: Migration = object : Migration(7, 8) {
     }
 }
 
+/**
+ * Version 9 adds a schedule, a reminder and the last generated day to task templates. All columns are nullable or
+ * default to "no schedule", so existing templates stay manual-only.
+ */
+val Migration8To9: Migration = object : Migration(8, 9) {
+    override fun migrate(connection: SQLiteConnection) {
+        connection.execSQL("ALTER TABLE templates ADD COLUMN scheduleKind TEXT NOT NULL DEFAULT 'None'")
+        connection.execSQL("ALTER TABLE templates ADD COLUMN scheduleStart TEXT")
+        connection.execSQL("ALTER TABLE templates ADD COLUMN scheduleEnd TEXT")
+        connection.execSQL("ALTER TABLE templates ADD COLUMN scheduleDays INTEGER NOT NULL DEFAULT 0")
+        connection.execSQL("ALTER TABLE templates ADD COLUMN reminderMinuteOfDay INTEGER")
+        connection.execSQL("ALTER TABLE templates ADD COLUMN reminderRepeatMinutes INTEGER")
+        connection.execSQL("ALTER TABLE templates ADD COLUMN lastGenerated TEXT")
+    }
+}
+
 fun RoomDatabase.Builder<OpenAdhdDatabase>.buildOpenAdhdDatabase(): OpenAdhdDatabase =
     setDriver(BundledSQLiteDriver())
         .setQueryCoroutineContext(Dispatchers.Default)
-        .addMigrations(Migration1To2, Migration2To3, Migration3To4, Migration4To5, Migration5To6, Migration6To7, Migration7To8)
+        .addMigrations(Migration1To2, Migration2To3, Migration3To4, Migration4To5, Migration5To6, Migration6To7, Migration7To8, Migration8To9)
         .build()

@@ -17,7 +17,10 @@ import com.usuallycoding.openadhd.domain.GameRules
 import com.usuallycoding.openadhd.domain.RewardRules
 import com.usuallycoding.openadhd.domain.RewardTemplate
 import com.usuallycoding.openadhd.domain.RewardTier
+import com.usuallycoding.openadhd.domain.ScheduleRules
 import com.usuallycoding.openadhd.domain.Settings
+import com.usuallycoding.openadhd.domain.StoredSchedule
+import com.usuallycoding.openadhd.domain.TemplateReminder
 import com.usuallycoding.openadhd.domain.TaskTemplate
 import com.usuallycoding.openadhd.domain.Tier
 import kotlinx.datetime.LocalDate
@@ -31,6 +34,13 @@ data class TemplateEntity(
     val energy: String,
     @ColumnInfo(defaultValue = "''") val description: String,
     @ColumnInfo(defaultValue = "0") val position: Int = 0,
+    @ColumnInfo(defaultValue = "'None'") val scheduleKind: String = "None",
+    val scheduleStart: String? = null,
+    val scheduleEnd: String? = null,
+    @ColumnInfo(defaultValue = "0") val scheduleDays: Int = 0,
+    val reminderMinuteOfDay: Int? = null,
+    val reminderRepeatMinutes: Int? = null,
+    val lastGenerated: String? = null,
 )
 
 @Entity(tableName = "template_subtasks")
@@ -126,9 +136,20 @@ internal fun TemplateWithSubtasks.toDomain() = TaskTemplate(
     energy = Energy.valueOf(template.energy),
     description = template.description,
     subtasks = subtasks.sortedBy { it.position }.map { it.title },
+    schedule = ScheduleRules.decode(StoredSchedule(template.scheduleKind, template.scheduleStart, template.scheduleEnd, template.scheduleDays)),
+    reminder = template.reminderMinuteOfDay?.let { TemplateReminder(it, template.reminderRepeatMinutes) },
+    lastGenerated = template.lastGenerated?.let { runCatching { LocalDate.parse(it) }.getOrNull() },
 )
 
-internal fun TaskTemplate.toEntity() = TemplateEntity(id, name, tier.level, energy.name, description)
+internal fun TaskTemplate.toEntity(): TemplateEntity {
+    val stored = ScheduleRules.encode(schedule)
+    return TemplateEntity(
+        id, name, tier.level, energy.name, description,
+        scheduleKind = stored.kind, scheduleStart = stored.start, scheduleEnd = stored.end, scheduleDays = stored.days,
+        reminderMinuteOfDay = reminder?.minuteOfDay, reminderRepeatMinutes = reminder?.repeatMinutes,
+        lastGenerated = lastGenerated?.toString(),
+    )
+}
 
 internal fun TaskTemplate.subtaskEntities() =
     subtasks.mapIndexed { index, title -> TemplateSubtaskEntity(newSubtaskId(id, index), id, index, title) }

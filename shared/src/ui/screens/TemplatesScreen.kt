@@ -13,7 +13,16 @@ import androidx.compose.foundation.pager.PagerState
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.DatePicker
+import androidx.compose.material3.DatePickerDialog
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.TimePicker
+import androidx.compose.material3.rememberDatePickerState
+import androidx.compose.material3.rememberTimePickerState
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -40,7 +49,19 @@ import androidx.compose.ui.unit.dp
 import com.usuallycoding.openadhd.domain.Energy
 import com.usuallycoding.openadhd.domain.CoinRules
 import com.usuallycoding.openadhd.ui.LocalGameRules
+import com.usuallycoding.openadhd.domain.HistoryDays
+import com.usuallycoding.openadhd.domain.ReminderRules
+import com.usuallycoding.openadhd.domain.ScheduleProblem
+import com.usuallycoding.openadhd.domain.ScheduleRules
+import com.usuallycoding.openadhd.domain.TaskSchedule
 import com.usuallycoding.openadhd.domain.TaskTemplate
+import com.usuallycoding.openadhd.domain.TemplateReminder
+import kotlinx.datetime.DateTimeUnit
+import kotlinx.datetime.LocalDate
+import kotlinx.datetime.TimeZone
+import kotlinx.datetime.plus
+import kotlinx.datetime.todayIn
+import kotlin.time.Clock
 import com.usuallycoding.openadhd.domain.Tier
 import com.usuallycoding.openadhd.ui.rewards.RewardTemplatesViewModel
 import com.usuallycoding.openadhd.ui.templates.TemplateInputError
@@ -95,15 +116,20 @@ fun TaskTemplatesScreen(viewModel: TemplatesViewModel, modifier: Modifier = Modi
         onSave = viewModel::save,
         onDelete = viewModel::delete,
         modifier = modifier,
+        today = Clock.System.todayIn(TimeZone.currentSystemDefault()),
     )
 }
 
 @Composable
 fun TemplatesContent(
     templates: List<TaskTemplate>,
-    onSave: (id: String?, name: String, tier: Tier, energy: Energy, description: String, subtasks: List<String>) -> Unit,
+    onSave: (
+        id: String?, name: String, tier: Tier, energy: Energy, description: String, subtasks: List<String>,
+        schedule: TaskSchedule, reminder: TemplateReminder?,
+    ) -> Unit,
     onDelete: (id: String) -> Unit,
     modifier: Modifier = Modifier,
+    today: LocalDate = Clock.System.todayIn(TimeZone.currentSystemDefault()),
     reordering: Boolean = false,
     onMoveUp: (id: String) -> Unit = {},
     onMoveDown: (id: String) -> Unit = {},
@@ -123,7 +149,12 @@ fun TemplatesContent(
                 itemsIndexed(templates, key = { _, template -> template.id }) { index, template ->
                     ListItem(
                         headlineContent = { Text(template.name) },
-                        supportingContent = { Text(template.description()) },
+                        supportingContent = {
+                            Column {
+                                Text(template.description())
+                                ScheduleRules.summary(template.schedule, today)?.let { Text(it) }
+                            }
+                        },
                         trailingContent = {
                             if (reordering) {
                                 MoveButtons(
@@ -162,9 +193,10 @@ fun TemplatesContent(
     editing?.let { template ->
         TemplateDialog(
             initial = template,
+            today = today,
             onDismiss = { editing = null },
-            onConfirm = { name, tier, energy, description, subtasks ->
-                onSave(template.id.ifEmpty { null }, name, tier, energy, description, subtasks)
+            onConfirm = { name, tier, energy, description, subtasks, schedule, reminder ->
+                onSave(template.id.ifEmpty { null }, name, tier, energy, description, subtasks, schedule, reminder)
             },
         )
     }
@@ -173,8 +205,12 @@ fun TemplatesContent(
 @Composable
 private fun TemplateDialog(
     initial: TaskTemplate,
+    today: LocalDate,
     onDismiss: () -> Unit,
-    onConfirm: (name: String, tier: Tier, energy: Energy, description: String, subtasks: List<String>) -> Unit,
+    onConfirm: (
+        name: String, tier: Tier, energy: Energy, description: String, subtasks: List<String>,
+        schedule: TaskSchedule, reminder: TemplateReminder?,
+    ) -> Unit,
 ) {
     var name by remember { mutableStateOf(initial.name) }
     var description by remember { mutableStateOf(initial.description) }
@@ -184,6 +220,27 @@ private fun TemplateDialog(
     var error by remember { mutableStateOf<TemplateInputError?>(null) }
     val rules = LocalGameRules.current
 
+    // Each mode keeps its own values while the sheet is open, so switching modes by mistake loses nothing.
+    var mode by remember { mutableStateOf(ScheduleMode.of(initial.schedule)) }
+    var onDate by remember { mutableStateOf((initial.schedule as? TaskSchedule.OnDate)?.date ?: today) }
+    var weekdays by remember { mutableStateOf((initial.schedule as? TaskSchedule.Weekly)?.days ?: emptySet()) }
+    var periodStart by remember { mutableStateOf((initial.schedule as? TaskSchedule.Period)?.start ?: today) }
+    var periodEnd by remember { mutableStateOf((initial.schedule as? TaskSchedule.Period)?.end ?: today.plus(1, DateTimeUnit.DAY)) }
+    var reminderTime by remember { mutableStateOf(initial.reminder?.minuteOfDay) }
+    var reminderRepeat by remember { mutableStateOf(if (initial.reminder != null) initial.reminder.repeatMinutes else ReminderRules.DefaultRepeat) }
+    var scheduleProblem by remember { mutableStateOf<ScheduleProblem?>(null) }
+    var pickingTime by remember { mutableStateOf(false) }
+
+    fun schedule(): TaskSchedule = when (mode) {
+        ScheduleMode.None -> TaskSchedule.None
+        ScheduleMode.Date -> TaskSchedule.OnDate(onDate)
+        ScheduleMode.Weekly -> TaskSchedule.Weekly(weekdays)
+        ScheduleMode.Period -> TaskSchedule.Period(periodStart, periodEnd)
+        ScheduleMode.Daily -> TaskSchedule.Daily
+    }
+
+    fun reminder(): TemplateReminder? = reminderTime?.let { TemplateReminder(it, reminderRepeat) }
+
     FormSheet(
         title = if (initial.id.isEmpty()) "New task" else "Edit task",
         onDismiss = onDismiss,
@@ -191,11 +248,13 @@ private fun TemplateDialog(
             TextButton(onClick = requestClose) { Text("Cancel") }
             TextButton(onClick = {
                 val problem = TemplatesViewModel.validate(name, tier, subtasks.toList(), rules)
-                if (problem == null) {
-                    onConfirm(name, tier, energy, description, subtasks.toList())
+                val badSchedule = TemplatesViewModel.validateSchedule(schedule(), reminder())
+                if (problem == null && badSchedule == null) {
+                    onConfirm(name, tier, energy, description, subtasks.toList(), schedule(), reminder())
                     requestClose()
                 } else {
                     error = problem
+                    scheduleProblem = badSchedule
                 }
             }) { Text("Save") }
         },
@@ -276,6 +335,115 @@ private fun TemplateDialog(
             Icon(AddIcon, contentDescription = null)
             Text("Add subtask", modifier = Modifier.padding(start = 8.dp))
         }
+
+        Text("Add to Today", style = MaterialTheme.typography.labelLarge)
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            ScheduleMode.entries.forEach { option ->
+                FilterChip(
+                    selected = option == mode,
+                    onClick = { mode = option; scheduleProblem = null },
+                    label = { Text(option.label) },
+                )
+            }
+        }
+        when (mode) {
+            ScheduleMode.None -> Text("Only when you add it by hand.", style = MaterialTheme.typography.bodySmall)
+            ScheduleMode.Date -> DateButton("Date", onDate) { onDate = it; scheduleProblem = null }
+            ScheduleMode.Weekly -> FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                ScheduleRules.Weekdays.forEach { day ->
+                    FilterChip(
+                        selected = day in weekdays,
+                        onClick = { weekdays = if (day in weekdays) weekdays - day else weekdays + day; scheduleProblem = null },
+                        label = { Text(ScheduleRules.dayName(day)) },
+                    )
+                }
+            }
+            ScheduleMode.Period -> Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                DateButton("From", periodStart) { periodStart = it; scheduleProblem = null }
+                DateButton("To", periodEnd) { periodEnd = it; scheduleProblem = null }
+            }
+            ScheduleMode.Daily -> Text("Every day.", style = MaterialTheme.typography.bodySmall)
+        }
+        scheduleProblem?.let {
+            Text(it.message, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+        }
+
+        Text("Reminder on the generated task", style = MaterialTheme.typography.labelLarge)
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+            OutlinedButton(onClick = { pickingTime = true }) {
+                Text(reminderTime?.let { ScheduleRules.clock(TemplateReminder(it)) } ?: "Set a time")
+            }
+            if (reminderTime != null) {
+                TextButton(onClick = { reminderTime = null; scheduleProblem = null }) { Text("Clear time") }
+            }
+        }
+        if (reminderTime != null) {
+            Text("Repeat", style = MaterialTheme.typography.labelLarge)
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                FilterChip(selected = reminderRepeat == null, onClick = { reminderRepeat = null }, label = { Text("Off") })
+                ReminderRules.RepeatChoices.forEach { minutes ->
+                    FilterChip(
+                        selected = reminderRepeat == minutes,
+                        onClick = { reminderRepeat = minutes },
+                        label = { Text("Every ${ReminderRules.repeatLabel(minutes)}") },
+                    )
+                }
+            }
+        }
+    }
+
+    if (pickingTime) {
+        val start = reminderTime ?: (9 * 60)
+        val picker = rememberTimePickerState(start / 60, start % 60, is24Hour = true)
+        AlertDialog(
+            onDismissRequest = { pickingTime = false },
+            title = { Text("Reminder time") },
+            text = { TimePicker(state = picker) },
+            confirmButton = {
+                TextButton(onClick = {
+                    reminderTime = picker.hour * 60 + picker.minute
+                    pickingTime = false
+                }) { Text("OK") }
+            },
+            dismissButton = { TextButton(onClick = { pickingTime = false }) { Text("Cancel") } },
+        )
+    }
+}
+
+/** How a template is added to Today, as the form offers it. */
+private enum class ScheduleMode(val label: String) {
+    None("None"), Date("Date"), Weekly("Weekly"), Period("Period"), Daily("Daily");
+
+    companion object {
+        fun of(schedule: TaskSchedule): ScheduleMode = when (schedule) {
+            TaskSchedule.None -> None
+            is TaskSchedule.OnDate -> Date
+            is TaskSchedule.Weekly -> Weekly
+            is TaskSchedule.Period -> Period
+            TaskSchedule.Daily -> Daily
+        }
+    }
+}
+
+/** A button showing [label] and the chosen [date] that opens a calendar to change it. */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun DateButton(label: String, date: LocalDate, onPick: (LocalDate) -> Unit) {
+    var picking by remember { mutableStateOf(false) }
+    OutlinedButton(onClick = { picking = true }) { Text("$label: ${ScheduleRules.dateText(date)}") }
+    if (picking) {
+        val millis = HistoryDays.toPickerMillis(date)
+        val state = rememberDatePickerState(initialSelectedDateMillis = millis, initialDisplayedMonthMillis = millis)
+        DatePickerDialog(
+            onDismissRequest = { picking = false },
+            confirmButton = {
+                TextButton(onClick = {
+                    state.selectedDateMillis?.let { onPick(HistoryDays.fromPickerMillis(it)) }
+                    picking = false
+                }) { Text("OK") }
+            },
+            dismissButton = { TextButton(onClick = { picking = false }) { Text("Cancel") } },
+        ) { DatePicker(state) }
     }
 }
 
@@ -297,7 +465,7 @@ private fun TemplatesContentPreview() {
                 TaskTemplate("1", "Reply to emails", Tier.Two, Energy.Medium, "Inbox zero", listOf("Reply to boss", "Archive newsletters")),
                 TaskTemplate("2", "File taxes", Tier.Four, Energy.High),
             ),
-            onSave = { _, _, _, _, _, _ -> },
+            onSave = { _, _, _, _, _, _, _, _ -> },
             onDelete = {},
         )
     }
