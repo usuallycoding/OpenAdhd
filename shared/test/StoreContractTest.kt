@@ -1814,6 +1814,46 @@ abstract class StoreContractTest {
         assertEquals(source.templates.first(), target.templates.first())
         assertTrue(target.generateDue(today, TimeZone.UTC).isEmpty())
     }
+
+    @Test
+    fun `adding a template with a reminder by hand gives the entry that reminder`() = runTest {
+        val store = newStore(clock)
+        val template = store.create("Meds", Tier.One, Energy.Low, reminder = TemplateReminder(9 * 60, 30))
+        val entry = store.assign(template, today, TimeZone.UTC)
+        assertEquals(Reminder(Instant.parse("2026-10-23T09:00:00Z"), 30), entry.reminder)
+        assertEquals(entry.reminder, store.entriesFor(today).first().single().reminder)
+    }
+
+    @Test
+    fun `adding a template without a reminder by hand gives the entry none`() = runTest {
+        val store = newStore(clock)
+        val template = store.create("Meds", Tier.One, Energy.Low)
+        assertNull(store.assign(template, today, TimeZone.UTC).reminder)
+    }
+
+    @Test
+    fun `adding the same template twice gives each entry its own reminder`() = runTest {
+        val store = newStore(clock)
+        val template = store.create("Meds", Tier.One, Energy.Low, reminder = TemplateReminder(9 * 60, null))
+        store.assign(template, today, TimeZone.UTC)
+        store.assign(template, today, TimeZone.UTC)
+        val entries = store.entriesFor(today).first()
+        assertEquals(2, entries.size)
+        assertTrue(entries.all { it.reminder == Reminder(Instant.parse("2026-10-23T09:00:00Z"), null) })
+        store.setReminder(entries[0].id, null)
+        assertNull(store.entriesFor(today).first()[0].reminder)
+        assertNotNull(store.entriesFor(today).first()[1].reminder)
+    }
+
+    @Test
+    fun `a hand added reminder in the past resumes at the next repeat or never fires`() = runTest {
+        val store = newStore(clock)
+        val now = Instant.parse("2026-10-23T14:10:00Z")
+        val repeating = store.assign(store.create("A", Tier.One, Energy.Low, reminder = TemplateReminder(9 * 60, 30)), today, TimeZone.UTC)
+        val once = store.assign(store.create("B", Tier.One, Energy.Low, reminder = TemplateReminder(9 * 60, null)), today, TimeZone.UTC)
+        assertEquals(Instant.parse("2026-10-23T14:30:00Z"), ReminderRules.upcoming(repeating.reminder!!, today, 22, now, TimeZone.UTC).first())
+        assertTrue(ReminderRules.upcoming(once.reminder!!, today, 22, now, TimeZone.UTC).isEmpty())
+    }
 }
 
 private fun DayOfWeek.next(): DayOfWeek = DayOfWeek.entries[(ordinal + 1) % 7]

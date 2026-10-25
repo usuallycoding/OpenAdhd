@@ -75,7 +75,7 @@ fun App(container: AppContainer) {
     var destination by rememberSaveable { mutableStateOf(Destination.Today) }
 
     val todayViewModel = viewModel { TodayViewModel(container.store, container.clock, dateCheckInterval = container.dateCheckInterval, random = container.random, reminders = container.reminders) }
-    val templatesViewModel = viewModel { TemplatesViewModel(container.store, container.store.settings) }
+    val templatesViewModel = viewModel { TemplatesViewModel(container.store, container.store.settings, container.reminders) }
     val rewardTemplatesViewModel = viewModel { RewardTemplatesViewModel(container.store, container.store.settings) }
     val historyViewModel = viewModel { HistoryViewModel(container.store, todayViewModel.today) }
     val shopViewModel = viewModel { ShopViewModel(container.store) }
@@ -137,6 +137,10 @@ fun App(container: AppContainer) {
     // Where the platform cannot show a system notification (the desktop without a system tray), reminders show here.
     LaunchedEffect(container) {
         container.reminderNotices.collect { text -> snackbarHostState.showSnackbar("Still to do: $text") }
+    }
+
+    LaunchedEffect(templatesViewModel) {
+        templatesViewModel.notices.collect { text -> snackbarHostState.showSnackbar(text) }
     }
 
     LaunchedEffect(todayViewModel) {

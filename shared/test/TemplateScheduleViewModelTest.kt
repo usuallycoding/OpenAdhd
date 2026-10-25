@@ -1,5 +1,6 @@
 package com.usuallycoding.openadhd
 
+import androidx.lifecycle.viewModelScope
 import com.usuallycoding.openadhd.data.InMemoryStore
 import com.usuallycoding.openadhd.domain.Energy
 import com.usuallycoding.openadhd.domain.ScheduleProblem
@@ -9,6 +10,7 @@ import com.usuallycoding.openadhd.domain.Tier
 import com.usuallycoding.openadhd.ui.templates.TemplatesViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
@@ -71,5 +73,87 @@ class TemplateScheduleViewModelTest {
         val edited = vm.templates.value.single()
         assertEquals(TaskSchedule.None, edited.schedule)
         assertNull(edited.reminder)
+    }
+}
+
+@OptIn(ExperimentalCoroutinesApi::class)
+class TemplateReminderPermissionTest {
+    private val store = InMemoryStore()
+
+    @BeforeTest
+    fun setUp() = Dispatchers.setMain(UnconfinedTestDispatcher())
+
+    @AfterTest
+    fun tearDown() = Dispatchers.resetMain()
+
+    private fun notices(vm: TemplatesViewModel): MutableList<String> {
+        val seen = mutableListOf<String>()
+        vm.viewModelScope.launch(UnconfinedTestDispatcher()) { vm.notices.collect { seen += it } }
+        return seen
+    }
+
+    @Test
+    fun `saving a template reminder asks for permission once and a refusal still saves it`() = runTest {
+        val scheduler = FakeReminderScheduler(granted = false, grantsWhenAsked = false)
+        val vm = TemplatesViewModel(store, reminders = scheduler)
+        val seen = notices(vm)
+        vm.save(null, "Meds", Tier.One, Energy.Low, schedule = TaskSchedule.Daily, reminder = TemplateReminder(540, 30))
+
+        assertEquals(1, scheduler.permissionRequests)
+        assertEquals(TemplateReminder(540, 30), vm.templates.value.single().reminder)
+        assertEquals(listOf(TemplatesViewModel.NotificationsOff), seen)
+    }
+
+    @Test
+    fun `a granted permission shows no notice and a later save asks nothing more`() = runTest {
+        val scheduler = FakeReminderScheduler(granted = false, grantsWhenAsked = true)
+        val vm = TemplatesViewModel(store, reminders = scheduler)
+        val seen = notices(vm)
+        vm.save(null, "Meds", Tier.One, Energy.Low, reminder = TemplateReminder(540, null))
+        vm.save(null, "More", Tier.One, Energy.Low, reminder = TemplateReminder(600, null))
+
+        assertEquals(1, scheduler.permissionRequests)
+        assertTrue(seen.isEmpty())
+    }
+
+    @Test
+    fun `saving without a reminder time asks nothing`() = runTest {
+        val scheduler = FakeReminderScheduler(granted = false, grantsWhenAsked = false)
+        val vm = TemplatesViewModel(store, reminders = scheduler)
+        val seen = notices(vm)
+        vm.save(null, "Plain", Tier.One, Energy.Low, schedule = TaskSchedule.Daily)
+
+        assertEquals(0, scheduler.permissionRequests)
+        assertTrue(seen.isEmpty())
+        assertEquals(1, vm.templates.value.size)
+    }
+
+    @Test
+    fun `without a scheduler nothing is asked and nothing is shown`() = runTest {
+        val vm = TemplatesViewModel(store, reminders = null)
+        val seen = notices(vm)
+        vm.save(null, "Meds", Tier.One, Energy.Low, reminder = TemplateReminder(540, null))
+
+        assertTrue(seen.isEmpty())
+        assertEquals(TemplateReminder(540, null), vm.templates.value.single().reminder)
+    }
+
+    @Test
+    fun `an invalid template asks nothing`() = runTest {
+        val scheduler = FakeReminderScheduler(granted = false, grantsWhenAsked = false)
+        val vm = TemplatesViewModel(store, reminders = scheduler)
+        vm.save(null, "  ", Tier.One, Energy.Low, reminder = TemplateReminder(540, null))
+        assertEquals(0, scheduler.permissionRequests)
+    }
+
+    @Test
+    fun `editing a template with a reminder asks as well`() = runTest {
+        val scheduler = FakeReminderScheduler(granted = false, grantsWhenAsked = false)
+        val vm = TemplatesViewModel(store, reminders = scheduler)
+        val seen = notices(vm)
+        vm.save(null, "Meds", Tier.One, Energy.Low)
+        vm.save(vm.templates.value.single().id, "Meds", Tier.One, Energy.Low, reminder = TemplateReminder(540, 15))
+        assertEquals(1, scheduler.permissionRequests)
+        assertEquals(1, seen.size)
     }
 }

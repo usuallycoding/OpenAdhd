@@ -336,7 +336,30 @@ private fun TemplateDialog(
             Text("Add subtask", modifier = Modifier.padding(start = 8.dp))
         }
 
-        Text("Add to Today", style = MaterialTheme.typography.labelLarge)
+        Text("Reminder settings", style = MaterialTheme.typography.labelLarge)
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+            OutlinedButton(onClick = { pickingTime = true }) {
+                Text(reminderTime?.let { ScheduleRules.clock(TemplateReminder(it)) } ?: "Set a time")
+            }
+            if (reminderTime != null) {
+                TextButton(onClick = { reminderTime = null; scheduleProblem = null }) { Text("Clear time") }
+            }
+        }
+        if (reminderTime != null) {
+            Text("Repeat reminder", style = MaterialTheme.typography.labelLarge)
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                FilterChip(selected = reminderRepeat == null, onClick = { reminderRepeat = null }, label = { Text("Off") })
+                ReminderRules.RepeatChoices.forEach { minutes ->
+                    FilterChip(
+                        selected = reminderRepeat == minutes,
+                        onClick = { reminderRepeat = minutes },
+                        label = { Text("Every ${ReminderRules.repeatLabel(minutes)}") },
+                    )
+                }
+            }
+        }
+
+        Text("Add to Today schedule", style = MaterialTheme.typography.labelLarge)
         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             ScheduleMode.entries.forEach { option ->
                 FilterChip(
@@ -366,29 +389,6 @@ private fun TemplateDialog(
         }
         scheduleProblem?.let {
             Text(it.message, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
-        }
-
-        Text("Reminder on the generated task", style = MaterialTheme.typography.labelLarge)
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-            OutlinedButton(onClick = { pickingTime = true }) {
-                Text(reminderTime?.let { ScheduleRules.clock(TemplateReminder(it)) } ?: "Set a time")
-            }
-            if (reminderTime != null) {
-                TextButton(onClick = { reminderTime = null; scheduleProblem = null }) { Text("Clear time") }
-            }
-        }
-        if (reminderTime != null) {
-            Text("Repeat", style = MaterialTheme.typography.labelLarge)
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                FilterChip(selected = reminderRepeat == null, onClick = { reminderRepeat = null }, label = { Text("Off") })
-                ReminderRules.RepeatChoices.forEach { minutes ->
-                    FilterChip(
-                        selected = reminderRepeat == minutes,
-                        onClick = { reminderRepeat = minutes },
-                        label = { Text("Every ${ReminderRules.repeatLabel(minutes)}") },
-                    )
-                }
-            }
         }
     }
 

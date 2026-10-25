@@ -2,7 +2,11 @@ package com.usuallycoding.openadhd
 
 import androidx.compose.ui.test.ComposeUiTest
 import androidx.compose.ui.test.ExperimentalTestApi
+import androidx.compose.ui.test.hasScrollAction
+import androidx.compose.ui.test.onLast
+import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextInput
@@ -25,6 +29,7 @@ import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertNotNull
 
 /** The schedule and reminder controls of the template form, and the schedule line in the list. */
 @OptIn(ExperimentalTestApi::class, ExperimentalCoroutinesApi::class)
@@ -49,6 +54,8 @@ class TemplateScheduleUiTest {
         onNodeWithContentDescription("Add template").performClick()
         onNodeWithText("Name").performTextInput("Laundry")
         tap("Weekly")
+        // The schedule is at the bottom of a tall form, so scroll it into view before choosing the days.
+        onAllNodes(hasScrollAction()).onLast().performScrollToNode(hasText("Wed"))
         tap("Mon")
         tap("Wed")
         tap("Fri")
@@ -115,5 +122,39 @@ class TemplateScheduleUiTest {
         onNodeWithText("Ended").assertExists()
         onNodeWithText("On 2 Jan 2999").assertExists()
         onNodeWithText("Manual").assertExists()
+    }
+
+    @Test
+    fun `saving a template reminder with notifications refused closes the form and shows the notice`() = runComposeUiTest {
+        val store = InMemoryStore()
+        val scheduler = FakeReminderScheduler(granted = false, grantsWhenAsked = false)
+        setContent { App(AppContainer(store, dateCheckInterval = null, reminders = scheduler)) }
+        onNodeWithText("Templates").performClick()
+        onNodeWithContentDescription("Add template").performClick()
+        onNodeWithText("Name").performTextInput("Meds")
+        tap("Set a time")
+        tap("OK")
+        tap("Save")
+
+        onNodeWithText("Meds").assertExists()
+        onNodeWithText("Notifications are turned off for OpenAdhd. Turn them on in your device's settings to get reminders.").assertExists()
+        assertEquals(1, scheduler.permissionRequests)
+        assertNotNull(runBlocking { store.templates.first().single().reminder })
+    }
+
+    @Test
+    fun `saving a template reminder with notifications allowed shows no notice`() = runComposeUiTest {
+        val store = InMemoryStore()
+        val scheduler = FakeReminderScheduler(granted = false, grantsWhenAsked = true)
+        setContent { App(AppContainer(store, dateCheckInterval = null, reminders = scheduler)) }
+        onNodeWithText("Templates").performClick()
+        onNodeWithContentDescription("Add template").performClick()
+        onNodeWithText("Name").performTextInput("Meds")
+        tap("Set a time")
+        tap("OK")
+        tap("Save")
+
+        onNodeWithText("Meds").assertExists()
+        onNodeWithText("Notifications are turned off for OpenAdhd. Turn them on in your device's settings to get reminders.").assertDoesNotExist()
     }
 }

@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.usuallycoding.openadhd.domain.Energy
 import com.usuallycoding.openadhd.domain.CoinRules
 import com.usuallycoding.openadhd.domain.GameRules
+import com.usuallycoding.openadhd.domain.ReminderScheduler
 import com.usuallycoding.openadhd.domain.ScheduleProblem
 import com.usuallycoding.openadhd.domain.ScheduleRules
 import com.usuallycoding.openadhd.domain.Settings
@@ -16,7 +17,9 @@ import com.usuallycoding.openadhd.domain.TaskTemplate
 import com.usuallycoding.openadhd.domain.Tier
 import com.usuallycoding.openadhd.domain.TemplateRepository
 import com.usuallycoding.openadhd.domain.moved
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
@@ -29,6 +32,8 @@ enum class TemplateInputError { NameRequired, SubtaskTitleRequired, TooManySubta
 class TemplatesViewModel(
     private val repository: TemplateRepository,
     settings: Flow<Settings> = flowOf(Settings.Default),
+    /** Delivers reminders, or null where there is no way to; then no notification permission is asked. */
+    private val reminders: ReminderScheduler? = null,
 ) : ViewModel() {
     private val rules: StateFlow<GameRules> =
         settings.map { it.rules }.stateIn(viewModelScope, SharingStarted.Eagerly, GameRules.Default)
@@ -59,6 +64,11 @@ class TemplatesViewModel(
         if (moved != ids) viewModelScope.launch { repository.reorderTemplates(moved) }
     }
 
+    private val _notices = MutableSharedFlow<String>(extraBufferCapacity = 4)
+
+    /** Short messages for the screen, such as that notifications are off after saving a template reminder. */
+    val notices: SharedFlow<String> = _notices
+
     /**
      * Creates a template, or updates the one with [id]. Invalid input is ignored; check [validate] first
      * so the user can be told what is wrong.
@@ -81,6 +91,8 @@ class TemplatesViewModel(
             } else {
                 repository.update(TaskTemplate(id, name, tier, energy, description, subtasks, schedule, reminder))
             }
+            // The template is already saved: a refusal only tells the user why its reminder will not show.
+            if (reminder != null && reminders?.ensurePermission() == false) _notices.emit(NotificationsOff)
         }
     }
 
@@ -89,6 +101,8 @@ class TemplatesViewModel(
     }
 
     companion object {
+        const val NotificationsOff = "Notifications are turned off for OpenAdhd. Turn them on in your device's settings to get reminders."
+
         fun isValidName(name: String): Boolean = name.isNotBlank()
 
         /** What is wrong with the schedule or reminder, or null; shown in the form so the user can fix it. */

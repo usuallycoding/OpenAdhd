@@ -19,7 +19,7 @@ import com.usuallycoding.openadhd.domain.TaskTemplate
 import com.usuallycoding.openadhd.domain.TemplateReminder
 import com.usuallycoding.openadhd.domain.Tier
 import com.usuallycoding.openadhd.domain.newId
-import com.usuallycoding.openadhd.domain.toPlannedTask
+import com.usuallycoding.openadhd.domain.generatedTask
 import com.usuallycoding.openadhd.domain.validated
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -75,8 +75,8 @@ class RoomStore(
 
     override suspend fun reorderEntries(date: LocalDate, ids: List<String>) = dao.reorderPlanned(date.toString(), ids)
 
-    override suspend fun assign(template: TaskTemplate, date: LocalDate): PlannedTask {
-        val task = template.toPlannedTask(date, dao.currentSettings().rules)
+    override suspend fun assign(template: TaskTemplate, date: LocalDate, zone: TimeZone): PlannedTask {
+        val task = template.generatedTask(date, zone, dao.currentSettings().rules)
         dao.insertPlannedWithSubtasks(task.toEntity(), task.subtaskEntities())
         return task
     }

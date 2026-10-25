@@ -29,7 +29,6 @@ import com.usuallycoding.openadhd.domain.generatedTask
 import com.usuallycoding.openadhd.domain.reorderedBy
 import com.usuallycoding.openadhd.domain.Tier
 import com.usuallycoding.openadhd.domain.newId
-import com.usuallycoding.openadhd.domain.toPlannedTask
 import com.usuallycoding.openadhd.domain.validated
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -101,8 +100,8 @@ internal class StoreLogic(
         return state.copy(planned = state.planned.map { if (it.date == date) reordered.next() else it })
     }
 
-    fun assign(state: StoreState, template: TaskTemplate, date: LocalDate): Pair<StoreState, PlannedTask> {
-        val task = template.toPlannedTask(date, state.rules)
+    fun assign(state: StoreState, template: TaskTemplate, date: LocalDate, zone: TimeZone): Pair<StoreState, PlannedTask> {
+        val task = template.generatedTask(date, zone, state.rules)
         return state.copy(planned = state.planned + task) to task
     }
 
@@ -301,9 +300,9 @@ class InMemoryStore(
 
     override suspend fun delete(id: String) = state.update { logic.delete(it, id) }
 
-    override suspend fun assign(template: TaskTemplate, date: LocalDate): PlannedTask {
+    override suspend fun assign(template: TaskTemplate, date: LocalDate, zone: TimeZone): PlannedTask {
         var assigned: PlannedTask? = null
-        state.update { s -> logic.assign(s, template, date).also { assigned = it.second }.first }
+        state.update { s -> logic.assign(s, template, date, zone).also { assigned = it.second }.first }
         return assigned!!
     }
 

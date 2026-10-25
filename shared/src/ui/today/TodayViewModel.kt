@@ -171,7 +171,7 @@ class TodayViewModel(
     }
 
     fun assign(template: TaskTemplate) {
-        viewModelScope.launch { store.assign(template, today.value) }
+        viewModelScope.launch { store.assign(template, today.value, timeZone) }
     }
 
     fun remove(id: String) {

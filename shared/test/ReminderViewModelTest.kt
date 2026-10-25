@@ -5,6 +5,7 @@ import com.usuallycoding.openadhd.data.InMemoryStore
 import com.usuallycoding.openadhd.domain.Energy
 import com.usuallycoding.openadhd.domain.Reminder
 import com.usuallycoding.openadhd.domain.SettingKey
+import com.usuallycoding.openadhd.domain.TemplateReminder
 import com.usuallycoding.openadhd.domain.Tier
 import com.usuallycoding.openadhd.ui.today.ReminderSaveResult
 import com.usuallycoding.openadhd.ui.today.TodayViewModel
@@ -152,6 +153,16 @@ class ReminderViewModelTest {
         val vm = viewModel()
         assertEquals(at("16:45"), vm.reminderStartAt(16, 45))
         assertEquals(14, vm.currentTime().hour)
+        vm.viewModelScope.cancel()
+    }
+
+    @Test
+    fun `adding a template from the plus button gives the entry its reminder`() = runTest {
+        val template = store.create("Meds", Tier.One, Energy.Low, reminder = TemplateReminder(15 * 60, 60))
+        val vm = viewModel()
+        vm.assign(template)
+        val entry = store.entriesFor(day).first().single()
+        assertEquals(Reminder(at("15:00"), 60), entry.reminder)
         vm.viewModelScope.cancel()
     }
 }

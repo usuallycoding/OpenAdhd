@@ -39,8 +39,11 @@ interface PlannerRepository {
     /** Every day that has at least one entry, today included. */
     val daysWithEntries: Flow<Set<LocalDate>>
 
-    /** Copies the template onto [date], freezing the coin reward of the task and of each subtask. */
-    suspend fun assign(template: TaskTemplate, date: LocalDate): PlannedTask
+    /**
+     * Copies the template onto [date], freezing the coin reward of the task and of each subtask, and giving the
+     * entry the template's reminder at its time of day on [date] in [zone], as for a scheduled entry.
+     */
+    suspend fun assign(template: TaskTemplate, date: LocalDate, zone: TimeZone = TimeZone.currentSystemDefault()): PlannedTask
 
     /**
      * Adds one entry to [today] for each template that is due that day and has not been generated for it yet,
