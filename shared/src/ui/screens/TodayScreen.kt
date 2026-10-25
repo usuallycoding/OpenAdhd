@@ -1,6 +1,11 @@
 package com.usuallycoding.openadhd.ui.screens
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.relocation.bringIntoViewRequester
+import androidx.compose.foundation.relocation.BringIntoViewRequester
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateFloatAsState
@@ -50,6 +55,7 @@ import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.style.TextDecoration
@@ -122,6 +128,7 @@ private fun TodayList(viewModel: TodayViewModel, modifier: Modifier = Modifier) 
         entries = entries,
         templates = templates,
         onAssign = viewModel::assign,
+        onRollTemplate = viewModel::rollTemplate,
         onRemove = viewModel::remove,
         onCompleteTask = viewModel::completeTask,
         onCompleteSubtask = viewModel::completeSubtask,
@@ -158,6 +165,8 @@ fun TodayContent(
     entries: List<PlannedTask>,
     templates: List<TaskTemplate>,
     onAssign: (TaskTemplate) -> Unit,
+    /** Draws a template for the picker's dice from those it shows, avoiding the previous roll's id. */
+    onRollTemplate: (shown: List<TaskTemplate>, previousId: String?) -> TaskTemplate? = { shown, _ -> shown.firstOrNull() },
     onRemove: (id: String) -> Unit,
     onCompleteTask: (id: String) -> Unit,
     onCompleteSubtask: (id: String) -> Unit,
@@ -268,6 +277,7 @@ fun TodayContent(
         TemplatePickerDialog(
             templates = templates,
             onPick = { onAssign(it); picking = false },
+            onRoll = onRollTemplate,
             onDismiss = { picking = false },
         )
     }
@@ -431,59 +441,130 @@ private fun RandomizerDialog(
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun TemplatePickerDialog(
     templates: List<TaskTemplate>,
     onPick: (TaskTemplate) -> Unit,
+    onRoll: (shown: List<TaskTemplate>, previousId: String?) -> TaskTemplate?,
     onDismiss: () -> Unit,
 ) {
+    // The query, the energy filter and the roll live in the sheet, so they start empty every time it opens.
+    var query by remember { mutableStateOf("") }
+    var energy by remember { mutableStateOf<Energy?>(null) }
+    var rolledId by remember { mutableStateOf<String?>(null) }
+    var rollCount by remember { mutableStateOf(0) }
+    var highlightedId by remember { mutableStateOf<String?>(null) }
+    val shown = templates.matching(query, energy)
+
+    LaunchedEffect(rollCount) {
+        if (rollCount == 0) return@LaunchedEffect
+        delay(PickHighlightMillis)
+        highlightedId = null
+    }
+
     FormSheet(
         title = "Add to today",
         onDismiss = onDismiss,
+        // The search field, the energy chips and the dice stay put while the list below them scrolls.
+        header = if (templates.isEmpty()) null else {
+            {
+                val focusRequester = remember { FocusRequester() }
+                val keyboard = LocalSoftwareKeyboardController.current
+                LaunchedEffect(Unit) {
+                    focusRequester.requestFocus()
+                    keyboard?.show()
+                }
+                OutlinedTextField(
+                    value = query,
+                    onValueChange = { query = it; highlightedId = null },
+                    label = { Text("Search tasks") },
+                    singleLine = true,
+                    trailingIcon = if (query.isNotEmpty()) {
+                        {
+                            IconButton(onClick = { query = ""; highlightedId = null }) {
+                                Icon(ClearIcon, contentDescription = "Clear search")
+                            }
+                        }
+                    } else {
+                        null
+                    },
+                    modifier = Modifier.fillMaxWidth().focusRequester(focusRequester),
+                )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.weight(1f)) {
+                        Energy.entries.forEach { option ->
+                            FilterChip(
+                                selected = option == energy,
+                                onClick = { energy = if (option == energy) null else option; highlightedId = null },
+                                label = { Text(option.name) },
+                            )
+                        }
+                    }
+                    IconButton(
+                        enabled = shown.isNotEmpty(),
+                        onClick = {
+                            onRoll(shown, rolledId)?.let { picked ->
+                                rolledId = picked.id
+                                highlightedId = picked.id
+                                rollCount++
+                            }
+                        },
+                    ) {
+                        Icon(DiceIcon, contentDescription = "Roll a task from the list")
+                    }
+                }
+            }
+        },
         footer = { requestClose -> TextButton(onClick = requestClose) { Text("Close") } },
     ) {
         if (templates.isEmpty()) {
             Text("You have no task templates yet. Create one on the Templates tab first.")
+        } else if (shown.isEmpty()) {
+            Text(noMatchMessage(query.trim(), energy))
         } else {
-            // The query lives in the sheet, so it starts empty every time the sheet opens.
-            var query by remember { mutableStateOf("") }
-            val focusRequester = remember { FocusRequester() }
-            val keyboard = LocalSoftwareKeyboardController.current
-            LaunchedEffect(Unit) {
-                focusRequester.requestFocus()
-                keyboard?.show()
-            }
-            OutlinedTextField(
-                value = query,
-                onValueChange = { query = it },
-                label = { Text("Search tasks") },
-                singleLine = true,
-                trailingIcon = if (query.isNotEmpty()) {
-                    {
-                        IconButton(onClick = { query = "" }) {
-                            Icon(ClearIcon, contentDescription = "Clear search")
-                        }
-                    }
-                } else {
-                    null
-                },
-                modifier = Modifier.fillMaxWidth().focusRequester(focusRequester),
-            )
-            val shown = templates.matching(query)
-            if (shown.isEmpty()) {
-                Text("No task matches ${query.trim()}")
-            } else {
-                // The sheet body already scrolls, so a plain column (not a LazyColumn) keeps long lists reachable.
-                shown.forEach { template ->
-                    ListItem(
-                        headlineContent = { Text(template.name) },
-                        supportingContent = { Text(template.description()) },
-                        modifier = Modifier.clickable { onPick(template) },
-                    )
-                }
+            // The sheet body already scrolls, so a plain column (not a LazyColumn) keeps long lists reachable.
+            shown.forEach { template ->
+                PickerRow(
+                    template = template,
+                    highlighted = template.id == highlightedId,
+                    revealOn = if (template.id == rolledId) rollCount else null,
+                    onPick = { onPick(template) },
+                )
             }
         }
     }
+}
+
+/** "No task matches dis", "No Low energy task matches dis" or "No High energy task", for a search that found nothing. */
+internal fun noMatchMessage(query: String, energy: Energy?): String {
+    val kind = if (energy == null) "task" else "${energy.name} energy task"
+    return if (query.isEmpty()) "No $kind" else "No $kind matches $query"
+}
+
+/** One template in the picker. [revealOn] changes with each roll that lands here, to scroll the row into view. */
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun PickerRow(
+    template: TaskTemplate,
+    highlighted: Boolean,
+    revealOn: Int?,
+    onPick: () -> Unit,
+) {
+    val requester = remember { BringIntoViewRequester() }
+    LaunchedEffect(revealOn) {
+        if (revealOn != null) requester.bringIntoView()
+    }
+    val container by animateColorAsState(
+        if (highlighted) MaterialTheme.colorScheme.tertiaryContainer else MaterialTheme.colorScheme.surface,
+    )
+    ListItem(
+        colors = ListItemDefaults.colors(containerColor = container),
+        headlineContent = { Text(template.name) },
+        supportingContent = { Text(template.description()) },
+        // Selected while it is the rolled one, which also lets tests and screen readers tell it apart.
+        modifier = Modifier.bringIntoViewRequester(requester).semantics { selected = highlighted }.clickable(onClick = onPick),
+    )
 }
 
 @Preview

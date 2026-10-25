@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.usuallycoding.openadhd.domain.CompletionResult
 import com.usuallycoding.openadhd.domain.Energy
 import com.usuallycoding.openadhd.domain.OpenAdhdStore
+import com.usuallycoding.openadhd.domain.PickerRoll
 import com.usuallycoding.openadhd.domain.PlannedTask
 import com.usuallycoding.openadhd.domain.Reminder
 import com.usuallycoding.openadhd.domain.ReminderPreset
@@ -169,6 +170,9 @@ class TodayViewModel(
             }
         }
     }
+
+    /** Draws a template from those the picker shows, without adding anything; see [PickerRoll]. */
+    fun rollTemplate(shown: List<TaskTemplate>, previousId: String?): TaskTemplate? = PickerRoll.pick(random, shown, previousId)
 
     fun assign(template: TaskTemplate) {
         viewModelScope.launch { store.assign(template, today.value, timeZone) }

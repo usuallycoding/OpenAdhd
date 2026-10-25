@@ -9,3 +9,10 @@ fun List<TaskTemplate>.matching(query: String): List<TaskTemplate> {
     if (text.isEmpty()) return this
     return filter { it.name.contains(text, ignoreCase = true) || it.description.contains(text, ignoreCase = true) }
 }
+
+/**
+ * The templates matching [query] as above that also have [energy], in their given order. A null [energy] applies
+ * no energy filter.
+ */
+fun List<TaskTemplate>.matching(query: String, energy: Energy?): List<TaskTemplate> =
+    matching(query).let { found -> if (energy == null) found else found.filter { it.energy == energy } }

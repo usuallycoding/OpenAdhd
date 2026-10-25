@@ -40,6 +40,13 @@ On Today, a task that is not done yet has a "..." button. Its sheet lets you set
 - The first time you save a reminder the system asks to allow notifications.
 - **Android and iOS** show the notification even when the app is closed (Android also after a restart). On **macOS** the app must be running: a reminder that comes due while it is closed is not shown later.
 
+### Adding a task to Today
+
+The + button on Today opens a list of your task templates. The search field and the Low, Medium and High chips stay at the top while the list scrolls:
+
+- **Search** matches the title and the description. **Energy chips** show only templates of that energy; tap the selected chip again to clear it. Both apply together.
+- **Dice:** the dice next to the chips picks one of the templates currently listed, highlights it and scrolls to it, without adding anything. Tap it to add the task, or roll again; a roll avoids repeating the previous one when more than one is listed.
+
 ### Scheduled templates
 
 In the template form, "Add to Today schedule" lets a template put itself on Today:

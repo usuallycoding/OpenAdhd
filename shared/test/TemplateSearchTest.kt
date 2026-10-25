@@ -51,4 +51,37 @@ class TemplateSearchTest {
         assertEquals(listOf("Laundry", "Taxes", "Reset the flat"), names("a"))
         assertTrue(names("xyz").isEmpty())
     }
+
+    private fun energyTemplate(name: String, energy: Energy, description: String = "") =
+        TaskTemplate(name, name, Tier.One, energy, description)
+
+    private val mixed = listOf(
+        energyTemplate("Laundry", Energy.Low),
+        energyTemplate("Taxes", Energy.High, "Send the forms"),
+        energyTemplate("Dishes", Energy.Low),
+        energyTemplate("Report", Energy.Medium, "wash the numbers"),
+    )
+
+    private fun names(query: String, energy: Energy?) = mixed.matching(query, energy).map { it.name }
+
+    @Test
+    fun `no energy filter lists what the text matches`() {
+        assertEquals(listOf("Laundry", "Taxes", "Dishes", "Report"), names("", null))
+        assertEquals(listOf("Dishes"), names("dis", null))
+    }
+
+    @Test
+    fun `an energy keeps only templates of that energy in order`() {
+        assertEquals(listOf("Laundry", "Dishes"), names("", Energy.Low))
+        assertEquals(listOf("Taxes"), names("", Energy.High))
+        assertEquals(listOf("Report"), names("   ", Energy.Medium))
+    }
+
+    @Test
+    fun `energy and text both apply including the description`() {
+        assertEquals(listOf("Dishes"), names("dis", Energy.Low))
+        assertEquals(listOf("Report"), names("wash", Energy.Medium))
+        assertTrue(names("wash", Energy.Low).isEmpty())
+        assertTrue(names("dis", Energy.High).isEmpty())
+    }
 }

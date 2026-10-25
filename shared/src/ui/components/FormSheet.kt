@@ -25,13 +25,15 @@ import kotlinx.coroutines.launch
  * A bottom sheet for forms and pickers. The [content] scrolls when it is taller than the available height, while
  * the [footer] with the Save/Cancel (or Close) actions stays fixed at the bottom of the sheet. Swiping the sheet
  * down, tapping outside it and the footer's `requestClose` all end in [onDismiss]; `requestClose` slides the sheet
- * out first. The sheet opens fully expanded and keeps the focused field above the on-screen keyboard.
+ * out first. An optional [header] stays fixed above the scrolling content, for controls such as a search field
+ * that must stay reachable however far the content is scrolled. The sheet opens fully expanded and keeps the focused field above the on-screen keyboard.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun FormSheet(
     title: String,
     onDismiss: () -> Unit,
+    header: (@Composable ColumnScope.() -> Unit)? = null,
     footer: @Composable RowScope.(requestClose: () -> Unit) -> Unit,
     content: @Composable ColumnScope.() -> Unit,
 ) {
@@ -48,6 +50,13 @@ fun FormSheet(
                 style = MaterialTheme.typography.titleLarge,
                 modifier = Modifier.padding(start = 24.dp, end = 24.dp, bottom = 8.dp),
             )
+            if (header != null) {
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 8.dp),
+                    content = header,
+                )
+            }
             Column(
                 verticalArrangement = Arrangement.spacedBy(12.dp),
                 modifier = Modifier
