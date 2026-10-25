@@ -1,7 +1,9 @@
 package com.usuallycoding.openadhd.data
 
+import com.usuallycoding.openadhd.domain.AlarmPlan
 import com.usuallycoding.openadhd.domain.EntryRequests
 import com.usuallycoding.openadhd.domain.ReminderScheduler
+import com.usuallycoding.openadhd.domain.ScheduledTime
 import com.usuallycoding.openadhd.domain.UpcomingReminder
 import kotlinx.coroutines.suspendCancellableCoroutine
 import platform.UserNotifications.UNAuthorizationOptionAlert
@@ -28,9 +30,14 @@ import kotlin.time.Clock
  * [MaxPending] times are scheduled; the shared coordinator hands over the whole list again whenever the app
  * starts or the data changes, which tops it up.
  */
-class IosReminderScheduler(private val requests: EntryRequests = EntryRequests()) : ReminderScheduler {
+class IosReminderScheduler(
+    private val requests: EntryRequests = EntryRequests(),
+    /** The alarm bridge Swift registered, read each time because it is set after this is made. */
+    private val alarmBridge: () -> IosAlarmBridge? = { IosBridge.alarms },
+) : ReminderScheduler {
     private val center = UNUserNotificationCenter.currentNotificationCenter()
     private var authorized = false
+    private var lastUpcoming: List<UpcomingReminder> = emptyList()
 
     /** UIKit keeps its delegate weakly, so it is held here. It makes a notification show as a banner while the app is open. */
     private val delegate = ForegroundDelegate(requests)
@@ -55,27 +62,44 @@ class IosReminderScheduler(private val requests: EntryRequests = EntryRequests()
         }
     }
 
+    /** Asks AlarmKit's permission the first time; older iOS has no alarms, so nothing is asked and reminders stay notifications. */
+    override suspend fun ensureAlarmPermission(): Boolean {
+        val bridge = alarmBridge()?.takeIf { it.isAvailable } ?: return true
+        if (bridge.isAuthorized()) return true
+        val allowed = suspendCancellableCoroutine { continuation ->
+            bridge.requestAuthorization { granted -> if (continuation.isActive) continuation.resume(granted) }
+        }
+        // The reminder was saved before the answer, so it was handed over as a notification: route it again.
+        if (allowed) replaceAll(lastUpcoming)
+        return allowed
+    }
+
     override fun replaceAll(upcoming: List<UpcomingReminder>) {
+        lastUpcoming = upcoming
+        val bridge = alarmBridge()
+        val items = upcoming.flatMap { reminder ->
+            reminder.times.map { ScheduledTime(reminder.entryId, reminder.text, it.toEpochMilliseconds(), reminder.kind) }
+        }
+        // Alarms ring only where AlarmKit exists and the user allowed them; otherwise they are notifications.
+        val routed = AlarmPlan.route(items, alarmsUsable = bridge != null && bridge.isAvailable && bridge.isAuthorized())
+        bridge?.takeIf { it.isAvailable }?.replaceAll(routed.alarms.map { IosAlarmItem(it.entryId, it.text, it.atMillis) })
+
         center.removeAllPendingNotificationRequests()
-        val now = Clock.System.now()
-        upcoming
-            .flatMap { reminder -> reminder.times.map { time -> reminder to time } }
-            .sortedBy { it.second }
+        val now = Clock.System.now().toEpochMilliseconds()
+        routed.notifications
             .take(MaxPending)
-            .forEach { (reminder, time) ->
-                val seconds = (time - now).inWholeMilliseconds / 1000.0
+            .forEach { item ->
+                val seconds = (item.atMillis - now) / 1000.0
                 if (seconds < 1.0) return@forEach
                 val content = UNMutableNotificationContent().apply {
                     setTitle("Still to do")
-                    setBody(reminder.text)
+                    setBody(item.text)
                     // Read back when the notification is tapped, to show the task it is about.
-                    setUserInfo(mapOf<Any?, Any?>(EntryIdKey to reminder.entryId))
+                    setUserInfo(mapOf<Any?, Any?>(EntryIdKey to item.entryId))
                     setSound(UNNotificationSound.defaultSound())
                 }
                 val trigger = UNTimeIntervalNotificationTrigger.triggerWithTimeInterval(seconds, repeats = false)
-                val request = UNNotificationRequest.requestWithIdentifier(
-                    "${reminder.entryId}-${time.toEpochMilliseconds()}", content, trigger,
-                )
+                val request = UNNotificationRequest.requestWithIdentifier("${item.entryId}-${item.atMillis}", content, trigger)
                 center.addNotificationRequest(request, withCompletionHandler = null)
             }
     }

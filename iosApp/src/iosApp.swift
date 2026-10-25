@@ -16,6 +16,11 @@ struct ContentView: View {
 
 @main
 struct iosApp: App {
+    init() {
+        // Offered to the Kotlin side before the first screen is made, so alarms are available from the start.
+        IosBridge.shared.alarms = AlarmKitBridge()
+    }
+
     var body: some Scene {
         WindowGroup {
             ContentView()

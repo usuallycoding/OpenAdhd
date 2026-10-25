@@ -88,4 +88,34 @@ class AlarmPlanTest {
         assertNull(AlarmPlan.decode("e|t|notanumber|Alarm"))
         assertNull(AlarmPlan.decode("a|b|1|Alarm|extra"))
     }
+
+    @Test
+    fun `usable alarms split by kind and keep notifications as notifications`() {
+        val items = listOf(alarm(5), note(1), alarm(2), note(9))
+        val routed = AlarmPlan.route(items, alarmsUsable = true)
+        assertEquals(listOf(2L, 5L), routed.alarms.map { it.atMillis })
+        assertEquals(listOf(1L, 9L), routed.notifications.map { it.atMillis })
+    }
+
+    @Test
+    fun `alarms that cannot be used become notifications and nothing is lost`() {
+        val items = listOf(alarm(5), note(1), alarm(2))
+        val routed = AlarmPlan.route(items, alarmsUsable = false)
+        assertEquals(emptyList(), routed.alarms)
+        assertEquals(listOf(1L, 2L, 5L), routed.notifications.map { it.atMillis })
+    }
+
+    @Test
+    fun `the soonest twenty alarms are routed and notifications are not counted against them`() {
+        val items = (25 downTo 1).map { alarm(it.toLong()) } + (100..160).map { note(it.toLong()) }
+        val routed = AlarmPlan.route(items, alarmsUsable = true)
+        assertEquals((1L..20L).toList(), routed.alarms.map { it.atMillis })
+        assertEquals(61, routed.notifications.size)
+    }
+
+    @Test
+    fun `nothing to route`() {
+        assertEquals(AlarmPlan.Routed(emptyList(), emptyList()), AlarmPlan.route(emptyList(), true))
+        assertEquals(AlarmPlan.Routed(emptyList(), emptyList()), AlarmPlan.route(emptyList(), false))
+    }
 }

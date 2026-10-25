@@ -9,6 +9,7 @@ class FakeReminderScheduler(
     var grantsWhenAsked: Boolean = true,
     override val supportsAlarms: Boolean = false,
     var fullScreenAllowed: Boolean = true,
+    var alarmsAllowed: Boolean = true,
 ) : ReminderScheduler {
     var settingsOpened = 0
         private set
@@ -19,6 +20,14 @@ class FakeReminderScheduler(
 
     /** The schedule most recently handed over. */
     val current: List<UpcomingReminder> get() = schedules.last()
+
+    var alarmPermissionRequests = 0
+        private set
+
+    override suspend fun ensureAlarmPermission(): Boolean {
+        alarmPermissionRequests++
+        return alarmsAllowed
+    }
 
     override fun fullScreenAlarmsAllowed(): Boolean = fullScreenAllowed
 

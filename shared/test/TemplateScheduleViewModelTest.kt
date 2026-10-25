@@ -190,4 +190,25 @@ class TemplateReminderPermissionTest {
         vm.save(null, "Meds", Tier.One, Energy.Low, reminder = TemplateReminder(540, null, com.usuallycoding.openadhd.domain.ReminderKind.Alarm))
         assertEquals(listOf(TemplatesViewModel.NotificationsOff), seen)
     }
+
+    @Test
+    fun `a refused alarm permission for a template saves it and shows the alarms notice`() = runTest {
+        val scheduler = FakeReminderScheduler(supportsAlarms = true, alarmsAllowed = false)
+        val vm = TemplatesViewModel(store, reminders = scheduler)
+        val seen = notices(vm)
+        vm.save(null, "Meds", Tier.One, Energy.Low, reminder = TemplateReminder(540, null, com.usuallycoding.openadhd.domain.ReminderKind.Alarm))
+        assertEquals(listOf(TemplatesViewModel.AlarmsOff), seen)
+        assertEquals(1, vm.templates.value.size)
+        assertEquals(1, scheduler.alarmPermissionRequests)
+    }
+
+    @Test
+    fun `no alarm permission is asked for a notification template`() = runTest {
+        val scheduler = FakeReminderScheduler(supportsAlarms = true, alarmsAllowed = false)
+        val vm = TemplatesViewModel(store, reminders = scheduler)
+        val seen = notices(vm)
+        vm.save(null, "Plain", Tier.One, Energy.Low, reminder = TemplateReminder(540, null))
+        assertEquals(0, scheduler.alarmPermissionRequests)
+        assertTrue(seen.isEmpty())
+    }
 }

@@ -14,7 +14,7 @@ import platform.Foundation.NSUserDomainMask
 fun createIosContainer(
     files: DataFiles? = IosDataFiles(),
     // Shared by the scheduler, which hears about a tapped notification, and the container, which hands it to the app.
-    entryRequests: EntryRequests = EntryRequests(),
+    entryRequests: EntryRequests = IosBridge.entryRequests,
     reminders: ReminderScheduler? = IosReminderScheduler(entryRequests),
 ): AppContainer {
     val documents = NSFileManager.defaultManager.URLForDirectory(

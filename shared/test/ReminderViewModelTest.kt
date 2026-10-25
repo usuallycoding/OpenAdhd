@@ -211,4 +211,29 @@ class ReminderViewModelTest {
         assertEquals(1, scheduler.settingsOpened)
         viewModel(null).openAlarmSettings()
     }
+
+    @Test
+    fun `a refused alarm permission saves the alarm and says alarms are off`() = runTest {
+        val scheduler = FakeReminderScheduler(supportsAlarms = true, alarmsAllowed = false)
+        val vm = viewModel(scheduler)
+        val e = entry()
+        assertEquals(ReminderSaveResult.SavedAlarmsOff, vm.saveAlarm(e.id, ReminderKind.Alarm))
+        assertEquals(Reminder(at("15:00"), 30, ReminderKind.Alarm), store.entriesFor(day).first().single().reminder)
+        assertEquals(1, scheduler.alarmPermissionRequests)
+    }
+
+    @Test
+    fun `the alarm permission is asked for alarms only`() = runTest {
+        val scheduler = FakeReminderScheduler(supportsAlarms = true, alarmsAllowed = false)
+        val vm = viewModel(scheduler)
+        assertEquals(ReminderSaveResult.Saved, vm.saveAlarm(entry().id, ReminderKind.Notification))
+        assertEquals(0, scheduler.alarmPermissionRequests)
+    }
+
+    @Test
+    fun `an allowed alarm permission shows no message and refused alarms are reported before notifications`() = runTest {
+        assertEquals(ReminderSaveResult.Saved, viewModel(FakeReminderScheduler(supportsAlarms = true)).saveAlarm(entry().id, ReminderKind.Alarm))
+        val both = FakeReminderScheduler(granted = false, grantsWhenAsked = false, supportsAlarms = true, alarmsAllowed = false)
+        assertEquals(ReminderSaveResult.SavedAlarmsOff, viewModel(both).saveAlarm(entry().id, ReminderKind.Alarm))
+    }
 }

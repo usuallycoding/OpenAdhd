@@ -35,6 +35,8 @@
 		<string>UIInterfaceOrientationLandscapeLeft</string>
 		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
+	<key>NSAlarmKitUsageDescription</key>
+	<string>OpenAdhd rings an alarm for the tasks you choose to be reminded of loudly.</string>
 	<key>CADisableMinimumFrameDurationOnPhone</key>
 	<true/>
 </dict>

@@ -35,6 +35,12 @@ interface ReminderScheduler {
      */
     fun fullScreenAlarmsAllowed(): Boolean = true
 
+    /**
+     * Asks the user to allow alarms if the platform needs that (iOS, once per install), and reports whether an alarm
+     * can ring. True where nothing is asked, including where alarms are not available and fall back to notifications.
+     */
+    suspend fun ensureAlarmPermission(): Boolean = true
+
     /** Opens the system setting where the user can allow full-screen alerts; nothing where there is none. */
     fun openAlarmSettings() {}
 

@@ -80,6 +80,9 @@ sealed interface ReminderSaveResult {
     /** Saved, but the system does not let the app show notifications. */
     data object SavedNotificationsOff : ReminderSaveResult
 
+    /** An alarm was saved, but the user did not allow alarms, so it will be shown as a notification. */
+    data object SavedAlarmsOff : ReminderSaveResult
+
     /** An alarm was saved and notifications are allowed, but the device does not let the app show full-screen alerts. */
     data object SavedFullScreenOff : ReminderSaveResult
 
@@ -228,8 +231,10 @@ class TodayViewModel(
                 return@launch
             }
             val granted = reminders?.ensurePermission() ?: true
+            val alarmsAllowed = kind != ReminderKind.Alarm || (reminders?.ensureAlarmPermission() ?: true)
             onResult(
                 when {
+                    !alarmsAllowed -> ReminderSaveResult.SavedAlarmsOff
                     !granted -> ReminderSaveResult.SavedNotificationsOff
                     kind == ReminderKind.Alarm && reminders?.fullScreenAlarmsAllowed() == false -> ReminderSaveResult.SavedFullScreenOff
                     else -> ReminderSaveResult.Saved

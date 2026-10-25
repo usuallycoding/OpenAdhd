@@ -33,6 +33,23 @@ object AlarmPlan {
         return (alarms + notifications).sortedBy { it.atMillis }
     }
 
+    /** The times to schedule as system alarms and the times to schedule as notifications. */
+    data class Routed(val alarms: List<ScheduledTime>, val notifications: List<ScheduledTime>)
+
+    /**
+     * Splits [items] for a platform that can ring alarms only sometimes. When [alarmsUsable] the soonest
+     * [MaxArmedAlarms] alarm-kind times become alarms and every notification-kind time stays a notification. When
+     * not, nothing is an alarm and every time, alarm-kind ones included, is a notification, so no reminder is lost.
+     */
+    fun route(items: List<ScheduledTime>, alarmsUsable: Boolean): Routed {
+        val soonest = items.sortedBy { it.atMillis }
+        if (!alarmsUsable) return Routed(emptyList(), soonest)
+        return Routed(
+            alarms = soonest.filter { it.kind == ReminderKind.Alarm }.take(MaxArmedAlarms),
+            notifications = soonest.filter { it.kind != ReminderKind.Alarm },
+        )
+    }
+
     /** One line: `entryId|text|atMillis|kind`, with the separators and line breaks in the texts escaped. */
     fun encode(item: ScheduledTime): String = "${escape(item.entryId)}|${escape(item.text)}|${item.atMillis}|${item.kind.name}"
 

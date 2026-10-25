@@ -253,4 +253,30 @@ class AlarmKindUiTest {
         onNodeWithText("Meds").assertExists()
         onNodeWithText(com.usuallycoding.openadhd.ui.templates.TemplatesViewModel.FullScreenOff).assertExists()
     }
+
+    private val alarmsOffMessage = "Alarms are turned off for OpenAdhd, so this reminder will be shown as a notification. Turn them on in your device's settings."
+
+    @Test
+    fun `saving an alarm when alarms are refused says so and keeps the alarm`() = runComposeUiTest {
+        entry()
+        show(alarms = true, scheduler = FakeReminderScheduler(supportsAlarms = true, alarmsAllowed = false))
+        onNodeWithContentDescription("Options for Clean the kitchen").performClick()
+        onNodeWithText("In 30 minutes").performClick()
+        onNodeWithText("Alarm").performClick()
+        onNodeWithText("Save reminder").performClick()
+        waitForIdle()
+        assertEquals(ReminderKind.Alarm, entries().single().reminder?.kind)
+        onNodeWithText(alarmsOffMessage).assertExists()
+    }
+
+    @Test
+    fun `no alarms message for a notification reminder or when alarms are allowed`() = runComposeUiTest {
+        entry()
+        show(alarms = true, scheduler = FakeReminderScheduler(supportsAlarms = true, alarmsAllowed = false))
+        onNodeWithContentDescription("Options for Clean the kitchen").performClick()
+        onNodeWithText("In 30 minutes").performClick()
+        onNodeWithText("Save reminder").performClick()
+        waitForIdle()
+        onNodeWithText(alarmsOffMessage).assertDoesNotExist()
+    }
 }

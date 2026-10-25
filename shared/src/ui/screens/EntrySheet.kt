@@ -72,6 +72,7 @@ internal fun EntrySheet(
     var message by remember { mutableStateOf<String?>(null) }
     var notificationsOff by remember { mutableStateOf(false) }
     var fullScreenOff by remember { mutableStateOf(false) }
+    var alarmsOff by remember { mutableStateOf(false) }
     var pickingTime by remember { mutableStateOf(false) }
 
     FormSheet(
@@ -134,6 +135,12 @@ internal fun EntrySheet(
                 )
             }
 
+            if (alarmsOff) {
+                Text(
+                    "Alarms are turned off for OpenAdhd, so this reminder will be shown as a notification. Turn them on in your device's settings.",
+                    color = MaterialTheme.colorScheme.error,
+                )
+            }
             if (fullScreenOff) {
                 Text(
                     "Full-screen alarms are turned off for OpenAdhd. The alarm will still ring, but it will not appear over the lock screen.",
@@ -152,8 +159,9 @@ internal fun EntrySheet(
                             reminders.save(entry.id, chosen, repeat, if (reminders.supportsAlarms) kind else ReminderKind.Notification) { result ->
                                 when (result) {
                                     ReminderSaveResult.Saved -> onDismiss()
-                                    ReminderSaveResult.SavedNotificationsOff -> { notificationsOff = true; fullScreenOff = false; message = null }
-                                    ReminderSaveResult.SavedFullScreenOff -> { fullScreenOff = true; notificationsOff = false; message = null }
+                                    ReminderSaveResult.SavedNotificationsOff -> { notificationsOff = true; fullScreenOff = false; alarmsOff = false; message = null }
+                                    ReminderSaveResult.SavedFullScreenOff -> { fullScreenOff = true; notificationsOff = false; alarmsOff = false; message = null }
+                                    ReminderSaveResult.SavedAlarmsOff -> { alarmsOff = true; notificationsOff = false; fullScreenOff = false; message = null }
                                     is ReminderSaveResult.Refused -> message = result.message
                                 }
                             }
