@@ -49,6 +49,10 @@ The + button on Today opens a list of your task templates. The search field and 
 - **Search** matches the title and the description. **Energy chips** show only templates of that energy; tap the selected chip again to clear it. Both apply together.
 - **Dice:** the dice next to the chips picks one of the templates currently listed, highlights it and scrolls to it, without adding anything. Tap it to add the task, or roll again; a roll avoids repeating the previous one when more than one is listed.
 
+### Searching templates
+
+The Tasks and Rewards tabs of Templates each have a search field above the list. It matches the name and the description, ignoring case, and each tab remembers its own text until the app is closed. Tap the list, scroll it or press Done to put the keyboard away. While a search holds text, **Reorder** is unavailable (typing turns it off), and saving a new template or reward clears that tab's search so the new one is not hidden.
+
 ### Scheduled templates
 
 In the template form, "Add to Today schedule" lets a template put itself on Today:

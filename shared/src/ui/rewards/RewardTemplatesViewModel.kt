@@ -12,6 +12,7 @@ import com.usuallycoding.openadhd.domain.RewardRepository
 import com.usuallycoding.openadhd.domain.RewardRules
 import com.usuallycoding.openadhd.domain.RewardTemplate
 import com.usuallycoding.openadhd.domain.RewardTier
+import com.usuallycoding.openadhd.domain.matchingRewards
 import com.usuallycoding.openadhd.domain.moved
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -31,13 +32,29 @@ class RewardTemplatesViewModel(
     val rewards: StateFlow<List<RewardTemplate>> =
         repository.rewards.stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
 
-    /** Whether there are enough items for the order to be worth changing. */
-    val canReorder: StateFlow<Boolean> = rewards.map { it.size >= 2 }.stateIn(viewModelScope, SharingStarted.Eagerly, false)
+    private val _query = MutableStateFlow("")
+
+    /** The text of the search above the list; kept while the app runs and not saved. */
+    val query: StateFlow<String> = _query
+
+    /** The rewards whose name or description contain the search text, in the list's order. */
+    val visible: StateFlow<List<RewardTemplate>> =
+        combine(rewards, _query) { list, text -> list.matchingRewards(text) }.stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
+
+    /** Changes the search text. Typing turns Reorder off: moving rows in a filtered list would be confusing. */
+    fun setQuery(text: String) {
+        _query.value = text
+        if (text.isNotBlank()) reorderRequested.value = false
+    }
+
+    /** Whether there are enough items for the order to be worth changing, and no search is narrowing the list. */
+    val canReorder: StateFlow<Boolean> = combine(rewards, _query) { list, text -> list.size >= 2 && text.isBlank() }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, false)
 
     private val reorderRequested = MutableStateFlow(false)
 
-    /** Whether the list shows move controls. Ends by itself when fewer than two rewards are left; not saved. */
-    val reordering: StateFlow<Boolean> = combine(reorderRequested, rewards) { on, list -> on && list.size >= 2 }
+    /** Whether the list shows move controls. Ends by itself when fewer than two rewards are left or a search starts; not saved. */
+    val reordering: StateFlow<Boolean> = combine(reorderRequested, rewards, _query) { on, list, text -> on && list.size >= 2 && text.isBlank() }
         .stateIn(viewModelScope, SharingStarted.Eagerly, false)
 
     fun setReordering(on: Boolean) {
@@ -67,6 +84,8 @@ class RewardTemplatesViewModel(
         customPrice: Int? = null,
     ) {
         if (validate(name, tier, customPrice, rules.value) != null) return
+        // A new reward goes to the top and may not match the search, so the search is cleared to keep it in view.
+        if (id == null) _query.value = ""
         viewModelScope.launch {
             if (id == null) {
                 repository.createReward(name, tier, energy, description, customPrice)

@@ -16,3 +16,14 @@ fun List<TaskTemplate>.matching(query: String): List<TaskTemplate> {
  */
 fun List<TaskTemplate>.matching(query: String, energy: Energy?): List<TaskTemplate> =
     matching(query).let { found -> if (energy == null) found else found.filter { it.energy == energy } }
+
+/**
+ * The rewards whose name or description contains [query], by the same rule as the task templates' [matching]: ignoring
+ * case and spaces around the query, in their given order, and every reward for a blank query. It has its own name
+ * because two functions `matching(String)` on lists of different element types would clash after type erasure.
+ */
+fun List<RewardTemplate>.matchingRewards(query: String): List<RewardTemplate> {
+    val text = query.trim()
+    if (text.isEmpty()) return this
+    return filter { it.name.contains(text, ignoreCase = true) || it.description.contains(text, ignoreCase = true) }
+}

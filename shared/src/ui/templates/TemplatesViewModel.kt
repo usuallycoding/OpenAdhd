@@ -17,6 +17,7 @@ import kotlinx.coroutines.flow.flowOf
 import com.usuallycoding.openadhd.domain.TaskTemplate
 import com.usuallycoding.openadhd.domain.Tier
 import com.usuallycoding.openadhd.domain.TemplateRepository
+import com.usuallycoding.openadhd.domain.matching
 import com.usuallycoding.openadhd.domain.moved
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -45,13 +46,29 @@ class TemplatesViewModel(
     val templates: StateFlow<List<TaskTemplate>> =
         repository.templates.stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
 
-    /** Whether there are enough items for the order to be worth changing. */
-    val canReorder: StateFlow<Boolean> = templates.map { it.size >= 2 }.stateIn(viewModelScope, SharingStarted.Eagerly, false)
+    private val _query = MutableStateFlow("")
+
+    /** The text of the search above the list; kept while the app runs and not saved. */
+    val query: StateFlow<String> = _query
+
+    /** The templates whose name or description contain the search text, in the list's order. */
+    val visible: StateFlow<List<TaskTemplate>> =
+        combine(templates, _query) { list, text -> list.matching(text) }.stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
+
+    /** Changes the search text. Typing turns Reorder off: moving rows in a filtered list would be confusing. */
+    fun setQuery(text: String) {
+        _query.value = text
+        if (text.isNotBlank()) reorderRequested.value = false
+    }
+
+    /** Whether there are enough items for the order to be worth changing, and no search is narrowing the list. */
+    val canReorder: StateFlow<Boolean> = combine(templates, _query) { list, text -> list.size >= 2 && text.isBlank() }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, false)
 
     private val reorderRequested = MutableStateFlow(false)
 
-    /** Whether the list shows move controls. Ends by itself when fewer than two templates are left; not saved. */
-    val reordering: StateFlow<Boolean> = combine(reorderRequested, templates) { on, list -> on && list.size >= 2 }
+    /** Whether the list shows move controls. Ends by itself when fewer than two templates are left or a search starts; not saved. */
+    val reordering: StateFlow<Boolean> = combine(reorderRequested, templates, _query) { on, list, text -> on && list.size >= 2 && text.isBlank() }
         .stateIn(viewModelScope, SharingStarted.Eagerly, false)
 
     fun setReordering(on: Boolean) {
@@ -89,6 +106,8 @@ class TemplatesViewModel(
     ) {
         if (validate(name, tier, subtasks, rules.value) != null) return
         if (validateSchedule(schedule, reminder) != null) return
+        // A new template goes to the top and may not match the search, so the search is cleared to keep it in view.
+        if (id == null) _query.value = ""
         viewModelScope.launch {
             if (id == null) {
                 repository.create(name, tier, energy, description, subtasks, schedule, reminder)

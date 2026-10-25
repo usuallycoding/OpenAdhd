@@ -69,6 +69,8 @@ import com.usuallycoding.openadhd.ui.templates.TemplateInputError
 import com.usuallycoding.openadhd.ui.templates.TemplatesViewModel
 import com.usuallycoding.openadhd.ui.components.FormSheet
 import com.usuallycoding.openadhd.ui.components.MoveButtons
+import com.usuallycoding.openadhd.ui.components.SearchField
+import com.usuallycoding.openadhd.ui.components.dismissKeyboardOnTapOrScroll
 import com.usuallycoding.openadhd.ui.theme.AddIcon
 import kotlinx.coroutines.launch
 import com.usuallycoding.openadhd.ui.theme.DeleteIcon
@@ -108,9 +110,14 @@ fun TemplatesScreen(
 @Composable
 fun TaskTemplatesScreen(viewModel: TemplatesViewModel, modifier: Modifier = Modifier) {
     val templates by viewModel.templates.collectAsStateWithLifecycle()
+    val visible by viewModel.visible.collectAsStateWithLifecycle()
+    val query by viewModel.query.collectAsStateWithLifecycle()
     val reordering by viewModel.reordering.collectAsStateWithLifecycle()
     TemplatesContent(
-        templates = templates,
+        templates = visible,
+        totalCount = templates.size,
+        query = query,
+        onQueryChange = viewModel::setQuery,
         reordering = reordering,
         onMoveUp = viewModel::moveUp,
         onMoveDown = viewModel::moveDown,
@@ -134,6 +141,11 @@ fun TemplatesContent(
     today: LocalDate = Clock.System.todayIn(TimeZone.currentSystemDefault()),
     /** Whether the form offers the Notification / Alarm choice for the reminder. */
     canAlarm: Boolean = false,
+    /** How many templates exist, so a search that matches none can be told apart from having none. */
+    totalCount: Int = templates.size,
+    /** The text of the search above the list, and what to do when it changes. */
+    query: String = "",
+    onQueryChange: (String) -> Unit = {},
     reordering: Boolean = false,
     onMoveUp: (id: String) -> Unit = {},
     onMoveDown: (id: String) -> Unit = {},
@@ -142,45 +154,54 @@ fun TemplatesContent(
     var editing by remember { mutableStateOf<TaskTemplate?>(null) }
 
     Box(modifier.fillMaxSize()) {
-        if (templates.isEmpty()) {
+        if (totalCount == 0) {
             Text(
                 "No templates yet. Tap + to create your first task.",
                 style = MaterialTheme.typography.bodyLarge,
                 modifier = Modifier.align(Alignment.Center).padding(32.dp),
             )
-        } else {
-            LazyColumn(contentPadding = PaddingValues(bottom = 88.dp)) {
-                itemsIndexed(templates, key = { _, template -> template.id }) { index, template ->
-                    ListItem(
-                        headlineContent = { Text(template.name) },
-                        supportingContent = {
-                            Column {
-                                Text(template.description())
-                                ScheduleRules.summary(template.schedule, today)?.let { Text(it) }
-                            }
-                        },
-                        trailingContent = {
-                            if (reordering) {
-                                MoveButtons(
-                                    name = template.name,
-                                    canMoveUp = index > 0,
-                                    canMoveDown = index < templates.lastIndex,
-                                    onMoveUp = { onMoveUp(template.id) },
-                                    onMoveDown = { onMoveDown(template.id) },
-                                )
-                            } else {
-                                Row {
-                                    IconButton(onClick = { editing = template }) {
-                                        Icon(EditIcon, contentDescription = "Edit ${template.name}")
-                                    }
-                                    IconButton(onClick = { onDelete(template.id) }) {
-                                        Icon(DeleteIcon, contentDescription = "Delete ${template.name}")
+        } else Column(Modifier.fillMaxSize()) {
+            SearchField(query, onQueryChange, label = "Search tasks", clearDescription = "Clear task search")
+            Box(Modifier.weight(1f).fillMaxWidth().dismissKeyboardOnTapOrScroll()) {
+                if (templates.isEmpty()) {
+                    Text(
+                        "No task matches ${query.trim()}",
+                        style = MaterialTheme.typography.bodyLarge,
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 24.dp),
+                    )
+                } else LazyColumn(contentPadding = PaddingValues(bottom = 88.dp)) {
+                    itemsIndexed(templates, key = { _, template -> template.id }) { index, template ->
+                        ListItem(
+                            headlineContent = { Text(template.name) },
+                            supportingContent = {
+                                Column {
+                                    Text(template.description())
+                                    ScheduleRules.summary(template.schedule, today)?.let { Text(it) }
+                                }
+                            },
+                            trailingContent = {
+                                if (reordering) {
+                                    MoveButtons(
+                                        name = template.name,
+                                        canMoveUp = index > 0,
+                                        canMoveDown = index < templates.lastIndex,
+                                        onMoveUp = { onMoveUp(template.id) },
+                                        onMoveDown = { onMoveDown(template.id) },
+                                    )
+                                } else {
+                                    Row {
+                                        IconButton(onClick = { editing = template }) {
+                                            Icon(EditIcon, contentDescription = "Edit ${template.name}")
+                                        }
+                                        IconButton(onClick = { onDelete(template.id) }) {
+                                            Icon(DeleteIcon, contentDescription = "Delete ${template.name}")
+                                        }
                                     }
                                 }
-                            }
-                        },
-                    )
-                    HorizontalDivider()
+                            },
+                        )
+                        HorizontalDivider()
+                    }
                 }
             }
         }

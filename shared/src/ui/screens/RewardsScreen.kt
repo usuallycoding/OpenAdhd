@@ -42,6 +42,8 @@ import com.usuallycoding.openadhd.domain.RewardTier
 import com.usuallycoding.openadhd.ui.rewards.RewardTemplatesViewModel
 import com.usuallycoding.openadhd.ui.components.FormSheet
 import com.usuallycoding.openadhd.ui.components.MoveButtons
+import com.usuallycoding.openadhd.ui.components.SearchField
+import com.usuallycoding.openadhd.ui.components.dismissKeyboardOnTapOrScroll
 import com.usuallycoding.openadhd.ui.theme.AddIcon
 import com.usuallycoding.openadhd.ui.theme.DeleteIcon
 import com.usuallycoding.openadhd.ui.theme.EditIcon
@@ -49,9 +51,14 @@ import com.usuallycoding.openadhd.ui.theme.EditIcon
 @Composable
 fun RewardsScreen(viewModel: RewardTemplatesViewModel, modifier: Modifier = Modifier) {
     val rewards by viewModel.rewards.collectAsStateWithLifecycle()
+    val visible by viewModel.visible.collectAsStateWithLifecycle()
+    val query by viewModel.query.collectAsStateWithLifecycle()
     val reordering by viewModel.reordering.collectAsStateWithLifecycle()
     RewardsContent(
-        rewards = rewards,
+        rewards = visible,
+        totalCount = rewards.size,
+        query = query,
+        onQueryChange = viewModel::setQuery,
         reordering = reordering,
         onMoveUp = viewModel::moveUp,
         onMoveDown = viewModel::moveDown,
@@ -67,6 +74,11 @@ fun RewardsContent(
     onSave: (id: String?, name: String, tier: RewardTier, energy: Energy, description: String, customPrice: Int?) -> Unit,
     onDelete: (id: String) -> Unit,
     modifier: Modifier = Modifier,
+    /** How many rewards exist, so a search that matches none can be told apart from having none. */
+    totalCount: Int = rewards.size,
+    /** The text of the search above the list, and what to do when it changes. */
+    query: String = "",
+    onQueryChange: (String) -> Unit = {},
     reordering: Boolean = false,
     onMoveUp: (id: String) -> Unit = {},
     onMoveDown: (id: String) -> Unit = {},
@@ -75,45 +87,54 @@ fun RewardsContent(
     var editing by remember { mutableStateOf<RewardTemplate?>(null) }
 
     Box(modifier.fillMaxSize()) {
-        if (rewards.isEmpty()) {
+        if (totalCount == 0) {
             Text(
                 "No rewards yet. Tap + to add something to look forward to.",
                 style = MaterialTheme.typography.bodyLarge,
                 modifier = Modifier.align(Alignment.Center).padding(32.dp),
             )
-        } else {
-            LazyColumn(contentPadding = PaddingValues(bottom = 88.dp)) {
-                itemsIndexed(rewards, key = { _, reward -> reward.id }) { index, reward ->
-                    ListItem(
-                        headlineContent = { Text(reward.name) },
-                        supportingContent = {
-                            Column {
-                                if (reward.description.isNotBlank()) Text(reward.description)
-                                Text(reward.summary())
-                            }
-                        },
-                        trailingContent = {
-                            if (reordering) {
-                                MoveButtons(
-                                    name = reward.name,
-                                    canMoveUp = index > 0,
-                                    canMoveDown = index < rewards.lastIndex,
-                                    onMoveUp = { onMoveUp(reward.id) },
-                                    onMoveDown = { onMoveDown(reward.id) },
-                                )
-                            } else {
-                                Row {
-                                    IconButton(onClick = { editing = reward }) {
-                                        Icon(EditIcon, contentDescription = "Edit ${reward.name}")
-                                    }
-                                    IconButton(onClick = { onDelete(reward.id) }) {
-                                        Icon(DeleteIcon, contentDescription = "Delete ${reward.name}")
+        } else Column(Modifier.fillMaxSize()) {
+            SearchField(query, onQueryChange, label = "Search rewards", clearDescription = "Clear reward search")
+            Box(Modifier.weight(1f).fillMaxWidth().dismissKeyboardOnTapOrScroll()) {
+                if (rewards.isEmpty()) {
+                    Text(
+                        "No reward matches ${query.trim()}",
+                        style = MaterialTheme.typography.bodyLarge,
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 24.dp),
+                    )
+                } else LazyColumn(contentPadding = PaddingValues(bottom = 88.dp)) {
+                    itemsIndexed(rewards, key = { _, reward -> reward.id }) { index, reward ->
+                        ListItem(
+                            headlineContent = { Text(reward.name) },
+                            supportingContent = {
+                                Column {
+                                    if (reward.description.isNotBlank()) Text(reward.description)
+                                    Text(reward.summary())
+                                }
+                            },
+                            trailingContent = {
+                                if (reordering) {
+                                    MoveButtons(
+                                        name = reward.name,
+                                        canMoveUp = index > 0,
+                                        canMoveDown = index < rewards.lastIndex,
+                                        onMoveUp = { onMoveUp(reward.id) },
+                                        onMoveDown = { onMoveDown(reward.id) },
+                                    )
+                                } else {
+                                    Row {
+                                        IconButton(onClick = { editing = reward }) {
+                                            Icon(EditIcon, contentDescription = "Edit ${reward.name}")
+                                        }
+                                        IconButton(onClick = { onDelete(reward.id) }) {
+                                            Icon(DeleteIcon, contentDescription = "Delete ${reward.name}")
+                                        }
                                     }
                                 }
-                            }
-                        },
-                    )
-                    HorizontalDivider()
+                            },
+                        )
+                        HorizontalDivider()
+                    }
                 }
             }
         }
