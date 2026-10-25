@@ -155,6 +155,7 @@ private fun TodayList(viewModel: TodayViewModel, modifier: Modifier = Modifier) 
             startAt = viewModel::reminderStartAt,
             currentTime = viewModel::currentTime,
             supportsAlarms = viewModel.canAlarm,
+            openAlarmSettings = viewModel::openAlarmSettings,
             save = viewModel::saveReminder,
             clear = viewModel::clearReminder,
         ),

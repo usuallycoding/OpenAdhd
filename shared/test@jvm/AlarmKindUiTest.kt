@@ -60,8 +60,7 @@ class AlarmKindUiTest {
 
     private fun entries(): List<PlannedTask> = runBlocking { store.entriesFor(today).first() }
 
-    private fun ComposeUiTest.show(alarms: Boolean) {
-        val scheduler = FakeReminderScheduler(supportsAlarms = alarms)
+    private fun ComposeUiTest.show(alarms: Boolean, fullScreenAllowed: Boolean = true, scheduler: FakeReminderScheduler = FakeReminderScheduler(supportsAlarms = alarms, fullScreenAllowed = fullScreenAllowed)) {
         setContent { App(AppContainer(store, clock = clock, dateCheckInterval = null, reminders = scheduler)) }
     }
 
@@ -193,5 +192,65 @@ class AlarmKindUiTest {
         assertEquals(ReminderKind.Notification, entries().single().reminder?.kind)
         assertEquals(ReminderKind.Alarm, runBlocking { store.templates.first().single().reminder?.kind })
         assertNotNull(entries().single().reminder)
+    }
+
+    private val fullScreenMessage = "Full-screen alarms are turned off for OpenAdhd. The alarm will still ring, but it will not appear over the lock screen."
+
+    @Test
+    fun `saving an alarm without full screen alerts says so and the button opens the setting`() = runComposeUiTest {
+        entry()
+        val scheduler = FakeReminderScheduler(supportsAlarms = true, fullScreenAllowed = false)
+        show(alarms = true, scheduler = scheduler)
+        onNodeWithContentDescription("Options for Clean the kitchen").performClick()
+        onNodeWithText("In 30 minutes").performClick()
+        onNodeWithText("Alarm").performClick()
+        onNodeWithText("Save reminder").performClick()
+        waitForIdle()
+
+        assertEquals(ReminderKind.Alarm, entries().single().reminder?.kind)
+        onNodeWithText(fullScreenMessage).assertExists()
+        onNodeWithText("Open settings").performClick()
+        assertEquals(1, scheduler.settingsOpened)
+    }
+
+    @Test
+    fun `no message for a notification reminder even when full screen alerts are off`() = runComposeUiTest {
+        entry()
+        show(alarms = true, fullScreenAllowed = false)
+        onNodeWithContentDescription("Options for Clean the kitchen").performClick()
+        onNodeWithText("In 30 minutes").performClick()
+        onNodeWithText("Save reminder").performClick()
+        waitForIdle()
+        onNodeWithText(fullScreenMessage).assertDoesNotExist()
+        onNodeWithText("Open settings").assertDoesNotExist()
+    }
+
+    @Test
+    fun `no message when full screen alerts are allowed`() = runComposeUiTest {
+        entry()
+        show(alarms = true, fullScreenAllowed = true)
+        onNodeWithContentDescription("Options for Clean the kitchen").performClick()
+        onNodeWithText("In 30 minutes").performClick()
+        onNodeWithText("Alarm").performClick()
+        onNodeWithText("Save reminder").performClick()
+        waitForIdle()
+        onNodeWithText(fullScreenMessage).assertDoesNotExist()
+    }
+
+    @Test
+    fun `a template alarm without full screen alerts shows the notice once after saving`() = runComposeUiTest {
+        show(alarms = true, fullScreenAllowed = false)
+        onNodeWithText("Templates").performClick()
+        onNodeWithContentDescription("Add template").performClick()
+        onNodeWithText("Name").performTextInput("Meds")
+        onNodeWithText("Set a time").performClick()
+        onNodeWithText("OK").performClick()
+        reveal("Alarm")
+        onNodeWithText("Alarm").performClick()
+        onNodeWithText("Save").performClick()
+        waitForIdle()
+
+        onNodeWithText("Meds").assertExists()
+        onNodeWithText(com.usuallycoding.openadhd.ui.templates.TemplatesViewModel.FullScreenOff).assertExists()
     }
 }

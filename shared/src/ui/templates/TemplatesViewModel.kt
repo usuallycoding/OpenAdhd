@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.usuallycoding.openadhd.domain.Energy
 import com.usuallycoding.openadhd.domain.CoinRules
 import com.usuallycoding.openadhd.domain.GameRules
+import com.usuallycoding.openadhd.domain.ReminderKind
 import com.usuallycoding.openadhd.domain.ReminderScheduler
 import com.usuallycoding.openadhd.domain.ScheduleProblem
 import com.usuallycoding.openadhd.domain.ScheduleRules
@@ -95,7 +96,13 @@ class TemplatesViewModel(
                 repository.update(TaskTemplate(id, name, tier, energy, description, subtasks, schedule, reminder))
             }
             // The template is already saved: a refusal only tells the user why its reminder will not show.
-            if (reminder != null && reminders?.ensurePermission() == false) _notices.emit(NotificationsOff)
+            if (reminder != null && reminders != null) {
+                if (!reminders.ensurePermission()) {
+                    _notices.emit(NotificationsOff)
+                } else if (reminder.kind == ReminderKind.Alarm && !reminders.fullScreenAlarmsAllowed()) {
+                    _notices.emit(FullScreenOff)
+                }
+            }
         }
     }
 
@@ -104,6 +111,8 @@ class TemplatesViewModel(
     }
 
     companion object {
+        const val FullScreenOff = "Full-screen alarms are turned off for OpenAdhd. The alarm will still ring, but it will not appear over the lock screen. Allow full-screen alerts in your device's settings."
+
         const val NotificationsOff = "Notifications are turned off for OpenAdhd. Turn them on in your device's settings to get reminders."
 
         fun isValidName(name: String): Boolean = name.isNotBlank()

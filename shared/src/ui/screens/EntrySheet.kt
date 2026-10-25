@@ -40,6 +40,8 @@ class ReminderActions(
     val clear: (entryId: String) -> Unit,
     /** Whether the Notification / Alarm choice is offered; false where only notifications exist, as on the desktop. */
     val supportsAlarms: Boolean = false,
+    /** Opens the system setting for full-screen alerts, offered after an alarm is saved without them. */
+    val openAlarmSettings: () -> Unit = {},
 ) {
     companion object {
         val None = ReminderActions(
@@ -69,6 +71,7 @@ internal fun EntrySheet(
     var kind by remember { mutableStateOf(current?.kind ?: ReminderKind.Notification) }
     var message by remember { mutableStateOf<String?>(null) }
     var notificationsOff by remember { mutableStateOf(false) }
+    var fullScreenOff by remember { mutableStateOf(false) }
     var pickingTime by remember { mutableStateOf(false) }
 
     FormSheet(
@@ -131,6 +134,14 @@ internal fun EntrySheet(
                 )
             }
 
+            if (fullScreenOff) {
+                Text(
+                    "Full-screen alarms are turned off for OpenAdhd. The alarm will still ring, but it will not appear over the lock screen.",
+                    color = MaterialTheme.colorScheme.error,
+                )
+                TextButton(onClick = reminders.openAlarmSettings) { Text("Open settings") }
+            }
+
             Column(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
                 OutlinedButton(
                     onClick = {
@@ -141,7 +152,8 @@ internal fun EntrySheet(
                             reminders.save(entry.id, chosen, repeat, if (reminders.supportsAlarms) kind else ReminderKind.Notification) { result ->
                                 when (result) {
                                     ReminderSaveResult.Saved -> onDismiss()
-                                    ReminderSaveResult.SavedNotificationsOff -> { notificationsOff = true; message = null }
+                                    ReminderSaveResult.SavedNotificationsOff -> { notificationsOff = true; fullScreenOff = false; message = null }
+                                    ReminderSaveResult.SavedFullScreenOff -> { fullScreenOff = true; notificationsOff = false; message = null }
                                     is ReminderSaveResult.Refused -> message = result.message
                                 }
                             }

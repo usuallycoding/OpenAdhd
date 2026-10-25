@@ -4,6 +4,7 @@ import androidx.lifecycle.viewModelScope
 import com.usuallycoding.openadhd.data.InMemoryStore
 import com.usuallycoding.openadhd.domain.Energy
 import com.usuallycoding.openadhd.domain.Reminder
+import com.usuallycoding.openadhd.domain.ReminderKind
 import com.usuallycoding.openadhd.domain.SettingKey
 import com.usuallycoding.openadhd.domain.TemplateReminder
 import com.usuallycoding.openadhd.domain.Tier
@@ -173,5 +174,41 @@ class ReminderViewModelTest {
         assertFalse(viewModel(null).canAlarm)
         assertTrue(com.usuallycoding.openadhd.ui.templates.TemplatesViewModel(store, reminders = FakeReminderScheduler(supportsAlarms = true)).canAlarm)
         assertFalse(com.usuallycoding.openadhd.ui.templates.TemplatesViewModel(store, reminders = null).canAlarm)
+    }
+
+    private fun TodayViewModel.saveAlarm(id: String, kind: ReminderKind): ReminderSaveResult {
+        var result: ReminderSaveResult? = null
+        saveReminder(id, at("15:00"), 30, kind) { result = it }
+        return result!!
+    }
+
+    @Test
+    fun `an alarm without full screen permission is saved and says so`() = runTest {
+        val vm = viewModel(FakeReminderScheduler(supportsAlarms = true, fullScreenAllowed = false))
+        val e = entry()
+        assertEquals(ReminderSaveResult.SavedFullScreenOff, vm.saveAlarm(e.id, ReminderKind.Alarm))
+        assertEquals(Reminder(at("15:00"), 30, ReminderKind.Alarm), store.entriesFor(day).first().single().reminder)
+    }
+
+    @Test
+    fun `a notification and an allowed alarm do not mention full screen`() = runTest {
+        val denied = viewModel(FakeReminderScheduler(supportsAlarms = true, fullScreenAllowed = false))
+        assertEquals(ReminderSaveResult.Saved, denied.saveAlarm(entry().id, ReminderKind.Notification))
+        val allowed = viewModel(FakeReminderScheduler(supportsAlarms = true, fullScreenAllowed = true))
+        assertEquals(ReminderSaveResult.Saved, allowed.saveAlarm(entry().id, ReminderKind.Alarm))
+    }
+
+    @Test
+    fun `a refused notification permission is reported before full screen`() = runTest {
+        val vm = viewModel(FakeReminderScheduler(granted = false, grantsWhenAsked = false, supportsAlarms = true, fullScreenAllowed = false))
+        assertEquals(ReminderSaveResult.SavedNotificationsOff, vm.saveAlarm(entry().id, ReminderKind.Alarm))
+    }
+
+    @Test
+    fun `opening the alarm settings goes to the scheduler`() = runTest {
+        val scheduler = FakeReminderScheduler(supportsAlarms = true)
+        viewModel(scheduler).openAlarmSettings()
+        assertEquals(1, scheduler.settingsOpened)
+        viewModel(null).openAlarmSettings()
     }
 }

@@ -156,4 +156,38 @@ class TemplateReminderPermissionTest {
         assertEquals(1, scheduler.permissionRequests)
         assertEquals(1, seen.size)
     }
+
+    @Test
+    fun `an alarm template without full screen permission saves and shows its own notice`() = runTest {
+        val scheduler = FakeReminderScheduler(supportsAlarms = true, fullScreenAllowed = false)
+        val vm = TemplatesViewModel(store, reminders = scheduler)
+        val seen = notices(vm)
+        vm.save(null, "Meds", Tier.One, Energy.Low, reminder = TemplateReminder(540, null, com.usuallycoding.openadhd.domain.ReminderKind.Alarm))
+        assertEquals(listOf(TemplatesViewModel.FullScreenOff), seen)
+        assertEquals(1, vm.templates.value.size)
+    }
+
+    @Test
+    fun `a notification template or an allowed alarm shows no full screen notice`() = runTest {
+        val denied = FakeReminderScheduler(supportsAlarms = true, fullScreenAllowed = false)
+        val first = TemplatesViewModel(store, reminders = denied)
+        val seenFirst = notices(first)
+        first.save(null, "Plain", Tier.One, Energy.Low, reminder = TemplateReminder(540, null))
+        assertTrue(seenFirst.isEmpty())
+
+        val allowed = FakeReminderScheduler(supportsAlarms = true, fullScreenAllowed = true)
+        val second = TemplatesViewModel(store, reminders = allowed)
+        val seenSecond = notices(second)
+        second.save(null, "Loud", Tier.One, Energy.Low, reminder = TemplateReminder(540, null, com.usuallycoding.openadhd.domain.ReminderKind.Alarm))
+        assertTrue(seenSecond.isEmpty())
+    }
+
+    @Test
+    fun `a refused notification permission shows only the notifications notice for an alarm`() = runTest {
+        val scheduler = FakeReminderScheduler(granted = false, grantsWhenAsked = false, supportsAlarms = true, fullScreenAllowed = false)
+        val vm = TemplatesViewModel(store, reminders = scheduler)
+        val seen = notices(vm)
+        vm.save(null, "Meds", Tier.One, Energy.Low, reminder = TemplateReminder(540, null, com.usuallycoding.openadhd.domain.ReminderKind.Alarm))
+        assertEquals(listOf(TemplatesViewModel.NotificationsOff), seen)
+    }
 }

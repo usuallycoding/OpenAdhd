@@ -80,6 +80,9 @@ sealed interface ReminderSaveResult {
     /** Saved, but the system does not let the app show notifications. */
     data object SavedNotificationsOff : ReminderSaveResult
 
+    /** An alarm was saved and notifications are allowed, but the device does not let the app show full-screen alerts. */
+    data object SavedFullScreenOff : ReminderSaveResult
+
     data class Refused(val message: String) : ReminderSaveResult
 }
 
@@ -225,8 +228,19 @@ class TodayViewModel(
                 return@launch
             }
             val granted = reminders?.ensurePermission() ?: true
-            onResult(if (granted) ReminderSaveResult.Saved else ReminderSaveResult.SavedNotificationsOff)
+            onResult(
+                when {
+                    !granted -> ReminderSaveResult.SavedNotificationsOff
+                    kind == ReminderKind.Alarm && reminders?.fullScreenAlarmsAllowed() == false -> ReminderSaveResult.SavedFullScreenOff
+                    else -> ReminderSaveResult.Saved
+                },
+            )
         }
+    }
+
+    /** Opens the system setting for full-screen alerts, from the message shown after saving an alarm. */
+    fun openAlarmSettings() {
+        reminders?.openAlarmSettings()
     }
 
     fun clearReminder(entryId: String) {

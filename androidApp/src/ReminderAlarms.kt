@@ -8,28 +8,30 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.os.Build
-import java.net.URLDecoder
-import java.net.URLEncoder
+import com.usuallycoding.openadhd.domain.AlarmPlan
+import com.usuallycoding.openadhd.domain.ReminderKind
+import com.usuallycoding.openadhd.domain.ScheduledTime
 
 /**
- * Arms the system alarms that show reminders. The whole schedule is also kept in preferences, so the receivers
- * can show a notification and re-arm after a restart without opening the database.
+ * Arms the system alarms that show reminders: quiet notifications with a normal alarm, and alarm-kind reminders
+ * with an alarm-clock alarm that rings. The whole schedule is also kept in preferences, so the receivers can act and
+ * re-arm after a restart without opening the database.
  */
 internal object ReminderAlarms {
     const val ChannelId = "reminders"
     const val ExtraEntryId = "entryId"
     const val ExtraText = "text"
+
+    /** Set on the intent that opens the app from a ringing alarm, so the app ends the ring. */
+    const val ExtraStopAlarm = "stopAlarm"
     private const val Prefs = "openadhd_reminders"
     private const val Key = "schedule"
-    private const val MaxArmed = 100
 
-    data class Item(val entryId: String, val text: String, val atMillis: Long)
-
-    /** Cancels everything armed before and arms [items], soonest first and at most [MaxArmed] of them. */
-    fun replace(context: Context, items: List<Item>) {
+    /** Cancels everything armed before and arms what [AlarmPlan.arm] picks from [items]. */
+    fun replace(context: Context, items: List<ScheduledTime>) {
         val before = load(context)
         before.forEach { cancel(context, it) }
-        val chosen = items.sortedBy { it.atMillis }.take(MaxArmed)
+        val chosen = AlarmPlan.arm(items)
         save(context, chosen)
         arm(context, chosen)
     }
@@ -37,22 +39,33 @@ internal object ReminderAlarms {
     /** Arms the stored schedule again, as after a restart; times already past are skipped. */
     fun rearm(context: Context) = arm(context, load(context))
 
-    private fun arm(context: Context, items: List<Item>) {
+    private fun arm(context: Context, items: List<ScheduledTime>) {
         val alarms = context.getSystemService(AlarmManager::class.java)
         val now = System.currentTimeMillis()
         items.filter { it.atMillis > now }.forEach { item ->
-            alarms.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, item.atMillis, pendingIntent(context, item))
+            if (item.kind == ReminderKind.Alarm) {
+                // An alarm clock alarm is exempt from Doze, and the system lists it as the next alarm. It is an exact alarm, so it
+                // needs the exact-alarm permission; if that is ever missing the alarm is still armed, only without exact timing.
+                try {
+                    alarms.setAlarmClock(AlarmManager.AlarmClockInfo(item.atMillis, TaskIntents.openApp(context)), pendingIntent(context, item))
+                } catch (_: SecurityException) {
+                    alarms.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, item.atMillis, pendingIntent(context, item))
+                }
+            } else {
+                alarms.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, item.atMillis, pendingIntent(context, item))
+            }
         }
     }
 
-    private fun cancel(context: Context, item: Item) {
+    private fun cancel(context: Context, item: ScheduledTime) {
         context.getSystemService(AlarmManager::class.java).cancel(pendingIntent(context, item))
     }
 
-    /** One distinct PendingIntent per entry and time, told apart by the data Uri. */
-    private fun pendingIntent(context: Context, item: Item): PendingIntent {
-        val intent = Intent(context, ReminderReceiver::class.java)
-            .setData(Uri.parse("openadhd://reminder/${Uri.encode(item.entryId)}/${item.atMillis}"))
+    /** One distinct PendingIntent per entry, time and kind, told apart by the data Uri. */
+    private fun pendingIntent(context: Context, item: ScheduledTime): PendingIntent {
+        val alarm = item.kind == ReminderKind.Alarm
+        val intent = Intent(context, if (alarm) AlarmReceiver::class.java else ReminderReceiver::class.java)
+            .setData(Uri.parse("openadhd://${if (alarm) "alarm" else "reminder"}/${Uri.encode(item.entryId)}/${item.atMillis}"))
             .putExtra(ExtraEntryId, item.entryId)
             .putExtra(ExtraText, item.text)
         return PendingIntent.getBroadcast(context, 0, intent, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
@@ -70,21 +83,13 @@ internal object ReminderAlarms {
         }
     }
 
-    private fun save(context: Context, items: List<Item>) {
-        val lines = items.joinToString("\n") { "${enc(it.entryId)}|${enc(it.text)}|${it.atMillis}" }
+    private fun save(context: Context, items: List<ScheduledTime>) {
+        val lines = items.joinToString("\n") { AlarmPlan.encode(it) }
         context.getSharedPreferences(Prefs, Context.MODE_PRIVATE).edit().putString(Key, lines).apply()
     }
 
-    private fun load(context: Context): List<Item> =
+    private fun load(context: Context): List<ScheduledTime> =
         context.getSharedPreferences(Prefs, Context.MODE_PRIVATE).getString(Key, "").orEmpty()
             .lines()
-            .mapNotNull { line ->
-                val parts = line.split('|')
-                val at = parts.getOrNull(2)?.toLongOrNull()
-                if (parts.size == 3 && at != null) Item(dec(parts[0]), dec(parts[1]), at) else null
-            }
-
-    private fun enc(text: String) = URLEncoder.encode(text, "UTF-8")
-
-    private fun dec(text: String) = URLDecoder.decode(text, "UTF-8")
+            .mapNotNull { AlarmPlan.decode(it) }
 }

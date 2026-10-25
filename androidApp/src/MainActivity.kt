@@ -33,6 +33,11 @@ class MainActivity : ComponentActivity() {
     private fun showEntryOf(intent: Intent?) {
         val entryId = intent?.getStringExtra(ReminderAlarms.ExtraEntryId) ?: return
         intent.removeExtra(ReminderAlarms.ExtraEntryId)
+        // Opening the app from a ringing alarm's notification ends the ring.
+        if (intent.getBooleanExtra(ReminderAlarms.ExtraStopAlarm, false)) {
+            intent.removeExtra(ReminderAlarms.ExtraStopAlarm)
+            startService(Intent(this, AlarmService::class.java).setAction(AlarmService.ActionDismiss))
+        }
         container.entryRequests.open(entryId)
     }
 }

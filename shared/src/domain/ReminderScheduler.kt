@@ -29,6 +29,15 @@ interface ReminderScheduler {
      */
     val supportsAlarms: Boolean get() = false
 
+    /**
+     * Whether the device lets the app show full-screen alerts, which an alarm needs to appear over the lock screen.
+     * Without it an alarm still rings. True by default and wherever the question does not arise.
+     */
+    fun fullScreenAlarmsAllowed(): Boolean = true
+
+    /** Opens the system setting where the user can allow full-screen alerts; nothing where there is none. */
+    fun openAlarmSettings() {}
+
     /** Whether notifications can be shown right now. */
     fun hasPermission(): Boolean
 

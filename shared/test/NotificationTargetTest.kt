@@ -19,6 +19,12 @@ class NotificationTargetTest {
     }
 
     @Test
+    fun `the alarm target is not the reminder target`() {
+        assertNotEquals(NotificationTarget.uri("a"), NotificationTarget.alarmUri("a"))
+        assertEquals("openadhd://entry/abc/alarm", NotificationTarget.alarmUri("abc"))
+    }
+
+    @Test
     fun `the address names the entry`() {
         assertEquals("openadhd://entry/abc-123", NotificationTarget.uri("abc-123"))
     }
