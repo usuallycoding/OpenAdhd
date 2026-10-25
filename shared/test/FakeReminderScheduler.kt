@@ -4,7 +4,11 @@ import com.usuallycoding.openadhd.domain.ReminderScheduler
 import com.usuallycoding.openadhd.domain.UpcomingReminder
 
 /** A [ReminderScheduler] for tests: remembers every schedule it was given and answers permission from [granted]. */
-class FakeReminderScheduler(var granted: Boolean = true, var grantsWhenAsked: Boolean = true) : ReminderScheduler {
+class FakeReminderScheduler(
+    var granted: Boolean = true,
+    var grantsWhenAsked: Boolean = true,
+    override val supportsAlarms: Boolean = false,
+) : ReminderScheduler {
     val schedules = mutableListOf<List<UpcomingReminder>>()
     var permissionRequests = 0
         private set

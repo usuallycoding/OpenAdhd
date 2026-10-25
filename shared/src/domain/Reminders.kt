@@ -9,11 +9,14 @@ import kotlinx.datetime.toLocalDateTime
 import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Instant
 
+/** How a reminder is delivered: quietly as a notification, or by ringing like an alarm where the device can. */
+enum class ReminderKind { Notification, Alarm }
+
 /**
  * A reminder for a Today entry: it fires at [startAt], then every [repeatMinutes] if set, as long as the entry
- * is not done and the stop time has not been reached.
+ * is not done and the stop time has not been reached. [kind] says how it is delivered.
  */
-data class Reminder(val startAt: Instant, val repeatMinutes: Int?)
+data class Reminder(val startAt: Instant, val repeatMinutes: Int?, val kind: ReminderKind = ReminderKind.Notification)
 
 /** Why a reminder cannot be saved. */
 sealed interface ReminderProblem {
@@ -91,7 +94,8 @@ object ReminderRules {
     fun summary(reminder: Reminder, zone: TimeZone): String {
         val at = clock(reminder.startAt, zone)
         val repeat = reminder.repeatMinutes?.let { ", every ${repeatLabel(it)}" }.orEmpty()
-        return "Reminder $at$repeat"
+        val name = if (reminder.kind == ReminderKind.Alarm) "Alarm" else "Reminder"
+        return "$name $at$repeat"
     }
 
     /** "30 min", "1 h" or "2 h" for a repeat in minutes. */

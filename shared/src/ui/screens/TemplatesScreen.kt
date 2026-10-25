@@ -50,6 +50,7 @@ import com.usuallycoding.openadhd.domain.Energy
 import com.usuallycoding.openadhd.domain.CoinRules
 import com.usuallycoding.openadhd.ui.LocalGameRules
 import com.usuallycoding.openadhd.domain.HistoryDays
+import com.usuallycoding.openadhd.domain.ReminderKind
 import com.usuallycoding.openadhd.domain.ReminderRules
 import com.usuallycoding.openadhd.domain.ScheduleProblem
 import com.usuallycoding.openadhd.domain.ScheduleRules
@@ -117,6 +118,7 @@ fun TaskTemplatesScreen(viewModel: TemplatesViewModel, modifier: Modifier = Modi
         onDelete = viewModel::delete,
         modifier = modifier,
         today = Clock.System.todayIn(TimeZone.currentSystemDefault()),
+        canAlarm = viewModel.canAlarm,
     )
 }
 
@@ -130,6 +132,8 @@ fun TemplatesContent(
     onDelete: (id: String) -> Unit,
     modifier: Modifier = Modifier,
     today: LocalDate = Clock.System.todayIn(TimeZone.currentSystemDefault()),
+    /** Whether the form offers the Notification / Alarm choice for the reminder. */
+    canAlarm: Boolean = false,
     reordering: Boolean = false,
     onMoveUp: (id: String) -> Unit = {},
     onMoveDown: (id: String) -> Unit = {},
@@ -194,6 +198,7 @@ fun TemplatesContent(
         TemplateDialog(
             initial = template,
             today = today,
+            canAlarm = canAlarm,
             onDismiss = { editing = null },
             onConfirm = { name, tier, energy, description, subtasks, schedule, reminder ->
                 onSave(template.id.ifEmpty { null }, name, tier, energy, description, subtasks, schedule, reminder)
@@ -206,6 +211,7 @@ fun TemplatesContent(
 private fun TemplateDialog(
     initial: TaskTemplate,
     today: LocalDate,
+    canAlarm: Boolean,
     onDismiss: () -> Unit,
     onConfirm: (
         name: String, tier: Tier, energy: Energy, description: String, subtasks: List<String>,
@@ -227,6 +233,7 @@ private fun TemplateDialog(
     var periodStart by remember { mutableStateOf((initial.schedule as? TaskSchedule.Period)?.start ?: today) }
     var periodEnd by remember { mutableStateOf((initial.schedule as? TaskSchedule.Period)?.end ?: today.plus(1, DateTimeUnit.DAY)) }
     var reminderTime by remember { mutableStateOf(initial.reminder?.minuteOfDay) }
+    var reminderKind by remember { mutableStateOf(initial.reminder?.kind ?: ReminderKind.Notification) }
     var reminderRepeat by remember { mutableStateOf(if (initial.reminder != null) initial.reminder.repeatMinutes else ReminderRules.DefaultRepeat) }
     var scheduleProblem by remember { mutableStateOf<ScheduleProblem?>(null) }
     var pickingTime by remember { mutableStateOf(false) }
@@ -239,7 +246,7 @@ private fun TemplateDialog(
         ScheduleMode.Daily -> TaskSchedule.Daily
     }
 
-    fun reminder(): TemplateReminder? = reminderTime?.let { TemplateReminder(it, reminderRepeat) }
+    fun reminder(): TemplateReminder? = reminderTime?.let { TemplateReminder(it, reminderRepeat, reminderKind) }
 
     FormSheet(
         title = if (initial.id.isEmpty()) "New task" else "Edit task",
@@ -356,6 +363,18 @@ private fun TemplateDialog(
                         label = { Text("Every ${ReminderRules.repeatLabel(minutes)}") },
                     )
                 }
+            }
+            if (canAlarm) {
+                Text("Type", style = MaterialTheme.typography.labelLarge)
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    ReminderKind.entries.forEach { option ->
+                        FilterChip(selected = reminderKind == option, onClick = { reminderKind = option }, label = { Text(option.name) })
+                    }
+                }
+                Text(
+                    "An alarm rings where your device supports it; otherwise it is shown as a notification.",
+                    style = MaterialTheme.typography.bodySmall,
+                )
             }
         }
 

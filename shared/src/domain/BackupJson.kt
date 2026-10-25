@@ -127,6 +127,11 @@ private fun taskTierOf(level: Int, kind: String): Tier =
 private fun rewardTierOf(level: Int, kind: String): RewardTier =
     RewardTier.entries.firstOrNull { it.level == level } ?: refuse("A $kind has a tier outside 1 to 5 ($level).")
 
+/** A reminder's kind from a file: missing means a notification, as in files from before kinds existed; anything else unknown is refused. */
+private fun reminderKindOf(name: String?): ReminderKind =
+    if (name == null) ReminderKind.Notification
+    else ReminderKind.entries.firstOrNull { it.name == name } ?: refuse("A reminder has an unknown kind ($name).")
+
 private fun instantOf(millis: Long): Instant = Instant.fromEpochMilliseconds(millis)
 
 @Serializable
@@ -144,11 +149,12 @@ private class TemplateDto(
     val reminderMinuteOfDay: Int? = null,
     val reminderRepeatMinutes: Int? = null,
     val lastGenerated: String? = null,
+    val reminderKind: String? = null,
 ) {
     fun toDomain(): TaskTemplate {
         if (name.isBlank()) refuse("A task template has no name.")
         val schedule = scheduleOf()
-        val reminder = reminderMinuteOfDay?.let { TemplateReminder(it, reminderRepeatMinutes) }
+        val reminder = reminderMinuteOfDay?.let { TemplateReminder(it, reminderRepeatMinutes, reminderKindOf(reminderKind)) }
         if (ScheduleRules.check(schedule, reminder) != null) refuse("A task template has an invalid schedule or reminder.")
         val generated = lastGenerated?.let { dateOf(it, "a task template's last generated day") }
         return TaskTemplate(
@@ -180,6 +186,7 @@ private class TemplateDto(
                 scheduleDays = (t.schedule as? TaskSchedule.Weekly)?.let { w -> ScheduleRules.Weekdays.filter { it in w.days }.map { it.name } }.orEmpty(),
                 reminderMinuteOfDay = t.reminder?.minuteOfDay, reminderRepeatMinutes = t.reminder?.repeatMinutes,
                 lastGenerated = t.lastGenerated?.toString(),
+                reminderKind = t.reminder?.kind?.name,
             )
         }
     }
@@ -202,6 +209,7 @@ private class PlannedDto(
     val subtasks: List<PlannedSubtaskDto> = emptyList(),
     val reminderAt: Long? = null,
     val reminderRepeatMinutes: Int? = null,
+    val reminderKind: String? = null,
 ) {
     fun toDomain(): PlannedTask {
         val day = try {
@@ -222,7 +230,7 @@ private class PlannedDto(
             description = description,
             reward = reward,
             subtasks = subtasks.map { PlannedSubtask(it.id, it.title, it.reward, it.completedAt?.let(::instantOf)) },
-            reminder = reminderAt?.let { Reminder(instantOf(it), reminderRepeatMinutes) },
+            reminder = reminderAt?.let { Reminder(instantOf(it), reminderRepeatMinutes, reminderKindOf(reminderKind)) },
         )
     }
 
@@ -231,7 +239,7 @@ private class PlannedDto(
             t.id, t.date.toString(), t.name, t.tier.level, t.energy.name, t.templateId,
             t.completedAt?.toEpochMilliseconds(), t.description, t.reward,
             t.subtasks.map { PlannedSubtaskDto(it.id, it.title, it.reward, it.completedAt?.toEpochMilliseconds()) },
-            t.reminder?.startAt?.toEpochMilliseconds(), t.reminder?.repeatMinutes,
+            t.reminder?.startAt?.toEpochMilliseconds(), t.reminder?.repeatMinutes, t.reminder?.kind?.name,
         )
     }
 }

@@ -9,6 +9,7 @@ import com.usuallycoding.openadhd.domain.PickerRoll
 import com.usuallycoding.openadhd.domain.PlannedTask
 import com.usuallycoding.openadhd.domain.Reminder
 import com.usuallycoding.openadhd.domain.ReminderPreset
+import com.usuallycoding.openadhd.domain.ReminderKind
 import com.usuallycoding.openadhd.domain.ReminderRules
 import com.usuallycoding.openadhd.domain.ReminderScheduler
 import com.usuallycoding.openadhd.domain.Settings
@@ -188,6 +189,9 @@ class TodayViewModel(
     /** Whether this platform can deliver reminders at all. */
     val canRemind: Boolean = reminders != null
 
+    /** Whether this platform offers alarms, so the sheet offers the Notification / Alarm choice. */
+    val canAlarm: Boolean = reminders?.supportsAlarms == true
+
     private val reminderStopHour: StateFlow<Int> =
         store.settings.map { it.reminderStopHour }.stateIn(viewModelScope, SharingStarted.Eagerly, Settings.Default.reminderStopHour)
 
@@ -202,15 +206,21 @@ class TodayViewModel(
     fun currentTime(): LocalTime = clock.now().toLocalDateTime(timeZone).time
 
     /**
-     * Saves a reminder for [entryId], starting at [start] and repeating every [repeatMinutes] (or once when null).
+     * Saves a reminder of [kind] for [entryId], starting at [start] and repeating every [repeatMinutes] (or once when null).
      * A start that cannot work is refused with the reason; otherwise the reminder is saved and, the first time,
      * permission to show notifications is asked for. A refused permission still saves the reminder.
      */
-    fun saveReminder(entryId: String, start: Instant, repeatMinutes: Int?, onResult: (ReminderSaveResult) -> Unit) {
+    fun saveReminder(
+        entryId: String,
+        start: Instant,
+        repeatMinutes: Int?,
+        kind: ReminderKind = ReminderKind.Notification,
+        onResult: (ReminderSaveResult) -> Unit,
+    ) {
         val problem = ReminderRules.check(start, clock.now(), today.value, reminderStopHour.value, timeZone)
         if (problem != null) return onResult(ReminderSaveResult.Refused(problem.message))
         viewModelScope.launch {
-            if (!store.setReminder(entryId, Reminder(start, repeatMinutes))) {
+            if (!store.setReminder(entryId, Reminder(start, repeatMinutes, kind))) {
                 onResult(ReminderSaveResult.Refused("This task can no longer have a reminder"))
                 return@launch
             }

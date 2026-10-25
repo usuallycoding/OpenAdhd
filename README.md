@@ -38,6 +38,7 @@ On Today, a task that is not done yet has a "..." button. Its sheet lets you set
 - **Repeat:** off, or every 15, 30, 60 or 120 minutes. A reminder repeats until the task is done or the stop time is reached. "Stop reminders at" is in Settings (default 22).
 - Completing the task stops its reminders, unchecking it brings back the ones still to come, and they all end at midnight.
 - The first time you save a reminder the system asks to allow notifications.
+- **Notification or alarm:** on Android and iOS a reminder can be a Notification (the default) or an Alarm, in the task's "..." sheet and in the template form. For now an alarm is shown as a notification; ringing is added per platform. The desktop app only has notifications.
 - **Tapping a notification** on Android and iOS opens the app on Today, scrolls to the task it is about and highlights it briefly, whether the app was closed, in the background or in front. On **macOS** tapping a notification does not jump to the task.
 - **Android and iOS** show the notification even when the app is closed (Android also after a restart). On **macOS** the app must be running: a reminder that comes due while it is closed is not shown later.
 

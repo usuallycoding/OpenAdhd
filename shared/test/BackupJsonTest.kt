@@ -9,6 +9,7 @@ import com.usuallycoding.openadhd.domain.PlannedSubtask
 import com.usuallycoding.openadhd.domain.PlannedTask
 import com.usuallycoding.openadhd.domain.Redemption
 import com.usuallycoding.openadhd.domain.Reminder
+import com.usuallycoding.openadhd.domain.ReminderKind
 import com.usuallycoding.openadhd.domain.RedemptionSource
 import com.usuallycoding.openadhd.domain.RewardTemplate
 import com.usuallycoding.openadhd.domain.RewardTier
@@ -292,5 +293,41 @@ class BackupJsonTest {
         assertEquals("A task template has an unknown schedule (Sometimes).", refusal(text.replace("\"Weekly\"", "\"Sometimes\"")))
         assertEquals("A task template has an unknown weekday (FUNDAY).", refusal(text.replace("\"MONDAY\"", "\"FUNDAY\"")))
         assertEquals("A task template has an invalid schedule or reminder.", refusal(text.replace("\"reminderRepeatMinutes\": 30", "\"reminderRepeatMinutes\": 20")))
+    }
+
+    @Test
+    fun `the kind of task and template reminders round trips`() {
+        val state = StoreState(
+            templates = listOf(TaskTemplate("t", "T", Tier.One, Energy.Low, reminder = TemplateReminder(540, 30, ReminderKind.Alarm))),
+            planned = listOf(
+                PlannedTask("a", day, "A", Tier.One, Energy.Low, null, reminder = Reminder(at, 15, ReminderKind.Alarm)),
+                PlannedTask("n", day, "N", Tier.One, Energy.Low, null, reminder = Reminder(at, null, ReminderKind.Notification)),
+            ),
+        )
+        val decoded = valid(BackupJson.encode(state, at)).state
+        assertEquals(state.templates, decoded.templates)
+        assertEquals(state.planned, decoded.planned)
+    }
+
+    @Test
+    fun `a file without reminder kinds imports every reminder as a notification`() {
+        val state = StoreState(
+            templates = listOf(TaskTemplate("t", "T", Tier.One, Energy.Low, reminder = TemplateReminder(540, 30, ReminderKind.Alarm))),
+            planned = listOf(PlannedTask("a", day, "A", Tier.One, Energy.Low, null, reminder = Reminder(at, 15, ReminderKind.Alarm))),
+        )
+        val root = Json.parseToJsonElement(BackupJson.encode(state, at)).jsonObject
+        fun strip(key: String) = JsonArray(root.getValue(key).jsonArray.map { JsonObject(it.jsonObject - "reminderKind") })
+        val text = JsonObject(root + ("templates" to strip("templates")) + ("planned" to strip("planned"))).toString()
+        assertFalse(text.contains("reminderKind"))
+        val decoded = valid(text).state
+        assertEquals(ReminderKind.Notification, decoded.templates.single().reminder?.kind)
+        assertEquals(ReminderKind.Notification, decoded.planned.single().reminder?.kind)
+    }
+
+    @Test
+    fun `an unknown reminder kind is refused`() {
+        val state = StoreState(planned = listOf(PlannedTask("a", day, "A", Tier.One, Energy.Low, null, reminder = Reminder(at, 15, ReminderKind.Alarm))))
+        val text = BackupJson.encode(state, at).replace("\"Alarm\"", "\"Siren\"")
+        assertEquals("A reminder has an unknown kind (Siren).", refusal(text))
     }
 }

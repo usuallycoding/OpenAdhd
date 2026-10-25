@@ -17,6 +17,7 @@ import com.usuallycoding.openadhd.domain.LedgerReason
 import com.usuallycoding.openadhd.domain.RedemptionSource
 import com.usuallycoding.openadhd.domain.PlannedTask
 import com.usuallycoding.openadhd.domain.Reminder
+import com.usuallycoding.openadhd.domain.ReminderKind
 import com.usuallycoding.openadhd.domain.generatedTask
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.TimeZone
@@ -267,15 +268,15 @@ abstract class OpenAdhdDao {
     @Query("SELECT * FROM planned_tasks WHERE id = :id")
     abstract suspend fun plannedById(id: String): PlannedWithSubtasks?
 
-    @Query("UPDATE planned_tasks SET reminderAtMillis = :at, reminderRepeatMinutes = :repeatMinutes WHERE id = :id")
-    abstract suspend fun updateReminder(id: String, at: Long?, repeatMinutes: Int?)
+    @Query("UPDATE planned_tasks SET reminderAtMillis = :at, reminderRepeatMinutes = :repeatMinutes, reminderKind = :kind WHERE id = :id")
+    abstract suspend fun updateReminder(id: String, at: Long?, repeatMinutes: Int?, kind: String)
 
     /** Sets or clears an entry's reminder; false, changing nothing, when the entry is unknown or already completed. */
     @Transaction
     open suspend fun setReminder(id: String, reminder: Reminder?): Boolean {
         val entry = plannedById(id)?.toDomain() ?: return false
         if (entry.isCompleted) return false
-        updateReminder(id, reminder?.startAt?.toEpochMilliseconds(), reminder?.repeatMinutes)
+        updateReminder(id, reminder?.startAt?.toEpochMilliseconds(), reminder?.repeatMinutes, (reminder?.kind ?: ReminderKind.Notification).name)
         return true
     }
 

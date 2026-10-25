@@ -43,6 +43,8 @@ class IosReminderScheduler(private val requests: EntryRequests = EntryRequests()
         }
     }
 
+    override val supportsAlarms: Boolean = true
+
     override fun hasPermission(): Boolean = authorized
 
     override suspend fun ensurePermission(): Boolean = suspendCancellableCoroutine { continuation ->

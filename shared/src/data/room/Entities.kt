@@ -12,6 +12,7 @@ import com.usuallycoding.openadhd.domain.PlannedSubtask
 import com.usuallycoding.openadhd.domain.PlannedTask
 import com.usuallycoding.openadhd.domain.Redemption
 import com.usuallycoding.openadhd.domain.Reminder
+import com.usuallycoding.openadhd.domain.ReminderKind
 import com.usuallycoding.openadhd.domain.RedemptionSource
 import com.usuallycoding.openadhd.domain.GameRules
 import com.usuallycoding.openadhd.domain.RewardRules
@@ -41,6 +42,7 @@ data class TemplateEntity(
     val reminderMinuteOfDay: Int? = null,
     val reminderRepeatMinutes: Int? = null,
     val lastGenerated: String? = null,
+    @ColumnInfo(defaultValue = "'Notification'") val reminderKind: String = "Notification",
 )
 
 @Entity(tableName = "template_subtasks")
@@ -72,6 +74,7 @@ data class PlannedTaskEntity(
     @ColumnInfo(defaultValue = "0") val position: Int = 0,
     val reminderAtMillis: Long? = null,
     val reminderRepeatMinutes: Int? = null,
+    @ColumnInfo(defaultValue = "'Notification'") val reminderKind: String = "Notification",
 )
 
 @Entity(tableName = "planned_subtasks")
@@ -137,7 +140,7 @@ internal fun TemplateWithSubtasks.toDomain() = TaskTemplate(
     description = template.description,
     subtasks = subtasks.sortedBy { it.position }.map { it.title },
     schedule = ScheduleRules.decode(StoredSchedule(template.scheduleKind, template.scheduleStart, template.scheduleEnd, template.scheduleDays)),
-    reminder = template.reminderMinuteOfDay?.let { TemplateReminder(it, template.reminderRepeatMinutes) },
+    reminder = template.reminderMinuteOfDay?.let { TemplateReminder(it, template.reminderRepeatMinutes, kindOf(template.reminderKind)) },
     lastGenerated = template.lastGenerated?.let { runCatching { LocalDate.parse(it) }.getOrNull() },
 )
 
@@ -147,6 +150,7 @@ internal fun TaskTemplate.toEntity(): TemplateEntity {
         id, name, tier.level, energy.name, description,
         scheduleKind = stored.kind, scheduleStart = stored.start, scheduleEnd = stored.end, scheduleDays = stored.days,
         reminderMinuteOfDay = reminder?.minuteOfDay, reminderRepeatMinutes = reminder?.repeatMinutes,
+        reminderKind = (reminder?.kind ?: ReminderKind.Notification).name,
         lastGenerated = lastGenerated?.toString(),
     )
 }
@@ -169,7 +173,7 @@ internal fun PlannedWithSubtasks.toDomain() = PlannedTask(
     subtasks = subtasks.sortedBy { it.position }.map {
         PlannedSubtask(it.id, it.title, it.reward, it.completedAtMillis?.let(Instant::fromEpochMilliseconds))
     },
-    reminder = task.reminderAtMillis?.let { Reminder(Instant.fromEpochMilliseconds(it), task.reminderRepeatMinutes) },
+    reminder = task.reminderAtMillis?.let { Reminder(Instant.fromEpochMilliseconds(it), task.reminderRepeatMinutes, kindOf(task.reminderKind)) },
 )
 
 internal fun PlannedTask.toEntity() = PlannedTaskEntity(
@@ -177,6 +181,7 @@ internal fun PlannedTask.toEntity() = PlannedTaskEntity(
     completedAt?.toEpochMilliseconds(), description, reward,
     reminderAtMillis = reminder?.startAt?.toEpochMilliseconds(),
     reminderRepeatMinutes = reminder?.repeatMinutes,
+    reminderKind = (reminder?.kind ?: ReminderKind.Notification).name,
 )
 
 internal fun PlannedTask.subtaskEntities() = subtasks.mapIndexed { index, subtask ->
@@ -208,3 +213,6 @@ internal fun RedemptionEntity.toDomain() = Redemption(
 )
 
 internal fun List<SettingEntity>.toSettings(): Settings = Settings.fromOverrides(associate { it.key to it.value })
+
+/** A stored kind name; anything that is not a known kind reads as a notification, so a bad row never blocks start-up. */
+internal fun kindOf(name: String): ReminderKind = ReminderKind.entries.firstOrNull { it.name == name } ?: ReminderKind.Notification

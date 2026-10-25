@@ -34,8 +34,12 @@ sealed interface TaskSchedule {
     }
 }
 
-/** A time of day and an optional repeat in minutes, applied to the entries a schedule generates. */
-data class TemplateReminder(val minuteOfDay: Int, val repeatMinutes: Int? = null) {
+/** A time of day, an optional repeat in minutes and a kind, applied to the entries a schedule generates. */
+data class TemplateReminder(
+    val minuteOfDay: Int,
+    val repeatMinutes: Int? = null,
+    val kind: ReminderKind = ReminderKind.Notification,
+) {
     val hour: Int get() = minuteOfDay / 60
     val minute: Int get() = minuteOfDay % 60
 }

@@ -38,6 +38,9 @@ class TemplatesViewModel(
     private val rules: StateFlow<GameRules> =
         settings.map { it.rules }.stateIn(viewModelScope, SharingStarted.Eagerly, GameRules.Default)
 
+    /** Whether this platform offers alarms, so the template form offers the Notification / Alarm choice. */
+    val canAlarm: Boolean = reminders?.supportsAlarms == true
+
     val templates: StateFlow<List<TaskTemplate>> =
         repository.templates.stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
 

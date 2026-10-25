@@ -4,6 +4,7 @@ import com.usuallycoding.openadhd.data.InMemoryStore
 import com.usuallycoding.openadhd.domain.Energy
 import com.usuallycoding.openadhd.domain.Reminder
 import com.usuallycoding.openadhd.domain.ReminderCoordinator
+import com.usuallycoding.openadhd.domain.ReminderKind
 import com.usuallycoding.openadhd.domain.ReminderRules
 import com.usuallycoding.openadhd.domain.SettingKey
 import com.usuallycoding.openadhd.domain.Tier
@@ -167,5 +168,19 @@ class ReminderCoordinatorTest {
         val ok = FakeReminderScheduler(granted = true)
         assertEquals(true, ok.ensurePermission())
         assertEquals(0, ok.permissionRequests)
+    }
+
+    @Test
+    fun `the kind of a reminder is handed over and changing only the kind hands the schedule over again`() = runTest {
+        start()
+        val e = entry()
+        store.setReminder(e.id, Reminder(at("17:00"), 60))
+        assertEquals(ReminderKind.Notification, scheduler.current.single().kind)
+
+        val count = scheduler.schedules.size
+        store.setReminder(e.id, Reminder(at("17:00"), 60, ReminderKind.Alarm))
+        assertEquals(count + 1, scheduler.schedules.size)
+        assertEquals(ReminderKind.Alarm, scheduler.current.single().kind)
+        assertEquals(clocks(), listOf("17:00", "18:00", "19:00", "20:00", "21:00"))
     }
 }

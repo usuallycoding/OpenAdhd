@@ -165,4 +165,13 @@ class ReminderViewModelTest {
         assertEquals(Reminder(at("15:00"), 60), entry.reminder)
         vm.viewModelScope.cancel()
     }
+
+    @Test
+    fun `alarms are offered only where the scheduler supports them`() = runTest {
+        assertTrue(viewModel(FakeReminderScheduler(supportsAlarms = true)).canAlarm)
+        assertFalse(viewModel(FakeReminderScheduler(supportsAlarms = false)).canAlarm)
+        assertFalse(viewModel(null).canAlarm)
+        assertTrue(com.usuallycoding.openadhd.ui.templates.TemplatesViewModel(store, reminders = FakeReminderScheduler(supportsAlarms = true)).canAlarm)
+        assertFalse(com.usuallycoding.openadhd.ui.templates.TemplatesViewModel(store, reminders = null).canAlarm)
+    }
 }

@@ -8,6 +8,7 @@ import com.usuallycoding.openadhd.domain.LedgerReason
 import com.usuallycoding.openadhd.domain.OpenAdhdStore
 import com.usuallycoding.openadhd.domain.RedemptionSource
 import com.usuallycoding.openadhd.domain.Reminder
+import com.usuallycoding.openadhd.domain.ReminderKind
 import com.usuallycoding.openadhd.domain.ReminderRules
 import com.usuallycoding.openadhd.domain.RewardTier
 import com.usuallycoding.openadhd.domain.SettingKey
@@ -1853,6 +1854,53 @@ abstract class StoreContractTest {
         val once = store.assign(store.create("B", Tier.One, Energy.Low, reminder = TemplateReminder(9 * 60, null)), today, TimeZone.UTC)
         assertEquals(Instant.parse("2026-10-23T14:30:00Z"), ReminderRules.upcoming(repeating.reminder!!, today, 22, now, TimeZone.UTC).first())
         assertTrue(ReminderRules.upcoming(once.reminder!!, today, 22, now, TimeZone.UTC).isEmpty())
+    }
+
+    @Test
+    fun `a generated task and a task added by hand take the kind of the template reminder`() = runTest {
+        val store = newStore(clock)
+        val alarm = store.create("Meds", Tier.One, Energy.Low, schedule = everyDay, reminder = TemplateReminder(9 * 60, 30, ReminderKind.Alarm))
+        val plain = store.create("Walk", Tier.One, Energy.Low, reminder = TemplateReminder(10 * 60, null))
+        val generated = store.generateDue(today, TimeZone.UTC).single()
+        assertEquals(ReminderKind.Alarm, generated.reminder?.kind)
+        assertEquals(ReminderKind.Alarm, store.assign(alarm, today, TimeZone.UTC).reminder?.kind)
+        assertEquals(ReminderKind.Notification, store.assign(plain, today, TimeZone.UTC).reminder?.kind)
+    }
+
+    @Test
+    fun `a template keeps the kind of its reminder`() = runTest {
+        val store = newStore(clock)
+        store.create("Meds", Tier.One, Energy.Low, reminder = TemplateReminder(540, 30, ReminderKind.Alarm))
+        assertEquals(ReminderKind.Alarm, store.templates.first().single().reminder?.kind)
+    }
+
+    @Test
+    fun `an entry keeps the kind of its reminder through replacing completing and unchecking`() = runTest {
+        val store = newStore(clock)
+        val entry = store.assign(store.create("Meds", Tier.One, Energy.Low), today)
+        val at = Instant.parse("2026-10-23T15:00:00Z")
+        assertTrue(store.setReminder(entry.id, Reminder(at, 30, ReminderKind.Alarm)))
+        assertEquals(ReminderKind.Alarm, store.entriesFor(today).first().single().reminder?.kind)
+
+        store.completeTask(entry.id)
+        store.uncompleteTask(entry.id)
+        assertEquals(Reminder(at, 30, ReminderKind.Alarm), store.entriesFor(today).first().single().reminder)
+
+        assertTrue(store.setReminder(entry.id, Reminder(at, 30, ReminderKind.Notification)))
+        assertEquals(ReminderKind.Notification, store.entriesFor(today).first().single().reminder?.kind)
+        assertTrue(store.setReminder(entry.id, null))
+        assertNull(store.entriesFor(today).first().single().reminder)
+    }
+
+    @Test
+    fun `the kind travels in a backup`() = runTest {
+        val source = newStore(clock)
+        val template = source.create("Meds", Tier.One, Energy.Low, reminder = TemplateReminder(540, null, ReminderKind.Alarm))
+        val entry = source.assign(template, today, TimeZone.UTC)
+        val target = newStore(clock)
+        target.importData(source.exportData())
+        assertEquals(ReminderKind.Alarm, target.templates.first().single().reminder?.kind)
+        assertEquals(ReminderKind.Alarm, target.entriesFor(today).first().single { it.id == entry.id }.reminder?.kind)
     }
 }
 

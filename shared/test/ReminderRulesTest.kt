@@ -1,6 +1,7 @@
 package com.usuallycoding.openadhd
 
 import com.usuallycoding.openadhd.domain.Reminder
+import com.usuallycoding.openadhd.domain.ReminderKind
 import com.usuallycoding.openadhd.domain.ReminderProblem
 import com.usuallycoding.openadhd.domain.ReminderRules
 import kotlinx.datetime.LocalDate
@@ -135,5 +136,13 @@ class ReminderRulesTest {
         assertEquals("Reminder 09:05, every 1 h", ReminderRules.summary(Reminder(at("09:05"), 60), utc))
         assertEquals("Reminder 09:05, every 2 h", ReminderRules.summary(Reminder(at("09:05"), 120), utc))
         assertEquals("Reminder 15:00", ReminderRules.summary(Reminder(at("15:00"), null), utc))
+    }
+
+    @Test
+    fun `an alarm is named as one in the summary and a notification is the default`() {
+        assertEquals("Alarm 15:00, every 30 min", ReminderRules.summary(Reminder(at("15:00"), 30, ReminderKind.Alarm), utc))
+        assertEquals("Alarm 09:05", ReminderRules.summary(Reminder(at("09:05"), null, ReminderKind.Alarm), utc))
+        assertEquals(ReminderKind.Notification, Reminder(at("15:00"), 30).kind)
+        assertEquals("Reminder 15:00", ReminderRules.summary(Reminder(at("15:00"), null, ReminderKind.Notification), utc))
     }
 }

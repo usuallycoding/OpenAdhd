@@ -10,6 +10,7 @@ import com.usuallycoding.openadhd.domain.CoinRules
 import com.usuallycoding.openadhd.domain.Energy
 import com.usuallycoding.openadhd.domain.RedemptionSource
 import com.usuallycoding.openadhd.domain.Reminder
+import com.usuallycoding.openadhd.domain.ReminderKind
 import com.usuallycoding.openadhd.domain.RewardTier
 import com.usuallycoding.openadhd.domain.SettingKey
 import com.usuallycoding.openadhd.domain.Settings
@@ -369,6 +370,49 @@ class RoomMigrationTest {
         assertEquals(TaskSchedule.Daily, reopened.schedule)
         assertEquals(TemplateReminder(540, 30), reopened.reminder)
         assertEquals(day, reopened.lastGenerated)
+        second.close()
+    }
+
+    @Test
+    fun `upgrading to version 10 leaves reminders as notifications and keeps an alarm once chosen`() = runTest {
+        val file = createVersion1Database()
+        val first = Room.databaseBuilder<OpenAdhdDatabase>(file).buildOpenAdhdDatabase()
+        val store = RoomStore(first)
+
+        val entry = store.entriesFor(day).first().first { !it.isCompleted }
+        val at = Instant.parse("2026-10-23T15:00:00Z")
+        assertTrue(store.setReminder(entry.id, Reminder(at, 30)))
+        assertEquals(ReminderKind.Notification, store.entriesFor(day).first().first { it.id == entry.id }.reminder?.kind)
+        assertTrue(store.setReminder(entry.id, Reminder(at, 30, ReminderKind.Alarm)))
+        val template = store.templates.first().single()
+        store.update(template.copy(reminder = TemplateReminder(540, null, ReminderKind.Alarm)))
+        first.close()
+
+        val second = Room.databaseBuilder<OpenAdhdDatabase>(file).buildOpenAdhdDatabase()
+        val reopened = RoomStore(second)
+        assertEquals(Reminder(at, 30, ReminderKind.Alarm), reopened.entriesFor(day).first().first { it.id == entry.id }.reminder)
+        assertEquals(TemplateReminder(540, null, ReminderKind.Alarm), reopened.templates.first().single().reminder)
+        second.close()
+    }
+
+    @Test
+    fun `a stored kind that is not known reads as a notification`() = runTest {
+        val file = createVersion1Database()
+        val first = Room.databaseBuilder<OpenAdhdDatabase>(file).buildOpenAdhdDatabase()
+        val store = RoomStore(first)
+        val entry = store.entriesFor(day).first().first { !it.isCompleted }
+        store.setReminder(entry.id, Reminder(Instant.parse("2026-10-23T15:00:00Z"), null, ReminderKind.Alarm))
+        first.close()
+
+        val connection = BundledSQLiteDriver().open(file)
+        try {
+            connection.execSQL("UPDATE planned_tasks SET reminderKind = 'Bogus'")
+        } finally {
+            connection.close()
+        }
+
+        val second = Room.databaseBuilder<OpenAdhdDatabase>(file).buildOpenAdhdDatabase()
+        assertEquals(ReminderKind.Notification, RoomStore(second).entriesFor(day).first().first { it.id == entry.id }.reminder?.kind)
         second.close()
     }
 }

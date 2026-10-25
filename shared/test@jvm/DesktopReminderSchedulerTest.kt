@@ -102,4 +102,16 @@ class DesktopReminderSchedulerTest {
         assertTrue(scheduler.hasPermission())
         assertTrue(scheduler.ensurePermission())
     }
+
+    @Test
+    fun `the desktop scheduler does not offer alarms and shows an alarm as a notification`() = runTest {
+        val recorder = Recorder()
+        val scheduler = scheduler(recorder)
+        assertEquals(false, scheduler.supportsAlarms)
+        scheduler.replaceAll(
+            listOf(UpcomingReminder("a", "Wake up", listOf(start + 10.minutes), com.usuallycoding.openadhd.domain.ReminderKind.Alarm)),
+        )
+        advanceTimeBy(11 * 60_000L)
+        assertEquals(listOf("Wake up"), recorder.shown)
+    }
 }

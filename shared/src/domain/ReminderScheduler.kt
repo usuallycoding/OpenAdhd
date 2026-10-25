@@ -11,13 +11,24 @@ import kotlin.time.Clock
 import kotlin.time.Instant
 
 /** What still has to be shown for one entry: its [text] at each of [times], all in the future when it was worked out. */
-data class UpcomingReminder(val entryId: String, val text: String, val times: List<Instant>)
+data class UpcomingReminder(
+    val entryId: String,
+    val text: String,
+    val times: List<Instant>,
+    val kind: ReminderKind = ReminderKind.Notification,
+)
 
 /**
  * The only platform-specific part of reminders: asking for permission and arming the system to show
  * notifications. The shared code works out what should fire, and the platform delivers it.
  */
 interface ReminderScheduler {
+    /**
+     * Whether this platform offers alarms, so the app shows the Notification / Alarm choice. An alarm is delivered as
+     * a notification wherever it cannot ring yet. False by default, as on the desktop.
+     */
+    val supportsAlarms: Boolean get() = false
+
     /** Whether notifications can be shown right now. */
     fun hasPermission(): Boolean
 
@@ -63,7 +74,7 @@ class ReminderCoordinator(
             .mapNotNull { entry ->
                 val reminder = entry.reminder ?: return@mapNotNull null
                 val times = ReminderRules.upcoming(reminder, date, stopHour, now, zone)
-                if (times.isEmpty()) null else UpcomingReminder(entry.id, entry.name, times)
+                if (times.isEmpty()) null else UpcomingReminder(entry.id, entry.name, times, reminder.kind)
             }
     }
 }

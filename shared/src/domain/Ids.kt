@@ -47,7 +47,7 @@ internal fun TaskTemplate.generatedTask(
     zone: kotlinx.datetime.TimeZone,
     rules: GameRules = GameRules.Default,
 ): PlannedTask = toPlannedTask(date, rules).copy(
-    reminder = reminder?.let { Reminder(ReminderRules.at(date, it.hour, it.minute, zone), it.repeatMinutes) },
+    reminder = reminder?.let { Reminder(ReminderRules.at(date, it.hour, it.minute, zone), it.repeatMinutes, it.kind) },
 )
 
 /** Trims text fields, clears the custom price outside tier 5, and rejects invalid input. */

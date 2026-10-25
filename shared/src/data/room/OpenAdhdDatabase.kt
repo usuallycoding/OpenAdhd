@@ -21,7 +21,7 @@ import kotlinx.coroutines.Dispatchers
         RedemptionEntity::class,
         SettingEntity::class,
     ],
-    version = 9,
+    version = 10,
     exportSchema = false,
 )
 @ConstructedBy(OpenAdhdDatabaseConstructor::class)
@@ -153,8 +153,16 @@ val Migration8To9: Migration = object : Migration(8, 9) {
     }
 }
 
+/** Version 10 adds the kind of a reminder, a notification or an alarm, to Today entries and templates. Existing reminders stay notifications. */
+val Migration9To10: Migration = object : Migration(9, 10) {
+    override fun migrate(connection: SQLiteConnection) {
+        connection.execSQL("ALTER TABLE planned_tasks ADD COLUMN reminderKind TEXT NOT NULL DEFAULT 'Notification'")
+        connection.execSQL("ALTER TABLE templates ADD COLUMN reminderKind TEXT NOT NULL DEFAULT 'Notification'")
+    }
+}
+
 fun RoomDatabase.Builder<OpenAdhdDatabase>.buildOpenAdhdDatabase(): OpenAdhdDatabase =
     setDriver(BundledSQLiteDriver())
         .setQueryCoroutineContext(Dispatchers.Default)
-        .addMigrations(Migration1To2, Migration2To3, Migration3To4, Migration4To5, Migration5To6, Migration6To7, Migration7To8, Migration8To9)
+        .addMigrations(Migration1To2, Migration2To3, Migration3To4, Migration4To5, Migration5To6, Migration6To7, Migration7To8, Migration8To9, Migration9To10)
         .build()

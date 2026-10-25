@@ -21,6 +21,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.usuallycoding.openadhd.domain.PlannedTask
+import com.usuallycoding.openadhd.domain.ReminderKind
 import com.usuallycoding.openadhd.domain.ReminderPreset
 import com.usuallycoding.openadhd.domain.ReminderRules
 import com.usuallycoding.openadhd.ui.components.FormSheet
@@ -35,8 +36,10 @@ class ReminderActions(
     val presets: () -> List<ReminderPreset>,
     val startAt: (hour: Int, minute: Int) -> Instant,
     val currentTime: () -> LocalTime,
-    val save: (entryId: String, start: Instant, repeatMinutes: Int?, onResult: (ReminderSaveResult) -> Unit) -> Unit,
+    val save: (entryId: String, start: Instant, repeatMinutes: Int?, kind: ReminderKind, onResult: (ReminderSaveResult) -> Unit) -> Unit,
     val clear: (entryId: String) -> Unit,
+    /** Whether the Notification / Alarm choice is offered; false where only notifications exist, as on the desktop. */
+    val supportsAlarms: Boolean = false,
 ) {
     companion object {
         val None = ReminderActions(
@@ -44,7 +47,7 @@ class ReminderActions(
             presets = { emptyList() },
             startAt = { _, _ -> error("No reminders here") },
             currentTime = { LocalTime(0, 0) },
-            save = { _, _, _, _ -> },
+            save = { _, _, _, _, _ -> },
             clear = {},
         )
     }
@@ -63,6 +66,7 @@ internal fun EntrySheet(
     val current = entry.reminder
     var start by remember { mutableStateOf(current?.startAt) }
     var repeat by remember { mutableStateOf(if (current != null) current.repeatMinutes else ReminderRules.DefaultRepeat) }
+    var kind by remember { mutableStateOf(current?.kind ?: ReminderKind.Notification) }
     var message by remember { mutableStateOf<String?>(null) }
     var notificationsOff by remember { mutableStateOf(false) }
     var pickingTime by remember { mutableStateOf(false) }
@@ -106,6 +110,19 @@ internal fun EntrySheet(
                 }
             }
 
+            if (reminders.supportsAlarms) {
+                Text("Type", style = MaterialTheme.typography.labelLarge)
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    ReminderKind.entries.forEach { option ->
+                        FilterChip(selected = kind == option, onClick = { kind = option }, label = { Text(option.name) })
+                    }
+                }
+                Text(
+                    "An alarm rings where your device supports it; otherwise it is shown as a notification.",
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
+
             message?.let { Text(it, color = MaterialTheme.colorScheme.error) }
             if (notificationsOff) {
                 Text(
@@ -121,7 +138,7 @@ internal fun EntrySheet(
                         if (chosen == null) {
                             message = "Choose when the reminder starts"
                         } else {
-                            reminders.save(entry.id, chosen, repeat) { result ->
+                            reminders.save(entry.id, chosen, repeat, if (reminders.supportsAlarms) kind else ReminderKind.Notification) { result ->
                                 when (result) {
                                     ReminderSaveResult.Saved -> onDismiss()
                                     ReminderSaveResult.SavedNotificationsOff -> { notificationsOff = true; message = null }
