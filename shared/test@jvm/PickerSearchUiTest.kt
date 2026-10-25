@@ -3,10 +3,14 @@ package com.usuallycoding.openadhd
 import androidx.compose.ui.test.ComposeUiTest
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.assertIsFocused
+import androidx.compose.ui.test.assertIsNotFocused
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performImeAction
+import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.swipeUp
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.runComposeUiTest
 import com.usuallycoding.openadhd.data.AppContainer
@@ -134,5 +138,53 @@ class PickerSearchUiTest {
         onNodeWithText("You have no task templates yet. Create one on the Templates tab first.").assertExists()
         onNode(hasSetTextAction()).assertDoesNotExist()
         onNodeWithText("Search tasks").assertDoesNotExist()
+    }
+
+    @Test
+    fun `the done key puts the keyboard away and keeps the text`() = runComposeUiTest {
+        openPicker()
+        type("dis")
+        onNode(hasSetTextAction()).assertIsFocused()
+        onNode(hasSetTextAction()).performImeAction()
+        onNode(hasSetTextAction()).assertIsNotFocused()
+        onNodeWithText("Dishes").assertExists()
+        onNodeWithText("Laundry").assertDoesNotExist()
+    }
+
+    @Test
+    fun `tapping the no match message puts the keyboard away`() = runComposeUiTest {
+        openPicker()
+        type("xyz")
+        onNodeWithText("No task matches xyz").performClick()
+        onNode(hasSetTextAction()).assertIsNotFocused()
+    }
+
+    @Test
+    fun `scrolling the results puts the keyboard away`() = runComposeUiTest {
+        val many = InMemoryStore()
+        runBlocking { (1..40).forEach { many.create("Chore $it", Tier.One, Energy.Low) } }
+        openPicker(many)
+        onNode(hasSetTextAction()).assertIsFocused()
+        onNodeWithText("Chore 40").performTouchInput { swipeUp() }
+        onNode(hasSetTextAction()).assertIsNotFocused()
+    }
+
+    @Test
+    fun `tapping the field brings the keyboard back`() = runComposeUiTest {
+        openPicker()
+        onNode(hasSetTextAction()).performImeAction()
+        onNode(hasSetTextAction()).assertIsNotFocused()
+        onNode(hasSetTextAction()).performClick()
+        onNode(hasSetTextAction()).assertIsFocused()
+    }
+
+    @Test
+    fun `tapping a template with the keyboard up still adds it`() = runComposeUiTest {
+        openPicker()
+        onNode(hasSetTextAction()).assertIsFocused()
+        onNodeWithText("Taxes").performClick()
+        waitForIdle()
+        onNodeWithText("Search tasks").assertDoesNotExist()
+        onNodeWithText("Taxes").assertExists()
     }
 }

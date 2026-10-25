@@ -35,7 +35,7 @@ fun Modifier.dismissKeyboardOnTapOrScroll(): Modifier {
         .pointerInput(focus, keyboard) { detectTapGestures(onTap = { focus.putKeyboardAway(keyboard) }) }
 }
 
-internal fun FocusManager.putKeyboardAway(keyboard: androidx.compose.ui.platform.SoftwareKeyboardController?) {
+fun FocusManager.putKeyboardAway(keyboard: androidx.compose.ui.platform.SoftwareKeyboardController?) {
     clearFocus()
     keyboard?.hide()
 }

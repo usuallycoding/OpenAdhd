@@ -1,6 +1,11 @@
 package com.usuallycoding.openadhd.ui.screens
 
 import androidx.compose.foundation.clickable
+import com.usuallycoding.openadhd.ui.components.putKeyboardAway
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.foundation.relocation.BringIntoViewRequester
 import androidx.compose.foundation.layout.FlowRow
@@ -477,11 +482,13 @@ private fun TemplatePickerDialog(
     FormSheet(
         title = "Add to today",
         onDismiss = onDismiss,
+        dismissKeyboardOnBodyInteraction = true,
         // The search field, the energy chips and the dice stay put while the list below them scrolls.
         header = if (templates.isEmpty()) null else {
             {
                 val focusRequester = remember { FocusRequester() }
                 val keyboard = LocalSoftwareKeyboardController.current
+                val focusManager = LocalFocusManager.current
                 LaunchedEffect(Unit) {
                     focusRequester.requestFocus()
                     keyboard?.show()
@@ -491,6 +498,8 @@ private fun TemplatePickerDialog(
                     onValueChange = { query = it; highlightedId = null },
                     label = { Text("Search tasks") },
                     singleLine = true,
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                    keyboardActions = KeyboardActions(onDone = { focusManager.putKeyboardAway(keyboard) }),
                     trailingIcon = if (query.isNotEmpty()) {
                         {
                             IconButton(onClick = { query = ""; highlightedId = null }) {

@@ -34,6 +34,12 @@ fun FormSheet(
     title: String,
     onDismiss: () -> Unit,
     header: (@Composable ColumnScope.() -> Unit)? = null,
+    /**
+     * Puts the keyboard away when the body is tapped or scrolled. Off by default: a form's body holds text fields,
+     * and a tap on one of them must not clear the focus it has just taken. Meant for a sheet whose search field is
+     * in the [header] and whose body only lists results.
+     */
+    dismissKeyboardOnBodyInteraction: Boolean = false,
     footer: @Composable RowScope.(requestClose: () -> Unit) -> Unit,
     content: @Composable ColumnScope.() -> Unit,
 ) {
@@ -61,6 +67,7 @@ fun FormSheet(
                 verticalArrangement = Arrangement.spacedBy(12.dp),
                 modifier = Modifier
                     .weight(1f, fill = false)
+                    .then(if (dismissKeyboardOnBodyInteraction) Modifier.dismissKeyboardOnTapOrScroll() else Modifier)
                     .verticalScroll(rememberScrollState())
                     .padding(horizontal = 24.dp, vertical = 8.dp),
                 content = content,
