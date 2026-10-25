@@ -87,6 +87,9 @@ class HistoryUiTest {
 
     // ---- the day and the list
 
+    /** A day in the date picker. The picker marks the real current day with a "Today, " prefix, which would make tests depend on when they run. */
+    private fun ComposeUiTest.calendarDay(label: String) = onNode(hasText(label, substring = true))
+
     @Test
     fun `history opens on yesterday with its entries and no next day`() = runComposeUiTest {
         openHistory(historyStore())
@@ -193,13 +196,13 @@ class HistoryUiTest {
         openHistory(store)
         onNodeWithText("Fri 23 Oct 2026").performClick()
 
-        onNodeWithText("Thursday, October 22, 2026").assertIsEnabled()
-        onNodeWithText("Friday, October 23, 2026").assertIsEnabled()
-        onNodeWithText("Wednesday, October 21, 2026").assertIsNotEnabled()
-        onNodeWithText("Today, Saturday, October 24, 2026").assertIsNotEnabled()
-        onNodeWithText("Sunday, October 25, 2026").assertIsNotEnabled()
+        calendarDay("Thursday, October 22, 2026").assertIsEnabled()
+        calendarDay("Friday, October 23, 2026").assertIsEnabled()
+        calendarDay("Wednesday, October 21, 2026").assertIsNotEnabled()
+        calendarDay("Saturday, October 24, 2026").assertIsNotEnabled()
+        calendarDay("Sunday, October 25, 2026").assertIsNotEnabled()
 
-        onNodeWithText("Thursday, October 22, 2026").performClick()
+        calendarDay("Thursday, October 22, 2026").performClick()
         onNodeWithText("OK").performClick()
         onNodeWithText("Thu 22 Oct 2026").assertExists()
         onNodeWithText("Old errand").assertExists()
@@ -210,7 +213,7 @@ class HistoryUiTest {
     fun `cancelling the calendar keeps the day`() = runComposeUiTest {
         openHistory(historyStore())
         onNodeWithText("Fri 23 Oct 2026").performClick()
-        onNodeWithText("Thursday, October 22, 2026").performClick()
+        calendarDay("Thursday, October 22, 2026").performClick()
         onNodeWithText("Cancel").performClick()
         onNodeWithText("Fri 23 Oct 2026").assertExists()
         onNodeWithText("Cancel").assertDoesNotExist()

@@ -5,6 +5,7 @@ import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.runComposeUiTest
@@ -61,6 +62,9 @@ class RewardHistoryUiTest {
         onNodeWithText("History").performClick()
     }
 
+    /** A day in the date picker. The picker marks the real current day with a "Today, " prefix, which would make tests depend on when they run. */
+    private fun ComposeUiTest.calendarDay(label: String) = onNode(hasText(label, substring = true))
+
     @Test
     fun `the history opens on today with only today's redemptions their descriptions and prices`() = runComposeUiTest {
         openShopHistory(historyStore())
@@ -101,14 +105,14 @@ class RewardHistoryUiTest {
         openShopHistory(historyStore())
         onNodeWithText("Sat 24 Oct 2026").performClick()
 
-        onNodeWithText("Tuesday, October 20, 2026").assertIsEnabled()
-        onNodeWithText("Friday, October 23, 2026").assertIsEnabled()
-        onNodeWithText("Today, Saturday, October 24, 2026").assertIsEnabled()
-        onNodeWithText("Wednesday, October 21, 2026").assertIsNotEnabled()
-        onNodeWithText("Thursday, October 22, 2026").assertIsNotEnabled()
-        onNodeWithText("Sunday, October 25, 2026").assertIsNotEnabled()
+        calendarDay("Tuesday, October 20, 2026").assertIsEnabled()
+        calendarDay("Friday, October 23, 2026").assertIsEnabled()
+        calendarDay("Saturday, October 24, 2026").assertIsEnabled()
+        calendarDay("Wednesday, October 21, 2026").assertIsNotEnabled()
+        calendarDay("Thursday, October 22, 2026").assertIsNotEnabled()
+        calendarDay("Sunday, October 25, 2026").assertIsNotEnabled()
 
-        onNodeWithText("Tuesday, October 20, 2026").performClick()
+        calendarDay("Tuesday, October 20, 2026").performClick()
         onNodeWithText("OK").performClick()
         onNodeWithText("Tue 20 Oct 2026").assertExists()
         onNodeWithText("Old tea").assertExists()
@@ -120,7 +124,7 @@ class RewardHistoryUiTest {
     fun `cancelling the calendar keeps the day`() = runComposeUiTest {
         openShopHistory(historyStore())
         onNodeWithText("Sat 24 Oct 2026").performClick()
-        onNodeWithText("Tuesday, October 20, 2026").performClick()
+        calendarDay("Tuesday, October 20, 2026").performClick()
         onNodeWithText("Cancel").performClick()
         onNodeWithText("Sat 24 Oct 2026").assertExists()
         onNodeWithText("Cancel").assertDoesNotExist()

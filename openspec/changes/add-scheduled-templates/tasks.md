@@ -26,5 +26,5 @@
 
 ## 6. Verification
 
-- [ ] 6.1 Run `./kotlin build` and `./kotlin test` for all targets (verify: both succeed with no failing tests)
-- [ ] 6.2 On macOS: schedule a template for today with a reminder a few minutes ahead, see the entry appear and the reminder fire, delete the entry and restart to confirm it stays gone, and edit the reminder on the entry (verify: manual, as the specs say)
+- [x] 6.1 Run `./kotlin build` and `./kotlin test` for all targets (verify: both succeed with no failing tests)
+- [x] 6.2 On macOS: schedule a template for today with a reminder a few minutes ahead, see the entry appear and the reminder fire, delete the entry and restart to confirm it stays gone, and edit the reminder on the entry (verify: manual, as the specs say)
