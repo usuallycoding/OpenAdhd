@@ -80,6 +80,10 @@ import com.usuallycoding.openadhd.ui.today.RandomizerState
 import com.usuallycoding.openadhd.ui.history.HistoryViewModel
 import com.usuallycoding.openadhd.ui.today.TodayViewModel
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.withTimeoutOrNull
+import kotlinx.coroutines.flow.merge
+import kotlinx.coroutines.flow.first
+import androidx.compose.runtime.snapshotFlow
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.emptyFlow
@@ -140,7 +144,7 @@ private fun TodayList(viewModel: TodayViewModel, modifier: Modifier = Modifier) 
         onMoveUp = viewModel::moveUp,
         onMoveDown = viewModel::moveDown,
         randomizer = randomizer,
-        pickedEntryIds = remember(viewModel) { viewModel.picked.map { it.entryId } },
+        pickedEntryIds = remember(viewModel) { merge(viewModel.picked.map { it.entryId }, viewModel.revealed) },
         onPickForMe = viewModel::openRandomizer,
         onChooseEnergy = viewModel::chooseEnergy,
         onChooseAnotherEnergy = viewModel::chooseAnotherEnergy,
@@ -156,6 +160,9 @@ private fun TodayList(viewModel: TodayViewModel, modifier: Modifier = Modifier) 
         modifier = modifier,
     )
 }
+
+/** How long Today waits for an entry to appear in the list before ignoring a request to show it. */
+private const val RevealWaitMillis = 2000L
 
 /** How long the entry chosen by "Pick one for me" stays highlighted. */
 private const val PickHighlightMillis = 1500L
@@ -195,8 +202,10 @@ fun TodayContent(
     val currentEntries by rememberUpdatedState(entries)
     LaunchedEffect(pickedEntryIds) {
         pickedEntryIds.collectLatest { id ->
-            val index = currentEntries.indexOfFirst { it.id == id }
-            if (index < 0) return@collectLatest
+            // At a cold start the list may not have loaded yet, so wait briefly for the entry; an unknown one is ignored.
+            val index = withTimeoutOrNull(RevealWaitMillis) {
+                snapshotFlow { currentEntries.indexOfFirst { it.id == id } }.first { it >= 0 }
+            } ?: return@collectLatest
             highlightedId = id
             listState.animateScrollToItem(index)
             delay(PickHighlightMillis)
@@ -316,13 +325,13 @@ internal fun EntryItem(
     ListItem(
         colors = ListItemDefaults.colors(containerColor = container),
         // Tapping the header of an entry with subtasks shows or hides them; entries without subtasks are not tappable.
-        modifier = if (hasSubtasks && !reordering) {
+        modifier = (if (hasSubtasks && !reordering) {
             modifier
                 .clickable(onClickLabel = if (expanded) "Collapse" else "Expand", onClick = onToggleExpanded)
                 .semantics { stateDescription = if (expanded) "Expanded" else "Collapsed" }
         } else {
             modifier
-        },
+        }).then(if (highlighted) Modifier.semantics { selected = true } else Modifier),
         leadingContent = if (reordering) {
             null
         } else if (hasSubtasks) {

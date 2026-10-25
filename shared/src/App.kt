@@ -101,6 +101,18 @@ fun App(container: AppContainer) {
     val templatesPager = rememberPagerState { 2 }
     val shopPager = rememberPagerState { 2 }
 
+    // A tapped reminder notification asks for its entry: show Today with that entry scrolled to and highlighted.
+    LaunchedEffect(container) {
+        container.entryRequests.pending.collect { entryId ->
+            if (entryId == null) return@collect
+            destination = Destination.Today
+            todayViewModel.setReordering(false)
+            todayPager.scrollToPage(0)
+            todayViewModel.reveal(entryId)
+            container.entryRequests.consume(entryId)
+        }
+    }
+
     // The Reorder toggle in the top bar belongs to whichever list is on screen: Today (not its History tab), or the shown Templates tab.
     val todayReordering by todayViewModel.reordering.collectAsStateWithLifecycle()
     val todayCanReorder by todayViewModel.canReorder.collectAsStateWithLifecycle()

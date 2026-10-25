@@ -18,7 +18,9 @@ import com.usuallycoding.openadhd.domain.collapsedIds
 import com.usuallycoding.openadhd.domain.moved
 import com.usuallycoding.openadhd.domain.pendingThenDone
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -29,6 +31,7 @@ import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -228,6 +231,19 @@ class TodayViewModel(
 
     /** One event per pick, so the screen can scroll to the entry and highlight it. */
     val picked: SharedFlow<PickedEntryEvent> = _picked
+
+    private val reveals = Channel<String>(Channel.CONFLATED)
+
+    /**
+     * Ids of entries to scroll to and highlight because of a tapped reminder notification. Each is delivered once,
+     * and is kept until the Today list is on screen to take it, which may be after a cold start.
+     */
+    val revealed: Flow<String> = reveals.receiveAsFlow()
+
+    /** Asks for the entry to be scrolled to and highlighted; nothing in the store changes. */
+    fun reveal(entryId: String) {
+        reveals.trySend(entryId)
+    }
 
     fun openRandomizer() {
         _randomizer.value =

@@ -104,4 +104,18 @@ class PickerRollTest {
         assertTrue(store.daysWithEntries.first().isEmpty())
         assertTrue(store.entries.first().isEmpty())
     }
+
+    @Test
+    fun `a reveal made before anything collects is delivered once and changes nothing`() = runTest {
+        val store = InMemoryStore()
+        val vm = TodayViewModel(store, dateCheckInterval = null)
+        vm.reveal("a")
+        assertEquals("a", vm.revealed.first())
+        assertTrue(store.daysWithEntries.first().isEmpty())
+
+        // Nothing is left to deliver a second time; a newer reveal replaces an undelivered one.
+        vm.reveal("b")
+        vm.reveal("c")
+        assertEquals("c", vm.revealed.first())
+    }
 }
