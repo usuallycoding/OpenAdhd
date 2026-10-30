@@ -49,6 +49,10 @@ keyPassword=the password you chose
 
 Android will not update an app signed with a different key. The first release APK therefore cannot replace an older debug-signed install: export a backup under Settings, uninstall the old app, install the new one and import the backup. After that every build installs over the last one and keeps its data, from any machine that has `secret/`.
 
+### App icons
+
+`scripts/make-icons.sh` makes the icon of every platform from `secret/open-adhd.svg`, a transparent drawing kept out of git with the signing key. It puts the drawing on the app's surface colors (light, and dark for the dark variants) and writes the Android adaptive icon (with a themed-icon layer, and a background that follows the wallpaper color on Android 12 and later), the iOS light, dark and tinted icons, and the rounded macOS and desktop window icon. Run it again only when the drawing changes, and commit what it writes: building the app does not need the SVG. It needs `magick` (ImageMagick) and `sips` (part of macOS), and draws the SVG with `rsvg-convert`, Inkscape or ImageMagick, whichever is installed.
+
 ### Appearance
 
 The theme (Follow system theme, Light or Dark) is chosen in Settings under Appearance and is remembered the next time the app starts. It is a normal setting, so it can be restored to its default, it is part of a backup, and Delete all data resets it.

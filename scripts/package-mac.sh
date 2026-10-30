@@ -45,13 +45,14 @@ cp "$work"/fat/BOOT-INF/lib/*.jar "$work/input/"
 done)
 "$jdk/bin/jar" --create --file "$work/input/app.jar" -C "$work/fat/BOOT-INF/classes" .
 
-# Icon from the Android launcher PNG; the app is built without one if this fails.
+# Icon from the rounded square the icon script wrote for the desktop; the app is built without one if this fails.
 icon_args=""
 iconset="$work/$name.iconset"
 mkdir -p "$iconset"
-src="$root/androidApp/res/mipmap-xxxhdpi/ic_launcher.png"
-if [ -f "$src" ] && for s in 16 32 64 128 256 512; do
+src="$root/desktopApp/resources/app-icon.png"
+if [ -f "$src" ] && for s in 16 32 128 256 512; do
   sips -z $s $s "$src" --out "$iconset/icon_${s}x${s}.png" >/dev/null 2>&1 || exit 1
+  sips -z $((s * 2)) $((s * 2)) "$src" --out "$iconset/icon_${s}x${s}@2x.png" >/dev/null 2>&1 || exit 1
 done && iconutil -c icns "$iconset" -o "$work/$name.icns" >/dev/null 2>&1; then
   icon_args="--icon $work/$name.icns"
 else
