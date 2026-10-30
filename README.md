@@ -54,6 +54,10 @@ The + button on Today opens a list of your task templates. The search field and 
 
 The Tasks and Rewards tabs of Templates each have a search field above the list. It matches the name and the description, ignoring case, and each tab remembers its own text until the app is closed. Tap the list, scroll it or press Done to put the keyboard away. While a search holds text, **Reorder** is unavailable (typing turns it off), and saving a new template or reward clears that tab's search so the new one is not hidden.
 
+### Browsing past days
+
+The History tab of Today and the history in the Shop show one day at a time. Tap the date to open a calendar: every earlier day can be opened (the Shop's also today), and days that have tasks or redemptions carry a dot under the number. An empty day opens on its "nothing here" message. Use the arrows to change month, then **OK** to show the chosen day.
+
 ### Scheduled templates
 
 In the template form, "Add to Today schedule" lets a template put itself on Today:

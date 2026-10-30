@@ -4,7 +4,6 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.DatePicker
 import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -12,7 +11,6 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -22,14 +20,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.unit.dp
-import com.usuallycoding.openadhd.domain.HistoryDays
-import com.usuallycoding.openadhd.ui.history.SelectableHistoryDays
 import com.usuallycoding.openadhd.ui.theme.ChevronIcon
 import kotlinx.datetime.LocalDate
 
 /**
  * The date bar of a History tab: previous and next day arrows around a button showing [date], which opens a
- * calendar where only days in [daysWithEntries] can be picked (before [today], or up to it with [includeToday]).
+ * calendar where any day before [today] (or up to it with [includeToday]) can be picked and days in
+ * [daysWithEntries] carry a dot; [markedLabel] names what they have ("tasks", "redemptions") for screen readers.
  */
 @Composable
 fun DayNavigator(
@@ -38,6 +35,7 @@ fun DayNavigator(
     canGoNext: Boolean,
     daysWithEntries: Set<LocalDate>,
     includeToday: Boolean,
+    markedLabel: String,
     onPreviousDay: () -> Unit,
     onNextDay: () -> Unit,
     onPickDay: (LocalDate) -> Unit,
@@ -66,6 +64,7 @@ fun DayNavigator(
             today = today,
             daysWithEntries = daysWithEntries,
             includeToday = includeToday,
+            markedLabel = markedLabel,
             onPick = { onPickDay(it); picking = false },
             onDismiss = { picking = false },
         )
@@ -79,25 +78,24 @@ private fun DayPickerDialog(
     today: LocalDate,
     daysWithEntries: Set<LocalDate>,
     includeToday: Boolean,
+    markedLabel: String,
     onPick: (LocalDate) -> Unit,
     onDismiss: () -> Unit,
 ) {
-    val millis = HistoryDays.toPickerMillis(date)
-    val state = rememberDatePickerState(
-        initialSelectedDateMillis = millis,
-        initialDisplayedMonthMillis = millis,
-        selectableDates = SelectableHistoryDays(today, daysWithEntries, includeToday),
-    )
+    var chosen by remember { mutableStateOf(date) }
     DatePickerDialog(
         onDismissRequest = onDismiss,
-        confirmButton = {
-            TextButton(
-                onClick = { state.selectedDateMillis?.let { onPick(HistoryDays.fromPickerMillis(it)) } ?: onDismiss() },
-            ) { Text("OK") }
-        },
+        confirmButton = { TextButton(onClick = { onPick(chosen) }) { Text("OK") } },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
     ) {
-        DatePicker(state)
+        DayCalendar(
+            selected = chosen,
+            today = today,
+            markedDays = daysWithEntries,
+            includeToday = includeToday,
+            markedLabel = markedLabel,
+            onSelect = { chosen = it },
+        )
     }
 }
 

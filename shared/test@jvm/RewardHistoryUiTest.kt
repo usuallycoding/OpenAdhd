@@ -5,6 +5,7 @@ import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -62,8 +63,8 @@ class RewardHistoryUiTest {
         onNodeWithText("History").performClick()
     }
 
-    /** A day in the date picker. The picker marks the real current day with a "Today, " prefix, which would make tests depend on when they run. */
-    private fun ComposeUiTest.calendarDay(label: String) = onNode(hasText(label, substring = true))
+    /** A day in the calendar, found by its description, which also says whether the day has redemptions. */
+    private fun ComposeUiTest.calendarDay(label: String) = onNode(hasContentDescription(label, substring = true))
 
     @Test
     fun `the history opens on today with only today's redemptions their descriptions and prices`() = runComposeUiTest {
@@ -101,23 +102,42 @@ class RewardHistoryUiTest {
     }
 
     @Test
-    fun `the calendar allows only days up to today that have redemptions and OK picks one`() = runComposeUiTest {
+    fun `the calendar marks days with redemptions and allows every day up to today`() = runComposeUiTest {
         openShopHistory(historyStore())
         onNodeWithText("Sat 24 Oct 2026").performClick()
 
-        calendarDay("Tuesday, October 20, 2026").assertIsEnabled()
-        calendarDay("Friday, October 23, 2026").assertIsEnabled()
-        calendarDay("Saturday, October 24, 2026").assertIsEnabled()
-        calendarDay("Wednesday, October 21, 2026").assertIsNotEnabled()
-        calendarDay("Thursday, October 22, 2026").assertIsNotEnabled()
+        calendarDay("Tuesday, October 20, 2026, has redemptions").assertIsEnabled()
+        calendarDay("Friday, October 23, 2026, has redemptions").assertIsEnabled()
+        calendarDay("Saturday, October 24, 2026, has redemptions").assertIsEnabled()
+        calendarDay("Wednesday, October 21, 2026").assertIsEnabled()
+        onNode(hasContentDescription("Wednesday, October 21, 2026, has redemptions")).assertDoesNotExist()
         calendarDay("Sunday, October 25, 2026").assertIsNotEnabled()
+    }
 
+    @Test
+    fun `today is selectable without a redemption`() = runComposeUiTest {
+        openShopHistory(InMemoryStore(clock))
+        onNodeWithText("Sat 24 Oct 2026").performClick()
+        calendarDay("Saturday, October 24, 2026").assertIsEnabled()
+        onNode(hasContentDescription("Saturday, October 24, 2026, has redemptions")).assertDoesNotExist()
+    }
+
+    @Test
+    fun `OK picks a day with redemptions and an empty day says nothing was redeemed`() = runComposeUiTest {
+        openShopHistory(historyStore())
+        onNodeWithText("Sat 24 Oct 2026").performClick()
         calendarDay("Tuesday, October 20, 2026").performClick()
         onNodeWithText("OK").performClick()
         onNodeWithText("Tue 20 Oct 2026").assertExists()
         onNodeWithText("Old tea").assertExists()
         onNodeWithText("Cold one").assertExists()
         onNodeWithText("OK").assertDoesNotExist()
+
+        onNodeWithText("Tue 20 Oct 2026").performClick()
+        calendarDay("Wednesday, October 21, 2026").performClick()
+        onNodeWithText("OK").performClick()
+        onNodeWithText("Wed 21 Oct 2026").assertExists()
+        onNodeWithText("Nothing redeemed on this day").assertExists()
     }
 
     @Test

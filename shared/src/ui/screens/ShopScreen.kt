@@ -340,6 +340,7 @@ private fun HistoryList(
             canGoNext = history.canGoNext,
             daysWithEntries = history.daysWithRedemptions,
             includeToday = true,
+            markedLabel = "redemptions",
             onPreviousDay = onPreviousDay,
             onNextDay = onNextDay,
             onPickDay = onPickDay,

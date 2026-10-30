@@ -67,6 +67,7 @@ fun HistoryContent(
             canGoNext = canGoNext,
             daysWithEntries = daysWithEntries,
             includeToday = false,
+            markedLabel = "tasks",
             onPreviousDay = onPreviousDay,
             onNextDay = onNextDay,
             onPickDay = onPickDay,

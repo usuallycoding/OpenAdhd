@@ -9,6 +9,7 @@ import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertIsSelected
+import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isEnabled
 import androidx.compose.ui.test.isToggleable
@@ -87,8 +88,8 @@ class HistoryUiTest {
 
     // ---- the day and the list
 
-    /** A day in the date picker. The picker marks the real current day with a "Today, " prefix, which would make tests depend on when they run. */
-    private fun ComposeUiTest.calendarDay(label: String) = onNode(hasText(label, substring = true))
+    /** A day in the calendar, found by its description, which also says whether the day has tasks. */
+    private fun ComposeUiTest.calendarDay(label: String) = onNode(hasContentDescription(label, substring = true))
 
     @Test
     fun `history opens on yesterday with its entries and no next day`() = runComposeUiTest {
@@ -188,7 +189,7 @@ class HistoryUiTest {
     // ---- the calendar
 
     @Test
-    fun `the calendar allows only earlier days that have tasks and picking one shows it`() = runComposeUiTest {
+    fun `the calendar marks days with tasks and allows every earlier day`() = runComposeUiTest {
         val store = historyStore()
         runBlocking {
             store.assign(store.create("Today only", Tier.One, Energy.Low), LocalDate(2026, 10, 24))
@@ -196,17 +197,42 @@ class HistoryUiTest {
         openHistory(store)
         onNodeWithText("Fri 23 Oct 2026").performClick()
 
-        calendarDay("Thursday, October 22, 2026").assertIsEnabled()
-        calendarDay("Friday, October 23, 2026").assertIsEnabled()
-        calendarDay("Wednesday, October 21, 2026").assertIsNotEnabled()
+        calendarDay("Thursday, October 22, 2026, has tasks").assertIsEnabled()
+        calendarDay("Friday, October 23, 2026, has tasks").assertIsEnabled()
+        calendarDay("Wednesday, October 21, 2026").assertIsEnabled()
+        onNode(hasContentDescription("Wednesday, October 21, 2026, has tasks")).assertDoesNotExist()
         calendarDay("Saturday, October 24, 2026").assertIsNotEnabled()
         calendarDay("Sunday, October 25, 2026").assertIsNotEnabled()
+        onNodeWithContentDescription("Next month").assertDoesNotExist()
+    }
 
+    @Test
+    fun `picking a day with tasks shows it and an empty day says nothing was planned`() = runComposeUiTest {
+        openHistory(historyStore())
+        onNodeWithText("Fri 23 Oct 2026").performClick()
         calendarDay("Thursday, October 22, 2026").performClick()
         onNodeWithText("OK").performClick()
         onNodeWithText("Thu 22 Oct 2026").assertExists()
         onNodeWithText("Old errand").assertExists()
         onNodeWithText("OK").assertDoesNotExist()
+
+        onNodeWithText("Thu 22 Oct 2026").performClick()
+        calendarDay("Wednesday, October 21, 2026").performClick()
+        onNodeWithText("OK").performClick()
+        onNodeWithText("Wed 21 Oct 2026").assertExists()
+        onNodeWithText("Nothing was planned on this day").assertExists()
+    }
+
+    @Test
+    fun `the calendar pages to earlier months and back`() = runComposeUiTest {
+        openHistory(historyStore())
+        onNodeWithText("Fri 23 Oct 2026").performClick()
+        onNodeWithText("October 2026").assertExists()
+        onNodeWithContentDescription("Previous month").performClick()
+        onNodeWithText("September 2026").assertExists()
+        calendarDay("Tuesday, September 15, 2026").assertIsEnabled()
+        onNodeWithContentDescription("Next month").performClick()
+        onNodeWithText("October 2026").assertExists()
     }
 
     @Test

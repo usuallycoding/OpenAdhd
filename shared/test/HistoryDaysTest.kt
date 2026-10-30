@@ -1,56 +1,58 @@
 package com.usuallycoding.openadhd
 
 import com.usuallycoding.openadhd.domain.HistoryDays
-import com.usuallycoding.openadhd.ui.history.SelectableHistoryDays
 import kotlinx.datetime.LocalDate
-import kotlinx.datetime.TimeZone
-import kotlinx.datetime.todayIn
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
-import kotlin.time.Instant
 
 class HistoryDaysTest {
     private val today = LocalDate(2026, 10, 24)
-    private val withEntries = setOf(LocalDate(2026, 10, 20), LocalDate(2025, 3, 2), today)
 
     @Test
-    fun `only earlier days with entries are selectable`() {
-        assertTrue(HistoryDays.isSelectable(LocalDate(2026, 10, 20), today, withEntries))
-        assertFalse(HistoryDays.isSelectable(LocalDate(2026, 10, 21), today, withEntries), "empty past day")
-        assertFalse(HistoryDays.isSelectable(today, today, withEntries), "today, even with entries")
-        assertFalse(HistoryDays.isSelectable(LocalDate(2026, 10, 25), today, withEntries), "future day")
+    fun `every earlier day is selectable and today and later are not`() {
+        assertTrue(HistoryDays.isSelectable(LocalDate(2026, 10, 20), today))
+        assertTrue(HistoryDays.isSelectable(LocalDate(2026, 10, 21), today), "empty past day")
+        assertFalse(HistoryDays.isSelectable(today, today), "today")
+        assertFalse(HistoryDays.isSelectable(LocalDate(2026, 10, 25), today), "future day")
     }
 
     @Test
-    fun `with includeToday a day today with entries is selectable and nothing else changes`() {
-        assertTrue(HistoryDays.isSelectable(today, today, withEntries, includeToday = true))
-        assertFalse(HistoryDays.isSelectable(today, today, setOf(LocalDate(2026, 10, 20)), includeToday = true), "today without entries")
-        assertTrue(HistoryDays.isSelectable(LocalDate(2026, 10, 20), today, withEntries, includeToday = true))
-        assertFalse(HistoryDays.isSelectable(LocalDate(2026, 10, 21), today, withEntries, includeToday = true), "empty past day")
-        assertFalse(HistoryDays.isSelectable(LocalDate(2026, 10, 25), today, withEntries + LocalDate(2026, 10, 25), includeToday = true), "future day")
-        assertTrue(HistoryDays.isSelectableYear(2026, today, setOf(today), includeToday = true))
-        val rule = SelectableHistoryDays(today, withEntries, includeToday = true)
-        assertTrue(rule.isSelectableDate(HistoryDays.toPickerMillis(today)))
-        assertTrue(rule.isSelectableYear(2026))
+    fun `with includeToday today is selectable and nothing else changes`() {
+        assertTrue(HistoryDays.isSelectable(today, today, includeToday = true))
+        assertTrue(HistoryDays.isSelectable(LocalDate(2026, 10, 21), today, includeToday = true), "empty past day")
+        assertFalse(HistoryDays.isSelectable(LocalDate(2026, 10, 25), today, includeToday = true), "future day")
     }
 
     @Test
-    fun `a year is selectable only if it has a selectable day`() {
-        assertTrue(HistoryDays.isSelectableYear(2026, today, withEntries))
-        assertTrue(HistoryDays.isSelectableYear(2025, today, withEntries))
-        assertFalse(HistoryDays.isSelectableYear(2024, today, withEntries))
-        assertFalse(HistoryDays.isSelectableYear(2026, today, setOf(today)), "only today in that year")
+    fun `a month grid has six weeks starting on Monday`() {
+        // 1 June 2026 is a Monday.
+        val june = HistoryDays.monthGrid(LocalDate(2026, 6, 1))
+        assertEquals(42, june.size)
+        assertEquals(LocalDate(2026, 6, 1), june[0])
+        assertEquals(LocalDate(2026, 6, 30), june[29])
+        assertNull(june[30])
+        // 1 November 2026 is a Sunday, so six empty cells come first.
+        val november = HistoryDays.monthGrid(LocalDate(2026, 11, 1))
+        assertEquals(List(6) { null }, november.take(6))
+        assertEquals(LocalDate(2026, 11, 1), november[6])
+        assertEquals(LocalDate(2026, 11, 30), november[35])
+        assertNull(november[36])
     }
 
     @Test
-    fun `the calendar rule works on picker milliseconds`() {
-        val rule = SelectableHistoryDays(today, withEntries)
-        assertTrue(rule.isSelectableDate(HistoryDays.toPickerMillis(LocalDate(2026, 10, 20))))
-        assertFalse(rule.isSelectableDate(HistoryDays.toPickerMillis(today)))
-        // Any moment of a day counts as that day, not only its midnight.
-        assertTrue(rule.isSelectableDate(HistoryDays.toPickerMillis(LocalDate(2026, 10, 20)) + 86_399_000))
+    fun `February has 29 days in a leap year`() {
+        assertEquals(29, HistoryDays.monthGrid(LocalDate(2028, 2, 1)).filterNotNull().size)
+        assertEquals(28, HistoryDays.monthGrid(LocalDate(2026, 2, 1)).filterNotNull().size)
+    }
+
+    @Test
+    fun `months move across year ends`() {
+        assertEquals(LocalDate(2027, 1, 1), HistoryDays.addMonths(LocalDate(2026, 12, 1), 1))
+        assertEquals(LocalDate(2025, 12, 1), HistoryDays.addMonths(LocalDate(2026, 1, 1), -1))
+        assertEquals(LocalDate(2026, 10, 1), HistoryDays.monthStart(today))
     }
 
     @Test
@@ -59,18 +61,5 @@ class HistoryDaysTest {
             assertEquals(it, HistoryDays.fromPickerMillis(HistoryDays.toPickerMillis(it)))
         }
         assertEquals(0L, HistoryDays.toPickerMillis(LocalDate(1970, 1, 1)))
-    }
-
-    @Test
-    fun `the day does not shift when the device zone is far from UTC`() {
-        // 2026-10-23 23:30 UTC is already the 24th in Kiritimati (+14) and still the 23rd in Pago Pago (-11).
-        val now = Instant.parse("2026-10-23T23:30:00Z")
-        val clock = FakeClock(now)
-        val kiritimati = clock.todayIn(TimeZone.of("Pacific/Kiritimati"))
-        val pagoPago = clock.todayIn(TimeZone.of("Pacific/Pago_Pago"))
-        assertEquals(LocalDate(2026, 10, 24), kiritimati)
-        assertEquals(LocalDate(2026, 10, 23), pagoPago)
-        assertEquals(kiritimati, HistoryDays.fromPickerMillis(HistoryDays.toPickerMillis(kiritimati)))
-        assertEquals(pagoPago, HistoryDays.fromPickerMillis(HistoryDays.toPickerMillis(pagoPago)))
     }
 }
