@@ -182,11 +182,15 @@ On Android and iOS reminders SHALL be delivered when the app is closed, and on A
 - **THEN** a notification or an in-app message shows the task's name
 
 ### Requirement: Scheduled template reminders are armed ahead
-The app SHALL arm the reminders of scheduled templates for today and the following 6 days without waiting for their entries to be generated. For each of those days on which a template with a reminder is due and has not yet generated its entry, the reminder fires at the template's time of day, repeats as the template says, and is a notification or an alarm as the template says, with the template's name as its text. The stop time from Settings, the rule that times already past are never fired, and the limits on armed alarms and notifications apply as for any reminder, and when not everything fits, the soonest times are armed. Once the entry of a day has been generated, only that entry's own reminder applies for that day, and no time MUST fire twice.
+The app SHALL arm the reminders of scheduled templates for today and the following 6 days on iOS and the desktop, and the following 29 days on Android, without waiting for their entries to be generated. For each of those days on which a template with a reminder is due and has not yet generated its entry, the reminder fires at the template's time of day, repeats as the template says, and is a notification or an alarm as the template says, with the template's name as its text. The stop time from Settings, the rule that times already past are never fired, and the limits on armed alarms and notifications apply as for any reminder, and when not everything fits, the soonest times are armed. Once the entry of a day has been generated, only that entry's own reminder applies for that day, and no time MUST fire twice.
 
 #### Scenario: App not opened in the morning
 - **WHEN** a daily template has an alarm at 07:00 and the app was last opened yesterday evening
 - **THEN** the alarm rings at 07:00 today without the app having been opened
+
+#### Scenario: Weeks ahead on Android
+- **WHEN** a daily template has a notification at 09:00 and the Android app was last opened 10 days ago
+- **THEN** the notification is still delivered on each of those days, up to 29 days after the app last worked out its reminders
 
 #### Scenario: Several days ahead
 - **WHEN** a weekly template due on Monday and Thursday has a notification at 09:00 and the app was last opened on Sunday
@@ -219,6 +223,25 @@ The app SHALL arm the reminders of scheduled templates for today and the followi
 #### Scenario: Tapping a planned reminder
 - **WHEN** the user taps a template's reminder before its entry exists
 - **THEN** the app opens on Today, creates the day's entries as it does at start, and highlights nothing if the entry cannot be matched
+
+### Requirement: Android arms the next reminders as they fire
+On Android the app SHALL keep every planned reminder time, not only the ones that are armed, and whenever a reminder notification or an alarm fires, and after the device restarts, it SHALL arm the soonest times that are still to come within the limits on armed alarms and notifications, dropping the times already past. This MUST happen without the app being opened and without reading the database. At most 1000 times are kept, the soonest first.
+
+#### Scenario: Armed times run out
+- **WHEN** a repeating reminder has more future times than can be armed at once and the armed ones fire one after another with the app closed
+- **THEN** each firing arms the next times, so the reminder keeps firing until the kept times are used up
+
+#### Scenario: After a restart
+- **WHEN** the device restarts with kept times that were not armed
+- **THEN** the soonest of them are armed
+
+#### Scenario: Past times
+- **WHEN** the app is opened again after kept times have passed
+- **THEN** it works out its reminders anew and the past times are not fired
+
+#### Scenario: Limit on kept times
+- **WHEN** the plan holds more than 1000 future times
+- **THEN** the soonest 1000 are kept
 
 ### Requirement: Generated entry starts with the template's reminder
 An entry generated from a scheduled template, or added to Today by hand, whose template has a reminder SHALL start with a reminder at the template's time of day, on the entry's date, with the template's repeat. Times that have already passed are never fired, so a repeating reminder resumes at its next time. The stop time from Settings applies as for any reminder.
@@ -480,7 +503,7 @@ When the device does not allow an app to show full-screen alerts (Android 14 and
 - **THEN** no message is shown on saving
 
 ### Requirement: How many alarms are armed
-Only the soonest 20 alarm times SHALL be armed on the device at once; the rest are armed the next time the app works out its reminders. The limit MUST count alarm times only, never notification times.
+Only the soonest 20 alarm times SHALL be armed on the device at once; the rest are kept and armed as the armed ones fire, or the next time the app works out its reminders. The limit MUST count alarm times only, never notification times.
 
 #### Scenario: Many alarm times
 - **WHEN** alarm reminders on several tasks add up to more than 20 future times
