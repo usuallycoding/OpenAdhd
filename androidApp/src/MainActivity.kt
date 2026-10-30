@@ -22,6 +22,17 @@ class MainActivity : ComponentActivity() {
         if (savedInstanceState == null) showEntryOf(intent)
     }
 
+    /**
+     * Whichever way the user comes to the app, a ringing alarm has been noticed: it ends, as with Dismiss, and later repeats still
+     * ring. An alarm that starts while the app is already in front is not ended, because this runs when the app comes to the front.
+     */
+    override fun onStart() {
+        super.onStart()
+        if (AlarmService.ringing) {
+            startService(Intent(this, AlarmService::class.java).setAction(AlarmService.ActionDismiss))
+        }
+    }
+
     /** A tap on a reminder notification while the activity is already running. */
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)

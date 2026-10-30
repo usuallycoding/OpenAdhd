@@ -54,7 +54,7 @@ internal object AlarmNotifications {
 
     /**
      * The alarm's notification: it opens the task when tapped, offers Dismiss, and asks for the alarm screen over the
-     * lock screen. [ringing] makes it ongoing, for the foreground service that is playing the sound.
+     * lock screen. [ringing] makes it ongoing, for the foreground service that is playing the sound, and swiping it away ends the ring.
      */
     fun build(context: Context, entryId: String, text: String, ringing: Boolean): Notification {
         val channel = if (ringing) RingingChannel else FallbackChannel
@@ -82,6 +82,8 @@ internal object AlarmNotifications {
             .setOngoing(ringing)
             .setAutoCancel(!ringing)
             .setContentIntent(TaskIntents.openTask(context, entryId, stopsAlarm = ringing))
+            // Swiping the ringing notification away (allowed from Android 14) must not leave the alarm ringing with nothing to show for it.
+            .apply { if (ringing) setDeleteIntent(dismiss) }
             .setFullScreenIntent(screen, true)
             .addAction(Notification.Action.Builder(null, "Dismiss", dismiss).build())
             .build()

@@ -57,6 +57,7 @@ class AlarmService : Service() {
         // A ring in progress is replaced, not layered over.
         stopSound()
         startSound()
+        ringing = true
         handler.removeCallbacks(limit)
         handler.postDelayed(limit, AlarmPlan.RingLimit.inWholeMilliseconds)
         sendBroadcast(Intent(ActionRinging).setPackage(packageName).putExtra(ReminderAlarms.ExtraEntryId, entryId).putExtra(ReminderAlarms.ExtraText, text))
@@ -67,6 +68,7 @@ class AlarmService : Service() {
      * was started as a foreground service, which must call startForeground before it ends, so it does that first.
      */
     private fun fallBack(intent: Intent) {
+        ringing = false
         stopSound()
         val id = intent.getStringExtra(ReminderAlarms.ExtraEntryId) ?: ""
         val label = intent.getStringExtra(ReminderAlarms.ExtraText) ?: ""
@@ -131,6 +133,7 @@ class AlarmService : Service() {
 
     /** Stops the ring and removes the alarm's notification. */
     private fun end() {
+        ringing = false
         handler.removeCallbacks(limit)
         stopSound()
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) stopForeground(STOP_FOREGROUND_REMOVE) else {
@@ -150,6 +153,7 @@ class AlarmService : Service() {
     }
 
     override fun onDestroy() {
+        ringing = false
         handler.removeCallbacks(limit)
         stopSound()
         super.onDestroy()
@@ -157,6 +161,11 @@ class AlarmService : Service() {
 
     companion object {
         private const val Tag = "AlarmService"
+
+        /** Whether an alarm is ringing right now. It lives in the process, so a new process starts with no ring. */
+        @Volatile
+        var ringing: Boolean = false
+            private set
 
         const val ActionRing = "com.usuallycoding.openadhd.alarm.RING"
         const val ActionDismiss = "com.usuallycoding.openadhd.alarm.DISMISS"
