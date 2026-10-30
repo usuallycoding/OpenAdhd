@@ -129,19 +129,23 @@ The redemption history SHALL show one day at a time. It MUST open on today's dat
 - **THEN** the History tab opens on today's date
 
 ### Requirement: Only days with redemptions can be picked
-In the calendar dialog, a day SHALL be selectable only if it is today or earlier and at least one redemption was made on it, by the device's local date. Every other day, including future days and earlier days with no redemptions, MUST NOT be selectable. Picking a day takes effect when the user confirms with OK, and cancelling keeps the shown day.
+In the calendar dialog, every day that is today or earlier SHALL be selectable by the device's local date, whether or not a redemption was made on it. Days with at least one redemption MUST be marked with a dot under the day number, and days without redemptions MUST NOT. Future days MUST NOT be selectable. The marker MUST stay visible on the selected day. Picking a day takes effect when the user confirms with OK, and cancelling keeps the shown day.
 
 #### Scenario: Day with a redemption
 - **WHEN** a reward was redeemed on the 20th and the 20th is before today
-- **THEN** the 20th can be selected in the calendar
+- **THEN** the 20th shows a dot and can be selected in the calendar
 
 #### Scenario: Day without a redemption
-- **WHEN** nothing was redeemed on the 21st
-- **THEN** the 21st cannot be selected in the calendar
+- **WHEN** nothing was redeemed on the 21st and the 21st is before today
+- **THEN** the 21st shows no dot and can be selected, and choosing it shows "Nothing redeemed on this day"
 
 #### Scenario: Today with a redemption
 - **WHEN** a reward was redeemed today
-- **THEN** today can be selected in the calendar
+- **THEN** today shows a dot and can be selected in the calendar
+
+#### Scenario: Today without a redemption
+- **WHEN** nothing was redeemed today
+- **THEN** today shows no dot and can be selected in the calendar
 
 #### Scenario: Future days
 - **WHEN** the calendar is open
