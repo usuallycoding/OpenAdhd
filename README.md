@@ -24,7 +24,30 @@ Use the run configurations provided by the run widget in your IDE's toolbar. You
 Two scripts leave their results in `dist/` (ignored by git):
 
 - macOS: `scripts/package-mac.sh` builds `OpenAdhd.app` and `OpenAdhd.dmg`, with its own Java runtime. It needs a JDK 25 or newer with `jpackage`: it uses `JAVA_HOME` if that is one, otherwise the JDK the Kotlin toolchain downloaded. The app is not signed, so the first time, right-click it and choose Open. Your data stays in `~/.openadhd/` when you replace the app.
-- Android: `scripts/package-android.sh` builds `OpenAdhd.apk` and checks its signature. It is the debug build, signed with the debug key in `~/.android/debug.keystore`. Install it with `adb install -r dist/OpenAdhd.apk`, or copy it to the phone. Build it on the same Mac every time: an APK signed with a different key will not install over the old one.
+- Android: `scripts/package-android.sh` builds the release `OpenAdhd.apk`, signed with your own key from `secret/`, and prints its certificate. Install it with `adb install -r dist/OpenAdhd.apk`, or copy it to the phone. The script stops with a message if the key is missing and never builds a debug APK instead.
+
+#### The Android release key
+
+`secret/` is ignored by git and holds two files that you create once. From the project root:
+
+```sh
+mkdir secret
+keytool -genkeypair -v -keystore secret/android-release.keystore -storetype PKCS12 \
+  -alias openadhd -keyalg RSA -keysize 2048 -validity 10000
+```
+
+`keytool` asks for a password (use the same one for the keystore and the key) and a name. Then create `secret/android-signing.properties`:
+
+```properties
+storeFile=../secret/android-release.keystore
+storePassword=the password you chose
+keyAlias=openadhd
+keyPassword=the password you chose
+```
+
+`storeFile` is relative to `androidApp/`, so keep it as shown. **Back up `secret/` somewhere outside this machine**: with a lost keystore or password you can never update an installed app, only reinstall it.
+
+Android will not update an app signed with a different key. The first release APK therefore cannot replace an older debug-signed install: export a backup under Settings, uninstall the old app, install the new one and import the backup. After that every build installs over the last one and keeps its data, from any machine that has `secret/`.
 
 ### Appearance
 

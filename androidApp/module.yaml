@@ -11,3 +11,6 @@ settings:
   android:
     namespace: com.usuallycoding.openadhd
     applicationId: com.usuallycoding.openadhd
+    signing:
+      enabled: true
+      propertiesFile: ../secret/android-signing.properties
