@@ -29,6 +29,9 @@ class AndroidReminderScheduler(private val activity: ComponentActivity) : Remind
 
     override val supportsAlarms: Boolean = true
 
+    /** The whole plan is kept and armed as the armed times fire, so a month can be planned instead of a week. */
+    override val planDays: Int = 30
+
     /** From Android 14 an app may need the user's permission to show an alarm over the lock screen. */
     override fun fullScreenAlarmsAllowed(): Boolean =
         Build.VERSION.SDK_INT < Build.VERSION_CODES.UPSIDE_DOWN_CAKE ||

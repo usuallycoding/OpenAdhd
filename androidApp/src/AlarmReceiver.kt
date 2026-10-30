@@ -7,7 +7,7 @@ import android.content.Intent
 import android.os.Build
 import android.util.Log
 
-/** Starts the ringing when an alarm-kind reminder comes due. */
+/** Starts the ringing when an alarm-kind reminder comes due, then arms the next kept times. */
 class AlarmReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         val entryId = intent.getStringExtra(ReminderAlarms.ExtraEntryId) ?: return
@@ -25,5 +25,6 @@ class AlarmReceiver : BroadcastReceiver() {
             context.getSystemService(NotificationManager::class.java)
                 .notify(AlarmNotifications.NotificationId, AlarmNotifications.build(context, entryId, text, ringing = false))
         }
+        ReminderAlarms.topUpSafely(context)
     }
 }

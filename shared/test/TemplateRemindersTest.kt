@@ -104,4 +104,13 @@ class TemplateRemindersTest {
         val alarm = template(reminder = TemplateReminder(7 * 60, kind = ReminderKind.Alarm))
         assertTrue(plan(alarm).all { it.kind == ReminderKind.Alarm })
     }
+
+    @Test
+    fun `the number of planned days follows the platform`() {
+        assertEquals(7, TemplateReminders.plan(listOf(template()), today, 22, Instant.parse("2026-10-23T07:00:00Z"), zone).size)
+        assertEquals(3, TemplateReminders.plan(listOf(template()), today, 22, Instant.parse("2026-10-23T07:00:00Z"), zone, days = 3).size)
+        val thirty = TemplateReminders.plan(listOf(template()), today, 22, Instant.parse("2026-10-23T07:00:00Z"), zone, days = 30)
+        assertEquals(30, thirty.size)
+        assertEquals("template:t:2026-11-21", thirty.last().entryId)
+    }
 }

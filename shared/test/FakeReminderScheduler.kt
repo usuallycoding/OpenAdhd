@@ -1,6 +1,7 @@
 package com.usuallycoding.openadhd
 
 import com.usuallycoding.openadhd.domain.ReminderScheduler
+import com.usuallycoding.openadhd.domain.TemplateReminders
 import com.usuallycoding.openadhd.domain.UpcomingReminder
 
 /** A [ReminderScheduler] for tests: remembers every schedule it was given and answers permission from [granted]. */
@@ -10,6 +11,7 @@ class FakeReminderScheduler(
     override val supportsAlarms: Boolean = false,
     var fullScreenAllowed: Boolean = true,
     var alarmsAllowed: Boolean = true,
+    override val planDays: Int = TemplateReminders.Days,
 ) : ReminderScheduler {
     var settingsOpened = 0
         private set

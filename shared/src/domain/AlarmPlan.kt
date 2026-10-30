@@ -22,6 +22,9 @@ object AlarmPlan {
     /** Only this many notification times are armed at once. */
     const val MaxArmedNotifications = 100
 
+    /** A platform that keeps the whole plan keeps at most this many of the soonest times. */
+    const val MaxKept = 1000
+
     /** A ring stops by itself after this long. */
     val RingLimit: Duration = 10.minutes
 
@@ -32,6 +35,13 @@ object AlarmPlan {
         val notifications = soonest.filter { it.kind != ReminderKind.Alarm }.take(MaxArmedNotifications)
         return (alarms + notifications).sortedBy { it.atMillis }
     }
+
+    /** The times of [items] later than [nowMillis], soonest first, at most [MaxKept] of them: what a platform keeps of a plan. */
+    fun keep(items: List<ScheduledTime>, nowMillis: Long): List<ScheduledTime> =
+        items.filter { it.atMillis > nowMillis }.sortedBy { it.atMillis }.take(MaxKept)
+
+    /** What to arm from a kept plan as of [nowMillis]: the times still to come, cut to the limits of [arm]. */
+    fun armNext(kept: List<ScheduledTime>, nowMillis: Long): List<ScheduledTime> = arm(keep(kept, nowMillis))
 
     /** The times to schedule as system alarms and the times to schedule as notifications. */
     data class Routed(val alarms: List<ScheduledTime>, val notifications: List<ScheduledTime>)

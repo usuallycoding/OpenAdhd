@@ -8,14 +8,16 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.os.Build
+import android.util.Log
 import com.usuallycoding.openadhd.domain.AlarmPlan
 import com.usuallycoding.openadhd.domain.ReminderKind
 import com.usuallycoding.openadhd.domain.ScheduledTime
 
 /**
  * Arms the system alarms that show reminders: quiet notifications with a normal alarm, and alarm-kind reminders
- * with an alarm-clock alarm that rings. The whole schedule is also kept in preferences, so the receivers can act and
- * re-arm after a restart without opening the database.
+ * with an alarm-clock alarm that rings. The whole plan (the soonest [AlarmPlan.MaxKept] times) and the part of it that
+ * is armed are kept in preferences, so the receivers can act, arm the next times as each one fires, and re-arm after a
+ * restart without opening the database.
  */
 internal object ReminderAlarms {
     const val ChannelId = "reminders"
@@ -25,19 +27,40 @@ internal object ReminderAlarms {
     /** Set on the intent that opens the app from a ringing alarm, so the app ends the ring. */
     const val ExtraStopAlarm = "stopAlarm"
     private const val Prefs = "openadhd_reminders"
-    private const val Key = "schedule"
 
-    /** Cancels everything armed before and arms what [AlarmPlan.arm] picks from [items]. */
+    /** The plan. Before the plan was kept whole this held only what was armed, which reads as a plan all the same. */
+    private const val Key = "schedule"
+    private const val ArmedKey = "armed"
+
+    /** Cancels everything armed before, keeps the soonest of [items] as the plan and arms what [AlarmPlan.armNext] picks from it. */
     fun replace(context: Context, items: List<ScheduledTime>) {
-        val before = load(context)
-        before.forEach { cancel(context, it) }
-        val chosen = AlarmPlan.arm(items)
-        save(context, chosen)
-        arm(context, chosen)
+        loadArmed(context).forEach { cancel(context, it) }
+        topUp(context, AlarmPlan.keep(items, System.currentTimeMillis()))
     }
 
-    /** Arms the stored schedule again, as after a restart; times already past are skipped. */
-    fun rearm(context: Context) = arm(context, load(context))
+    /**
+     * Arms the next times of the kept plan, as after a reminder fired or a restart: times already past are dropped, and the soonest
+     * within the limits are armed. Arming a time that is already armed only updates it.
+     */
+    fun topUp(context: Context) = topUp(context, load(context))
+
+    /** [topUp] for the receivers: a failure here must never stop the reminder that is being shown. */
+    fun topUpSafely(context: Context) {
+        try {
+            topUp(context)
+        } catch (e: Exception) {
+            Log.e("ReminderAlarms", "The next reminders could not be armed", e)
+        }
+    }
+
+    private fun topUp(context: Context, plan: List<ScheduledTime>) {
+        val now = System.currentTimeMillis()
+        val kept = AlarmPlan.keep(plan, now)
+        val armed = AlarmPlan.armNext(kept, now)
+        save(context, Key, kept)
+        save(context, ArmedKey, armed)
+        arm(context, armed)
+    }
 
     private fun arm(context: Context, items: List<ScheduledTime>) {
         val alarms = context.getSystemService(AlarmManager::class.java)
@@ -83,13 +106,19 @@ internal object ReminderAlarms {
         }
     }
 
-    private fun save(context: Context, items: List<ScheduledTime>) {
+    private fun save(context: Context, key: String, items: List<ScheduledTime>) {
         val lines = items.joinToString("\n") { AlarmPlan.encode(it) }
-        context.getSharedPreferences(Prefs, Context.MODE_PRIVATE).edit().putString(Key, lines).apply()
+        context.getSharedPreferences(Prefs, Context.MODE_PRIVATE).edit().putString(key, lines).apply()
     }
 
-    private fun load(context: Context): List<ScheduledTime> =
-        context.getSharedPreferences(Prefs, Context.MODE_PRIVATE).getString(Key, "").orEmpty()
+    private fun load(context: Context, key: String = Key): List<ScheduledTime> =
+        context.getSharedPreferences(Prefs, Context.MODE_PRIVATE).getString(key, "").orEmpty()
             .lines()
             .mapNotNull { AlarmPlan.decode(it) }
+
+    /** What was armed. A version that kept only the armed times has no such list, and its plan is what was armed. */
+    private fun loadArmed(context: Context): List<ScheduledTime> {
+        val prefs = context.getSharedPreferences(Prefs, Context.MODE_PRIVATE)
+        return load(context, if (prefs.contains(ArmedKey)) ArmedKey else Key)
+    }
 }

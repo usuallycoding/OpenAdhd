@@ -138,4 +138,28 @@ class AlarmPlanTest {
         assertEquals(15, armed.count { it.entryId == "entry" })
         assertEquals((100L..104L).toList(), armed.filter { it.entryId != "entry" }.map { it.atMillis })
     }
+
+    @Test
+    fun `only the soonest thousand future times are kept and past ones are dropped`() {
+        val items = (1500 downTo 1).map { note(it.toLong()) }
+        val kept = AlarmPlan.keep(items, nowMillis = 100)
+        assertEquals(1000, AlarmPlan.MaxKept)
+        assertEquals((101L..1100L).toList(), kept.map { it.atMillis })
+        assertEquals(emptyList(), AlarmPlan.keep(emptyList(), 0))
+        assertEquals(emptyList(), AlarmPlan.keep(listOf(note(50)), nowMillis = 50), "a time at now is past")
+    }
+
+    @Test
+    fun `arming the next times respects the limits and moves on as time passes`() {
+        val kept = (1L..300L).map { note(it) } + (1L..30L).map { alarm(it * 10) }
+        val first = AlarmPlan.armNext(kept, nowMillis = 0)
+        assertEquals(20, first.count { it.kind == ReminderKind.Alarm })
+        assertEquals(100, first.count { it.kind == ReminderKind.Notification })
+        assertEquals((1L..100L).toList(), first.filter { it.kind == ReminderKind.Notification }.map { it.atMillis })
+
+        val later = AlarmPlan.armNext(kept, nowMillis = 100)
+        assertEquals((101L..200L).toList(), later.filter { it.kind == ReminderKind.Notification }.map { it.atMillis })
+        assertEquals((11L..30L).map { it * 10 }, later.filter { it.kind == ReminderKind.Alarm }.map { it.atMillis })
+        assertEquals(emptyList(), AlarmPlan.armNext(kept, nowMillis = 100_000))
+    }
 }

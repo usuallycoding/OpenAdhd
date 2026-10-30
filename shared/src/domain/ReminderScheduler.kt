@@ -44,6 +44,12 @@ interface ReminderScheduler {
     /** Opens the system setting where the user can allow full-screen alerts; nothing where there is none. */
     fun openAlarmSettings() {}
 
+    /**
+     * How many days from today the reminders of scheduled templates are planned for ([TemplateReminders]). A platform that can keep
+     * and arm times as they come up, as Android does, asks for more than one that can only hold what it is given.
+     */
+    val planDays: Int get() = TemplateReminders.Days
+
     /** Whether notifications can be shown right now. */
     fun hasPermission(): Boolean
 
@@ -80,7 +86,7 @@ class ReminderCoordinator(
                     store.templates,
                     store.settings.map { it.reminderStopHour }.distinctUntilChanged(),
                 ) { entries, templates, stopHour ->
-                    upcoming(date, entries, stopHour) + TemplateReminders.plan(templates, date, stopHour, clock.now(), zone)
+                    upcoming(date, entries, stopHour) + TemplateReminders.plan(templates, date, stopHour, clock.now(), zone, scheduler.planDays)
                 }
             }
             .distinctUntilChanged()

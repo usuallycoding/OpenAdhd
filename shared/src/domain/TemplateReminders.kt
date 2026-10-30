@@ -11,14 +11,14 @@ import kotlin.time.Instant
  * created while the app runs, so without this nothing is armed for a day on which the app is not opened.
  */
 object TemplateReminders {
-    /** Today and the 6 days after it are planned; the platform limits on armed times decide how much of that is armed. */
+    /** Today and the 6 days after it are planned unless the platform asks for more ([ReminderScheduler.planDays]); the limits on armed times decide how much is armed. */
     const val Days = 7
 
     /** The id of the planned reminder of [templateId] on [date]. No entry has it, so a tap on it opens Today with nothing highlighted. */
     fun id(templateId: String, date: LocalDate): String = "template:$templateId:$date"
 
     /**
-     * For each of the [Days] days from [today], the reminder of every template that is due that day, has a reminder and has not
+     * For each of the [days] days from [today], the reminder of every template that is due that day, has a reminder and has not
      * generated that day's entry. A generated entry, even one the user has since deleted, brings its own reminder instead.
      * Times follow [ReminderRules.upcoming], so the stop hour and the rule that past times never fire apply.
      */
@@ -28,9 +28,10 @@ object TemplateReminders {
         stopHour: Int,
         now: Instant,
         zone: TimeZone,
+        days: Int = Days,
     ): List<UpcomingReminder> {
         val reminders = templates.filter { it.reminder != null && it.schedule != TaskSchedule.None }
-        return (0 until Days).flatMap { offset ->
+        return (0 until days).flatMap { offset ->
             val date = today.plus(offset, DateTimeUnit.DAY)
             reminders
                 .filter { it.schedule.isDue(date) && it.lastGenerated != date }

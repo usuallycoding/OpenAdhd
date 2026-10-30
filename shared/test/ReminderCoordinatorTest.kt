@@ -274,4 +274,15 @@ class ReminderCoordinatorTest {
         store.create("Unrelated", Tier.One, Energy.Low)
         assertEquals(count, scheduler.schedules.size)
     }
+
+    @Test
+    fun `a platform that plans 30 days gets 30 days of a daily template`() = runTest {
+        val long = FakeReminderScheduler(planDays = 30)
+        backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) {
+            ReminderCoordinator(store, long, clock, today, TimeZone.UTC).run()
+        }
+        dailyTemplate()
+        assertEquals(30, long.current.size)
+        assertEquals(at("17:30", "2026-11-21"), long.current.last().times.single())
+    }
 }
