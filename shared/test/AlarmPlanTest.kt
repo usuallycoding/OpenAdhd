@@ -3,6 +3,8 @@ package com.usuallycoding.openadhd
 import com.usuallycoding.openadhd.domain.AlarmPlan
 import com.usuallycoding.openadhd.domain.ReminderKind
 import com.usuallycoding.openadhd.domain.ScheduledTime
+import com.usuallycoding.openadhd.domain.TemplateReminders
+import kotlinx.datetime.LocalDate
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
@@ -117,5 +119,23 @@ class AlarmPlanTest {
     fun `nothing to route`() {
         assertEquals(AlarmPlan.Routed(emptyList(), emptyList()), AlarmPlan.route(emptyList(), true))
         assertEquals(AlarmPlan.Routed(emptyList(), emptyList()), AlarmPlan.route(emptyList(), false))
+    }
+
+    @Test
+    fun `the id of a planned template reminder survives the stored line`() {
+        val id = TemplateReminders.id("3f2c-91", LocalDate(2026, 11, 3))
+        assertEquals("template:3f2c-91:2026-11-03", id)
+        val item = ScheduledTime(id, "Water plants", 1_700_000_000_000, ReminderKind.Alarm)
+        assertEquals(item, AlarmPlan.decode(AlarmPlan.encode(item)))
+    }
+
+    @Test
+    fun `today comes before later days when planned days exceed the limits`() {
+        val todays = (1L..15L).map { ScheduledTime("entry", "Today", it, ReminderKind.Alarm) }
+        val planned = (100L..130L).map { ScheduledTime("template:t:2026-10-24", "Later", it, ReminderKind.Alarm) }
+        val armed = AlarmPlan.arm(planned + todays)
+        assertEquals(20, armed.size)
+        assertEquals(15, armed.count { it.entryId == "entry" })
+        assertEquals((100L..104L).toList(), armed.filter { it.entryId != "entry" }.map { it.atMillis })
     }
 }

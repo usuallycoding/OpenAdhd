@@ -58,9 +58,11 @@ interface ReminderScheduler {
 }
 
 /**
- * Keeps a [ReminderScheduler] equal to the store: whenever today, today's entries or the stop hour change, the
- * full list of reminders still to fire is worked out again and handed over. Replacing the whole schedule makes
- * setting, completing, unchecking, removing and importing all go through one path.
+ * Keeps a [ReminderScheduler] equal to the store: whenever today, today's entries, the templates or the stop hour
+ * change, the full list of reminders still to fire is worked out again and handed over. It holds the reminders of
+ * today's entries and, for the days ahead, those of scheduled templates whose entries do not exist yet
+ * ([TemplateReminders]). Replacing the whole schedule makes setting, completing, unchecking, removing and importing
+ * all go through one path.
  */
 class ReminderCoordinator(
     private val store: OpenAdhdStore,
@@ -73,8 +75,12 @@ class ReminderCoordinator(
     suspend fun run() {
         today
             .flatMapLatest { date ->
-                combine(store.entriesFor(date), store.settings.map { it.reminderStopHour }.distinctUntilChanged()) { entries, stopHour ->
-                    upcoming(date, entries, stopHour)
+                combine(
+                    store.entriesFor(date),
+                    store.templates,
+                    store.settings.map { it.reminderStopHour }.distinctUntilChanged(),
+                ) { entries, templates, stopHour ->
+                    upcoming(date, entries, stopHour) + TemplateReminders.plan(templates, date, stopHour, clock.now(), zone)
                 }
             }
             .distinctUntilChanged()

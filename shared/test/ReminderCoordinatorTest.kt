@@ -7,9 +7,12 @@ import com.usuallycoding.openadhd.domain.ReminderCoordinator
 import com.usuallycoding.openadhd.domain.ReminderKind
 import com.usuallycoding.openadhd.domain.ReminderRules
 import com.usuallycoding.openadhd.domain.SettingKey
+import com.usuallycoding.openadhd.domain.TaskSchedule
+import com.usuallycoding.openadhd.domain.TemplateReminder
 import com.usuallycoding.openadhd.domain.Tier
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.runTest
@@ -182,5 +185,93 @@ class ReminderCoordinatorTest {
         assertEquals(count + 1, scheduler.schedules.size)
         assertEquals(ReminderKind.Alarm, scheduler.current.single().kind)
         assertEquals(clocks(), listOf("17:00", "18:00", "19:00", "20:00", "21:00"))
+    }
+
+    // ---- templates whose entries do not exist yet
+
+    private suspend fun dailyTemplate(time: Int = 17 * 60 + 30, repeat: Int? = null, kind: ReminderKind = ReminderKind.Notification) =
+        store.create("Water plants", Tier.One, Energy.Low, schedule = TaskSchedule.Daily, reminder = TemplateReminder(time, repeat, kind))
+
+    private fun entryIds(): List<String> = scheduler.current.map { it.entryId }
+
+    @Test
+    fun `a daily template is armed for today and the days ahead before its entry exists`() = runTest {
+        start()
+        val template = dailyTemplate()
+
+        assertEquals(7, scheduler.current.size)
+        assertEquals("template:${template.id}:2026-10-23", entryIds().first())
+        assertEquals("Water plants", scheduler.current.first().text)
+        assertEquals(at("17:30"), scheduler.current.first().times.single())
+        assertEquals(at("17:30", "2026-10-29"), scheduler.current.last().times.single())
+    }
+
+    @Test
+    fun `an alarm template hands over its kind`() = runTest {
+        start()
+        dailyTemplate(kind = ReminderKind.Alarm)
+        assertTrue(scheduler.current.all { it.kind == ReminderKind.Alarm })
+    }
+
+    @Test
+    fun `once the entry is generated only its own reminder is left for that day`() = runTest {
+        start()
+        val template = dailyTemplate()
+        store.generateDue(day, TimeZone.UTC)
+
+        val generated = store.entriesFor(day).first().single()
+        assertEquals(7, scheduler.current.size)
+        assertEquals(generated.id, entryIds().first())
+        assertEquals(listOf(at("17:30")), scheduler.current.first().times)
+        assertEquals(6, entryIds().count { it.startsWith("template:${template.id}:") })
+        assertEquals(1, scheduler.current.count { it.times.contains(at("17:30")) })
+    }
+
+    @Test
+    fun `completing or deleting the generated entry leaves nothing for that day`() = runTest {
+        start()
+        dailyTemplate()
+        store.generateDue(day, TimeZone.UTC)
+        val generated = store.entriesFor(day).first().single()
+
+        store.completeTask(generated.id)
+        assertEquals(6, scheduler.current.size)
+        assertTrue(entryIds().none { it.endsWith("2026-10-23") })
+
+        store.uncompleteTask(generated.id)
+        assertEquals(7, scheduler.current.size)
+        store.remove(generated.id)
+        assertEquals(6, scheduler.current.size)
+        assertTrue(entryIds().none { it.endsWith("2026-10-23") })
+    }
+
+    @Test
+    fun `editing the template re-plans and removing its schedule stops the reminders`() = runTest {
+        start()
+        val template = dailyTemplate()
+
+        store.update(template.copy(reminder = TemplateReminder(20 * 60)))
+        assertEquals(at("20:00"), scheduler.current.first().times.single())
+
+        store.update(template.copy(reminder = TemplateReminder(20 * 60), schedule = TaskSchedule.None))
+        assertTrue(scheduler.current.isEmpty())
+    }
+
+    @Test
+    fun `the stop hour limits the planned repeats`() = runTest {
+        start()
+        dailyTemplate(time = 9 * 60, repeat = 60)
+        store.saveSetting(SettingKey.ReminderStopHour, "12")
+        val tomorrow = scheduler.current.first { it.entryId.endsWith("2026-10-24") }
+        assertEquals(listOf("09:00", "10:00", "11:00"), tomorrow.times.map { ReminderRules.clock(it, TimeZone.UTC) })
+    }
+
+    @Test
+    fun `an unchanged plan is not handed over again`() = runTest {
+        start()
+        dailyTemplate()
+        val count = scheduler.schedules.size
+        store.create("Unrelated", Tier.One, Energy.Low)
+        assertEquals(count, scheduler.schedules.size)
     }
 }

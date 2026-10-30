@@ -89,7 +89,7 @@ In the template form, "Add to Today schedule" lets a template put itself on Toda
 - **Reminder on the generated task:** an optional time of day and, once a time is set, a repeat (off, or every 15, 30, 60 or 120 minutes). The task you get on Today carries that reminder, and you can still change or remove it from its "..." sheet without touching the template. A time that has already passed is skipped, so a repeating reminder resumes at its next time.
 - The task is added when the app starts, when the date changes while it is running, and right away when you save a template that is due today. Only today is filled in: days you did not open the app are not made up.
 - A template adds at most one task a day. If you delete the generated task, it does not come back. Adding the template by hand with the + button gives the task the same reminder.
-- Because the task is added when the app runs, its reminders start once you have opened the app that day.
+- **Reminders when the app is not opened:** on Android and iOS the reminders and alarms of scheduled templates are armed for today and the next 6 days as soon as the template or the app's schedule changes, before the tasks exist, so they fire even on a day you do not open the app. How far ahead is limited by what the phone allows to be armed (20 alarms, and about 100 notifications on Android or 64 requests on iOS in total), so a reminder that repeats often reaches only a few days; opening the app arms the rest. After a week without opening it nothing is left to fire. The desktop app still needs to be running. Tapping such a reminder opens Today; the task appears there once the app has added it.
 
 ### Backup
 
