@@ -8,6 +8,7 @@ import com.usuallycoding.openadhd.data.SaveResult
 import com.usuallycoding.openadhd.domain.BackupJson
 import com.usuallycoding.openadhd.domain.BackupResult
 import com.usuallycoding.openadhd.domain.CoinRules
+import com.usuallycoding.openadhd.domain.LoginItem
 import com.usuallycoding.openadhd.domain.OpenAdhdStore
 import com.usuallycoding.openadhd.domain.SettingGroup
 import com.usuallycoding.openadhd.domain.SettingKey
@@ -73,11 +74,28 @@ class SettingsViewModel(
     private val timeZone: TimeZone = TimeZone.currentSystemDefault(),
     /** Whether the Dynamic color setting is listed; only platforms with dynamic color have it. */
     private val dynamicColorSupported: Boolean = supportsDynamicColor,
+    /** Starting the app at login, where the platform has it (the packaged macOS app); the Startup section is hidden without it. */
+    private val loginItem: LoginItem? = null,
 ) : ViewModel() {
     private val repository: SettingsRepository get() = store
 
     /** Whether this platform can save and open backup files; Export and Import are hidden when it cannot. */
     val canTransfer: Boolean = files != null
+
+    private val _launchAtLogin = MutableStateFlow(loginItem?.isEnabled())
+
+    /** Whether the system will start the app at login, or null where there is no login item and the setting is not listed. */
+    val launchAtLogin: StateFlow<Boolean?> = _launchAtLogin
+
+    /** Asks the system again, so a login item removed outside the app shows as off. Called whenever Settings is shown. */
+    fun refreshLaunchAtLogin() {
+        _launchAtLogin.value = loginItem?.isEnabled()
+    }
+
+    fun setLaunchAtLogin(enabled: Boolean) {
+        runCatching { loginItem?.setEnabled(enabled) }
+        refreshLaunchAtLogin()
+    }
 
     private val _dialog = MutableStateFlow<DataDialog?>(null)
     val dialog: StateFlow<DataDialog?> = _dialog

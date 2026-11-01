@@ -17,9 +17,11 @@ import androidx.compose.material3.ListItem
 import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -49,6 +51,8 @@ import com.usuallycoding.openadhd.ui.theme.SystemThemeIcon
 fun SettingsScreen(viewModel: SettingsViewModel, modifier: Modifier = Modifier) {
     val sections by viewModel.sections.collectAsStateWithLifecycle()
     var editing by remember { mutableStateOf<SettingRow?>(null) }
+    val launchAtLogin by viewModel.launchAtLogin.collectAsStateWithLifecycle()
+    LaunchedEffect(Unit) { viewModel.refreshLaunchAtLogin() }
 
     LazyColumn(modifier = modifier) {
         sections.forEach { section ->
@@ -75,6 +79,33 @@ fun SettingsScreen(viewModel: SettingsViewModel, modifier: Modifier = Modifier) 
                         }
                     },
                     modifier = Modifier.clickable { editing = row },
+                )
+                HorizontalDivider()
+            }
+        }
+        launchAtLogin?.let { enabled ->
+            item(key = "group-Startup") {
+                Text(
+                    "Startup",
+                    style = MaterialTheme.typography.titleSmall,
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 4.dp),
+                )
+            }
+            item(key = "startup-launch-at-login") {
+                ListItem(
+                    headlineContent = { Text("Launch at login") },
+                    supportingContent = { Text("Start in the tray when you log in. Default: Off") },
+                    trailingContent = {
+                        Switch(
+                            checked = enabled,
+                            onCheckedChange = viewModel::setLaunchAtLogin,
+                            modifier = Modifier.testTag("launch-at-login-switch"),
+                        )
+                    },
+                    modifier = Modifier
+                        .clickable { viewModel.setLaunchAtLogin(!enabled) }
+                        .testTag("launch-at-login-row"),
                 )
                 HorizontalDivider()
             }

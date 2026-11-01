@@ -8,24 +8,30 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import java.awt.AWTException
-import java.awt.Color
-import java.awt.SystemTray
-import java.awt.TrayIcon
-import java.awt.image.BufferedImage
 import kotlin.time.Clock
+import kotlin.time.Duration
+import kotlin.time.Duration.Companion.minutes
+import kotlin.time.Duration.Companion.seconds
+
+/** How often the desktop scheduler looks at the wall clock while waiting for the next reminder. */
+val DesktopReminderTick: Duration = 20.seconds
+
+/** How late a reminder may be shown, which only happens when the computer slept through its time. */
+val DesktopReminderGrace: Duration = 2.minutes
 
 /**
- * Delivers reminders on the desktop while the app is running: a timer waits for each time in turn and calls
- * [notify] with the task's name. Nothing is shown while the app is closed, and times that were missed are not
- * replayed. [DesktopNotifier] shows the system notification.
+ * Delivers reminders on the desktop while the app is running, with or without its window: a timer waits for each
+ * time in turn and calls [notify] with the task's name. It looks at the wall clock every [tick] instead of waiting
+ * out the whole time in one delay, because a long delay does not count the time the computer sleeps. A time that has
+ * passed by more than [grace] when it is noticed (the computer slept through it) is dropped, and times missed while
+ * the app was not running are not replayed. [DesktopNotifier] shows the system notification.
  */
 class DesktopReminderScheduler(
     private val notify: (text: String) -> Unit,
-    /** Called with true while reminders are waiting and false once none are, so a tray icon can come and go. */
-    private val onPending: (Boolean) -> Unit = {},
     private val scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Default),
     private val clock: Clock = Clock.System,
+    private val tick: Duration = DesktopReminderTick,
+    private val grace: Duration = DesktopReminderGrace,
 ) : ReminderScheduler {
     private var timer: Job? = null
 
@@ -40,56 +46,31 @@ class DesktopReminderScheduler(
             .flatMap { reminder -> reminder.times.map { time -> time to reminder.text } }
             .filter { (time, _) -> time > clock.now() }
             .sortedBy { it.first }
-        onPending(queue.isNotEmpty())
         if (queue.isEmpty()) return
         timer = scope.launch {
-            for ((time, text) in queue) {
-                val wait = time - clock.now()
-                if (wait.isPositive()) delay(wait)
-                notify(text)
+            val waiting = ArrayDeque(queue)
+            while (waiting.isNotEmpty()) {
+                val now = clock.now()
+                while (waiting.isNotEmpty() && waiting.first().first <= now) {
+                    val (time, text) = waiting.removeFirst()
+                    if (now - time <= grace) notify(text)
+                }
+                if (waiting.isNotEmpty()) delay(minOf(tick, waiting.first().first - now))
             }
-            onPending(false)
         }
     }
 }
 
 /**
- * Shows desktop notifications through the system tray, which on macOS appear in the notification centre under the
- * app's own name. The tray icon exists only while reminders are pending. Falls back to [fallback] (an in-app
- * message) where there is no system tray.
+ * Shows reminder notifications on the desktop: through [send] (the tray's notification, which on macOS appears in the
+ * notification centre under the app's own name) when there is a system tray, and as an in-app message through
+ * [fallback] where there is none.
  */
-class DesktopNotifier(private val fallback: (String) -> Unit) {
-    private var icon: TrayIcon? = null
-
-    @Synchronized
-    fun setPending(pending: Boolean) {
-        if (!SystemTray.isSupported()) return
-        if (pending && icon == null) {
-            try {
-                val created = TrayIcon(image(), "OpenAdhd")
-                SystemTray.getSystemTray().add(created)
-                icon = created
-            } catch (_: AWTException) {
-                icon = null
-            }
-        } else if (!pending) {
-            icon?.let { SystemTray.getSystemTray().remove(it) }
-            icon = null
-        }
-    }
-
-    @Synchronized
+class DesktopNotifier(
+    private val send: ((title: String, text: String) -> Unit)?,
+    private val fallback: (String) -> Unit,
+) {
     fun show(text: String) {
-        val tray = icon
-        if (tray == null) fallback(text) else tray.displayMessage("Still to do", text, TrayIcon.MessageType.INFO)
-    }
-
-    private fun image(): BufferedImage {
-        val image = BufferedImage(32, 32, BufferedImage.TYPE_INT_ARGB)
-        val g = image.createGraphics()
-        g.color = Color(0xE8, 0x7A, 0x1E)
-        g.fillOval(3, 3, 26, 26)
-        g.dispose()
-        return image
+        if (send == null) fallback(text) else send("Still to do", text)
     }
 }

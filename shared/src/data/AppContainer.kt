@@ -5,6 +5,7 @@ import com.usuallycoding.openadhd.data.room.RoomStore
 import com.usuallycoding.openadhd.domain.CriticalHits
 import com.usuallycoding.openadhd.domain.OpenAdhdStore
 import com.usuallycoding.openadhd.domain.EntryRequests
+import com.usuallycoding.openadhd.domain.LoginItem
 import com.usuallycoding.openadhd.domain.ReminderScheduler
 import com.usuallycoding.openadhd.ui.today.DefaultDateCheckInterval
 import com.usuallycoding.openadhd.domain.Settings
@@ -35,6 +36,8 @@ class AppContainer(
     val initialSettings: Settings = runBlocking { store.settings.first() },
     /** Where a platform asks the app to show an entry, such as the one a tapped reminder notification is about. */
     val entryRequests: EntryRequests = EntryRequests(),
+    /** Starting the app at login, or null where the platform has no such thing (everywhere but the packaged macOS app). */
+    val loginItem: LoginItem? = null,
 )
 
 /**
@@ -47,10 +50,12 @@ fun createContainer(
     reminders: ReminderScheduler? = null,
     reminderNotices: SharedFlow<String> = MutableSharedFlow(),
     entryRequests: EntryRequests = EntryRequests(),
+    loginItem: LoginItem? = null,
 ): AppContainer = AppContainer(
     RoomStore(database, criticalHits = CriticalHits.Standard),
     files = files,
     reminders = reminders,
     reminderNotices = reminderNotices,
     entryRequests = entryRequests,
+    loginItem = loginItem,
 )
