@@ -42,6 +42,8 @@ data class Settings(
     /** The hour of the day, 1 to 23, at which reminders stop for the day. */
     val reminderStopHour: Int = 22,
     val themeMode: ThemeMode = ThemeMode.System,
+    /** Whether Android 12+ takes the app's colors from the wallpaper; a platform without dynamic color ignores it. */
+    val dynamicColor: Boolean = true,
 ) {
     /** The title of the top bar. */
     val title: String get() = if (name.isBlank()) "OpenAdhd" else "$name's OpenAdhd"
@@ -70,12 +72,14 @@ data class Settings(
         SettingKey.UpgradeOneIn -> rules.upgradeOneIn.toString()
         SettingKey.ReminderStopHour -> reminderStopHour.toString()
         SettingKey.Theme -> themeMode.name
+        SettingKey.DynamicColor -> if (dynamicColor) DynamicColorDynamic else DynamicColorApp
     }
 
     /** These settings with [key] set to [value], which must already be valid (a number for every key but the name). */
     fun with(key: SettingKey, value: String): Settings {
         if (key == SettingKey.Name) return copy(name = value)
         if (key == SettingKey.Theme) return copy(themeMode = ThemeMode.valueOf(value))
+        if (key == SettingKey.DynamicColor) return copy(dynamicColor = value == DynamicColorDynamic)
         val number = value.toInt()
         if (key == SettingKey.ReminderStopHour) return copy(reminderStopHour = number)
         fun <T> List<T>.set(index: Int, item: T) = toMutableList().also { it[index] = item }
@@ -94,7 +98,7 @@ data class Settings(
                 SettingKey.CriticalOneIn -> rules.copy(criticalOneIn = number)
                 SettingKey.CriticalMultiplier -> rules.copy(criticalMultiplier = number)
                 SettingKey.UpgradeOneIn -> rules.copy(upgradeOneIn = number)
-                SettingKey.Name, SettingKey.ReminderStopHour, SettingKey.Theme -> rules
+                SettingKey.Name, SettingKey.ReminderStopHour, SettingKey.Theme, SettingKey.DynamicColor -> rules
             },
         )
     }
@@ -114,6 +118,10 @@ data class Settings(
     }
 }
 
+/** The stored values of the Dynamic color setting: colors from the wallpaper, or the app's own. */
+const val DynamicColorDynamic = "dynamic"
+const val DynamicColorApp = "app"
+
 enum class SettingGroup(val label: String) {
     Appearance("Appearance"), Profile("Profile"), Coins("Coins"), Subtasks("Subtasks"), Shop("Shop"), Luck("Luck"), Reminders("Reminders")
 }
@@ -130,6 +138,7 @@ enum class SettingKey(
     val choices: List<String>? = null,
 ) {
     Theme("theme", "Theme", SettingGroup.Appearance, null, ThemeMode.entries.map { it.name }),
+    DynamicColor("dynamic_color", "Dynamic color", SettingGroup.Appearance, null, listOf(DynamicColorDynamic, DynamicColorApp)),
     Name("name", "Your name", SettingGroup.Profile, null),
     DebtLimit("debt_limit", "Debt limit", SettingGroup.Coins, 0..100_000),
     PayoutTier1("task_payout_1", "Tier 1 task pays", SettingGroup.Coins, 1..1000),
@@ -153,6 +162,11 @@ enum class SettingKey(
     /** [text], a stored value of this setting, as the user reads it: a choice shows its label, an empty name "Not set". */
     fun display(text: String): String = when (this) {
         Theme -> ThemeMode.entries.firstOrNull { it.name == text }?.label ?: text
+        DynamicColor -> when (text) {
+            DynamicColorDynamic -> "Dynamic (wallpaper colors)"
+            DynamicColorApp -> "App colors"
+            else -> text
+        }
         else -> text.ifEmpty { "Not set" }
     }
 

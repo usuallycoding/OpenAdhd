@@ -1595,6 +1595,27 @@ abstract class StoreContractTest {
         assertEquals(ThemeMode.System, target.settings.first().themeMode)
     }
 
+    @Test
+    fun `dynamic color is kept restored carried in a backup and reset by deleting all data`() = runTest {
+        val source = newStore(clock)
+        assertTrue(source.settings.first().dynamicColor)
+        assertNull(source.saveSetting(SettingKey.DynamicColor, "app"))
+        assertFalse(source.settings.first().dynamicColor)
+        assertEquals(mapOf("dynamic_color" to "app"), source.exportData().overrides)
+        val data = source.exportData()
+
+        source.restoreSetting(SettingKey.DynamicColor)
+        assertTrue(source.settings.first().dynamicColor)
+        assertTrue(source.exportData().overrides.isEmpty())
+
+        val target = newStore(clock)
+        target.importData(data)
+        assertFalse(target.settings.first().dynamicColor)
+        target.deleteAllData()
+        assertTrue(target.settings.first().dynamicColor)
+        assertEquals("Choose one of the options", target.saveSetting(SettingKey.DynamicColor, "off"))
+    }
+
     // ---- schedules and generation
 
     private val everyDay = TaskSchedule.Daily

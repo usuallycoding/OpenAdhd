@@ -163,7 +163,7 @@ fun App(container: AppContainer) {
     }
 
     CompositionLocalProvider(LocalGameRules provides settings.rules) {
-    AppTheme(settings.themeMode) {
+    AppTheme(settings.themeMode, settings.dynamicColor) {
         Scaffold(
             modifier = Modifier.fillMaxSize(),
             snackbarHost = { SnackbarHost(snackbarHostState) },

@@ -8,8 +8,10 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.platform.LocalContext
 
 @Composable
-internal actual fun platformColorScheme(darkTheme: Boolean): ColorScheme? {
-    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return null
+internal actual fun platformColorScheme(darkTheme: Boolean, dynamic: Boolean): ColorScheme? {
+    if (!dynamic || !supportsDynamicColor) return null
     val context = LocalContext.current
     return if (darkTheme) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
 }
+
+internal actual val supportsDynamicColor: Boolean = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S

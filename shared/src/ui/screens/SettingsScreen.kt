@@ -112,6 +112,14 @@ fun SettingsScreen(viewModel: SettingsViewModel, modifier: Modifier = Modifier) 
             )
             return@let
         }
+        if (row.key == SettingKey.DynamicColor) {
+            DynamicColorSheet(
+                current = row.value,
+                onChoose = { choice -> viewModel.save(SettingKey.DynamicColor, choice) { editing = null } },
+                onDismiss = { editing = null },
+            )
+            return@let
+        }
         SettingDialog(
             row = row,
             onDismiss = { editing = null },
@@ -249,6 +257,29 @@ private fun ThemeSheet(current: String, onChoose: (ThemeMode) -> Unit, onDismiss
                 modifier = Modifier
                     .testTag("theme-option-${mode.name}")
                     .selectable(selected = selected, role = Role.RadioButton, onClick = { onChoose(mode) }),
+            )
+        }
+    }
+}
+
+/** The two ways to color the app in a bottom sheet, the current one highlighted; choosing one applies it and closes the sheet. */
+@Composable
+private fun DynamicColorSheet(current: String, onChoose: (String) -> Unit, onDismiss: () -> Unit) {
+    FormSheet(
+        title = SettingKey.DynamicColor.label,
+        onDismiss = onDismiss,
+        footer = { requestClose -> TextButton(onClick = requestClose) { Text("Close") } },
+    ) {
+        SettingKey.DynamicColor.choices.orEmpty().forEach { choice ->
+            val selected = choice == current
+            ListItem(
+                headlineContent = { Text(SettingKey.DynamicColor.display(choice)) },
+                colors = ListItemDefaults.colors(
+                    containerColor = if (selected) MaterialTheme.colorScheme.secondaryContainer else Color.Transparent,
+                ),
+                modifier = Modifier
+                    .testTag("dynamic-color-option-$choice")
+                    .selectable(selected = selected, role = Role.RadioButton, onClick = { onChoose(choice) }),
             )
         }
     }

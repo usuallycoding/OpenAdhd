@@ -14,6 +14,7 @@ import com.usuallycoding.openadhd.domain.SettingKey
 import com.usuallycoding.openadhd.domain.Settings
 import com.usuallycoding.openadhd.domain.SettingsRepository
 import com.usuallycoding.openadhd.domain.StoreState
+import com.usuallycoding.openadhd.ui.theme.supportsDynamicColor
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.todayIn
@@ -70,6 +71,8 @@ class SettingsViewModel(
     private val files: DataFiles? = null,
     private val clock: Clock = Clock.System,
     private val timeZone: TimeZone = TimeZone.currentSystemDefault(),
+    /** Whether the Dynamic color setting is listed; only platforms with dynamic color have it. */
+    private val dynamicColorSupported: Boolean = supportsDynamicColor,
 ) : ViewModel() {
     private val repository: SettingsRepository get() = store
 
@@ -80,8 +83,8 @@ class SettingsViewModel(
     val dialog: StateFlow<DataDialog?> = _dialog
 
     val sections: StateFlow<List<SettingSection>> = repository.settings
-        .map(::buildSections)
-        .stateIn(viewModelScope, SharingStarted.Eagerly, buildSections(Settings.Default))
+        .map { buildSections(it, dynamicColorSupported) }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, buildSections(Settings.Default, dynamicColorSupported))
 
     /** Saves [text] as the value of [key]; [onResult] gets why it was refused, or null when it was saved. */
     fun save(key: SettingKey, text: String, onResult: (String?) -> Unit) {
@@ -161,11 +164,11 @@ class SettingsViewModel(
     }
 
     companion object {
-        fun buildSections(settings: Settings): List<SettingSection> =
+        fun buildSections(settings: Settings, dynamicColorSupported: Boolean): List<SettingSection> =
             SettingGroup.entries.map { group ->
                 SettingSection(
                     group,
-                    SettingKey.entries.filter { it.group == group }.map { key ->
+                    SettingKey.entries.filter { it.group == group && (dynamicColorSupported || it != SettingKey.DynamicColor) }.map { key ->
                         SettingRow(key, settings.text(key), Settings.Default.text(key))
                     },
                 )

@@ -121,6 +121,33 @@ class SettingsTest {
     }
 
     @Test
+    fun `dynamic color defaults to on and follows its two choices`() {
+        assertTrue(defaults.dynamicColor)
+        assertEquals("dynamic", defaults.text(SettingKey.DynamicColor))
+        assertEquals(listOf("dynamic", "app"), SettingKey.DynamicColor.choices)
+        assertEquals(com.usuallycoding.openadhd.domain.SettingGroup.Appearance, SettingKey.DynamicColor.group)
+        assertEquals("Dynamic (wallpaper colors)", SettingKey.DynamicColor.display("dynamic"))
+        assertEquals("App colors", SettingKey.DynamicColor.display("app"))
+        assertFalse(accepted(SettingKey.DynamicColor, "app").dynamicColor)
+        assertTrue(accepted(SettingKey.DynamicColor, "dynamic", Settings(dynamicColor = false)).dynamicColor)
+        assertEquals("Choose one of the options", refusal(SettingKey.DynamicColor, "off"))
+    }
+
+    @Test
+    fun `dynamic color is stored only when it is off and a bad stored value is ignored`() {
+        assertEquals(emptyMap(), Settings.Default.overrides)
+        assertEquals(mapOf("dynamic_color" to "app"), Settings(dynamicColor = false).overrides)
+        assertFalse(Settings.fromOverrides(mapOf("dynamic_color" to "app")).dynamicColor)
+        assertTrue(Settings.fromOverrides(mapOf("dynamic_color" to "off")).dynamicColor)
+    }
+
+    @Test
+    fun `dynamic color is listed after the theme`() {
+        val appearance = SettingKey.entries.filter { it.group == com.usuallycoding.openadhd.domain.SettingGroup.Appearance }
+        assertEquals(listOf(SettingKey.Theme, SettingKey.DynamicColor), appearance)
+    }
+
+    @Test
     fun `the title carries the name`() {
         assertEquals("Sam's OpenAdhd", Settings(name = "Sam").title)
         assertEquals("OpenAdhd", Settings(name = "  ").title)

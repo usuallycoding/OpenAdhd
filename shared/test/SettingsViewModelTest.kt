@@ -34,7 +34,7 @@ class SettingsViewModelTest {
 
     @Test
     fun `every setting is listed once in its group with its default`() = runTest {
-        val vm = SettingsViewModel(store)
+        val vm = SettingsViewModel(store, dynamicColorSupported = true)
         assertEquals(SettingGroup.entries, vm.sections.value.map { it.group })
         assertEquals(SettingKey.entries.toSet(), vm.sections.value.flatMap { it.rows }.map { it.key }.toSet())
         assertEquals(SettingKey.entries.size, vm.sections.value.sumOf { it.rows.size })
@@ -79,10 +79,24 @@ class SettingsViewModelTest {
     }
 
     @Test
-    fun `the appearance group comes first and holds only the theme`() = runTest {
-        val vm = SettingsViewModel(store)
+    fun `the appearance group comes first and holds only the theme where there is no dynamic color`() = runTest {
+        val vm = SettingsViewModel(store, dynamicColorSupported = false)
         assertEquals(SettingGroup.Appearance, vm.sections.value.first().group)
         assertEquals(listOf(SettingKey.Theme), vm.sections.value.first().rows.map { it.key })
+        assertTrue(vm.sections.value.flatMap { it.rows }.none { it.key == SettingKey.DynamicColor })
+        vm.viewModelScope.cancel()
+    }
+
+    @Test
+    fun `the appearance group lists dynamic color after the theme where the platform has it`() = runTest {
+        val vm = SettingsViewModel(store, dynamicColorSupported = true)
+        assertEquals(listOf(SettingKey.Theme, SettingKey.DynamicColor), vm.sections.value.first().rows.map { it.key })
+        assertEquals("Dynamic (wallpaper colors)", vm.row(SettingKey.DynamicColor).valueLabel)
+        assertTrue(vm.row(SettingKey.DynamicColor).isDefault)
+
+        vm.save(SettingKey.DynamicColor, "app") { }
+        assertEquals("App colors", vm.row(SettingKey.DynamicColor).valueLabel)
+        assertFalse(vm.row(SettingKey.DynamicColor).isDefault)
         vm.viewModelScope.cancel()
     }
 

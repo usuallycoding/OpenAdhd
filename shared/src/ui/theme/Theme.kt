@@ -253,10 +253,11 @@ val unspecified_scheme = ColorFamily(
 @Composable
 fun AppTheme(
     themeMode: ThemeMode = ThemeMode.System,
+    dynamicColor: Boolean = true,
     content: @Composable () -> Unit
 ) {
     val darkTheme = themeMode.isDark(isSystemInDarkTheme())
-    val colorScheme = platformColorScheme(darkTheme)
+    val colorScheme = platformColorScheme(darkTheme, dynamicColor)
         ?: if (darkTheme) darkScheme else lightScheme
 
     MaterialTheme(
@@ -266,6 +267,9 @@ fun AppTheme(
     )
 }
 
-/** Dynamic color scheme where the platform offers one (Android 12+), otherwise null. */
+/** Dynamic color scheme where the platform offers one (Android 12+) and [dynamic] is on, otherwise null. */
 @Composable
-internal expect fun platformColorScheme(darkTheme: Boolean): ColorScheme?
+internal expect fun platformColorScheme(darkTheme: Boolean, dynamic: Boolean): ColorScheme?
+
+/** Whether this platform has dynamic color to turn on or off; Settings lists the Dynamic color setting only where it does. */
+internal expect val supportsDynamicColor: Boolean
