@@ -82,7 +82,7 @@ class AlarmKindUiTest {
     }
 
     @Test
-    fun `the desktop offers no choice`() = runComposeUiTest {
+    fun `a platform without alarms offers no choice`() = runComposeUiTest {
         entry()
         show(alarms = false)
         onNodeWithContentDescription("Options for Clean the kitchen").performClick()
@@ -167,7 +167,7 @@ class AlarmKindUiTest {
     }
 
     @Test
-    fun `the template form on the desktop offers no kind`() = runComposeUiTest {
+    fun `the template form on a platform without alarms offers no kind`() = runComposeUiTest {
         show(alarms = false)
         onNodeWithText("Templates").performClick()
         onNodeWithContentDescription("Add template").performClick()

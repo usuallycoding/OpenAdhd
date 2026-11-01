@@ -14,8 +14,11 @@ object TemplateReminders {
     /** Today and the 6 days after it are planned unless the platform asks for more ([ReminderScheduler.planDays]); the limits on armed times decide how much is armed. */
     const val Days = 7
 
+    /** What the id of a planned reminder starts with; the id of an entry never does. */
+    const val IdPrefix = "template:"
+
     /** The id of the planned reminder of [templateId] on [date]. No entry has it, so a tap on it opens Today with nothing highlighted. */
-    fun id(templateId: String, date: LocalDate): String = "template:$templateId:$date"
+    fun id(templateId: String, date: LocalDate): String = "$IdPrefix$templateId:$date"
 
     /**
      * For each of the [days] days from [today], the reminder of every template that is due that day, has a reminder and has not

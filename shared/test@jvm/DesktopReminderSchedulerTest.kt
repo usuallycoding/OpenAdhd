@@ -1,9 +1,11 @@
 package com.usuallycoding.openadhd
 
 import com.usuallycoding.openadhd.data.DesktopNotifier
+import com.usuallycoding.openadhd.data.DueAlarm
 import com.usuallycoding.openadhd.data.DesktopReminderGrace
 import com.usuallycoding.openadhd.data.DesktopReminderScheduler
 import com.usuallycoding.openadhd.data.DesktopReminderTick
+import com.usuallycoding.openadhd.domain.ReminderKind
 import com.usuallycoding.openadhd.domain.UpcomingReminder
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.advanceTimeBy
@@ -30,13 +32,17 @@ class DesktopReminderSchedulerTest {
 
     private class Recorder {
         val shown = mutableListOf<String>()
+        val rung = mutableListOf<DueAlarm>()
     }
 
     private fun kotlinx.coroutines.test.TestScope.scheduler(recorder: Recorder) = DesktopReminderScheduler(
         notify = { recorder.shown += it },
         scope = backgroundScope,
         clock = clockOf(),
+        ring = { recorder.rung += it },
     )
+
+    private fun alarm(id: String, text: String, vararg times: Instant) = UpcomingReminder(id, text, times.toList(), ReminderKind.Alarm)
 
     @Test
     fun `each reminder is shown at its time in turn`() = runTest {
@@ -142,15 +148,103 @@ class DesktopReminderSchedulerTest {
     }
 
     @Test
-    fun `the desktop scheduler does not offer alarms and shows an alarm as a notification`() = runTest {
+    fun `the desktop scheduler offers alarms`() = runTest {
+        assertTrue(scheduler(Recorder()).supportsAlarms)
+    }
+
+    @Test
+    fun `an alarm on time rings with no due time and leaves a notification`() = runTest {
         val recorder = Recorder()
-        val scheduler = scheduler(recorder)
-        assertEquals(false, scheduler.supportsAlarms)
-        scheduler.replaceAll(
-            listOf(UpcomingReminder("a", "Wake up", listOf(start + 10.minutes), com.usuallycoding.openadhd.domain.ReminderKind.Alarm)),
-        )
-        advanceTimeBy(11 * 60_000L)
+        scheduler(recorder).replaceAll(listOf(alarm("a", "Wake up", start + 10.minutes)))
+
+        advanceTimeBy(9 * 60_000L)
+        assertTrue(recorder.rung.isEmpty())
+        advanceTimeBy(2 * 60_000L)
+        assertEquals(listOf(DueAlarm("a", "Wake up", null)), recorder.rung)
         assertEquals(listOf("Wake up"), recorder.shown)
+    }
+
+    @Test
+    fun `an alarm the computer slept through rings on waking with the time it was due`() = runTest {
+        val recorder = Recorder()
+        scheduler(recorder).replaceAll(listOf(alarm("a", "Wake up", start + 5.minutes)))
+
+        advanceTimeBy(60_000L)
+        slept = 20.minutes
+        advanceTimeBy(DesktopReminderTick.inWholeMilliseconds)
+        assertEquals(listOf(DueAlarm("a", "Wake up", start + 5.minutes)), recorder.rung)
+        assertEquals(listOf("Wake up"), recorder.shown)
+    }
+
+    @Test
+    fun `an alarm that is a little late rings with no due time`() = runTest {
+        val recorder = Recorder()
+        scheduler(recorder).replaceAll(listOf(alarm("a", "Wake up", start + 5.minutes)))
+
+        advanceTimeBy(60_000L)
+        slept = 5.minutes
+        advanceTimeBy(DesktopReminderTick.inWholeMilliseconds)
+        assertEquals(listOf(DueAlarm("a", "Wake up", null)), recorder.rung)
+    }
+
+    @Test
+    fun `repeats missed during sleep ring once for the latest time`() = runTest {
+        val recorder = Recorder()
+        scheduler(recorder).replaceAll(listOf(alarm("a", "Wake up", start + 5.minutes, start + 35.minutes)))
+
+        advanceTimeBy(60_000L)
+        slept = 50.minutes
+        advanceTimeBy(DesktopReminderTick.inWholeMilliseconds)
+        assertEquals(listOf(DueAlarm("a", "Wake up", start + 35.minutes)), recorder.rung)
+        assertEquals(listOf("Wake up"), recorder.shown)
+    }
+
+    @Test
+    fun `two tasks that missed alarms ring once each`() = runTest {
+        val recorder = Recorder()
+        scheduler(recorder).replaceAll(
+            listOf(alarm("a", "Taxes", start + 5.minutes), alarm("b", "Laundry", start + 8.minutes, start + 20.minutes)),
+        )
+
+        advanceTimeBy(60_000L)
+        slept = 40.minutes
+        advanceTimeBy(DesktopReminderTick.inWholeMilliseconds)
+        assertEquals(
+            listOf(DueAlarm("a", "Taxes", start + 5.minutes), DueAlarm("b", "Laundry", start + 20.minutes)),
+            recorder.rung,
+        )
+    }
+
+    @Test
+    fun `repeats that are on time each ring`() = runTest {
+        val recorder = Recorder()
+        scheduler(recorder).replaceAll(listOf(alarm("a", "Wake up", start + 10.minutes, start + 40.minutes)))
+
+        advanceTimeBy(11 * 60_000L)
+        assertEquals(1, recorder.rung.size)
+        advanceTimeBy(30 * 60_000L)
+        assertEquals(2, recorder.rung.size)
+        assertTrue(recorder.rung.all { it.dueAt == null })
+    }
+
+    @Test
+    fun `an alarm time already past when the schedule is set never rings`() = runTest {
+        val recorder = Recorder()
+        scheduler(recorder).replaceAll(listOf(alarm("a", "Wake up", start - 5.minutes)))
+
+        advanceTimeBy(60 * 60_000L)
+        assertTrue(recorder.rung.isEmpty())
+        assertTrue(recorder.shown.isEmpty())
+    }
+
+    @Test
+    fun `a notification never rings`() = runTest {
+        val recorder = Recorder()
+        scheduler(recorder).replaceAll(listOf(UpcomingReminder("a", "Taxes", listOf(start + 10.minutes))))
+
+        advanceTimeBy(11 * 60_000L)
+        assertEquals(listOf("Taxes"), recorder.shown)
+        assertTrue(recorder.rung.isEmpty())
     }
 
     @Test
