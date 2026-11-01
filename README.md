@@ -49,6 +49,14 @@ keyPassword=the password you chose
 
 Android will not update an app signed with a different key. The first release APK therefore cannot replace an older debug-signed install: export a backup under Settings, uninstall the old app, install the new one and import the backup. After that every build installs over the last one and keeps its data, from any machine that has `secret/`.
 
+### Version
+
+The end of Settings shows the version of the app that is installed, such as "OpenAdhd 1.0.0 (1)" on Android and iOS (version and build number) and "OpenAdhd 1.0.0" on the packaged macOS app. The desktop app run with `./kotlin run` has no packaged version and shows "OpenAdhd dev". Each platform keeps its own number, so a release changes all three, and the label shows what each build really holds:
+
+- Android: `versionName` and `versionCode` under `settings.android` in `androidApp/module.yaml` (raise the code with every release, Android only installs a higher one over an older one).
+- iOS: `CFBundleShortVersionString` and `CFBundleVersion` in `iosApp/src/Info.plist`. They are written there as plain values, not as project variables, because the toolchain regenerates `module.xcodeproj`.
+- macOS: `version=` at the top of `scripts/package-mac.sh`.
+
 ### App icons
 
 `scripts/make-icons.sh` makes the icon of every platform from `secret/open-adhd.svg`, a transparent drawing kept out of git with the signing key. It puts the drawing on the app's surface colors (light, and dark for the dark variants) and writes the Android adaptive icon (with a themed-icon layer, and a background that follows the wallpaper color on Android 12 and later), the iOS light, dark and tinted icons, and the rounded macOS and desktop window icon. Run it again only when the drawing changes, and commit what it writes: building the app does not need the SVG. It needs `magick` (ImageMagick) and `sips` (part of macOS), and draws the SVG with `rsvg-convert`, Inkscape or ImageMagick, whichever is installed.

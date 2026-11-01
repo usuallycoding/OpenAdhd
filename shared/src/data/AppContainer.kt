@@ -2,6 +2,7 @@ package com.usuallycoding.openadhd.data
 
 import com.usuallycoding.openadhd.data.room.OpenAdhdDatabase
 import com.usuallycoding.openadhd.data.room.RoomStore
+import com.usuallycoding.openadhd.domain.AppVersion
 import com.usuallycoding.openadhd.domain.CriticalHits
 import com.usuallycoding.openadhd.domain.OpenAdhdStore
 import com.usuallycoding.openadhd.domain.EntryRequests
@@ -38,6 +39,8 @@ class AppContainer(
     val entryRequests: EntryRequests = EntryRequests(),
     /** Starting the app at login, or null where the platform has no such thing (everywhere but the packaged macOS app). */
     val loginItem: LoginItem? = null,
+    /** The version line shown at the end of Settings, built by [AppVersion.label] from what the installed app reports. */
+    val versionLabel: String = AppVersion.Unpackaged,
 )
 
 /**
@@ -51,6 +54,7 @@ fun createContainer(
     reminderNotices: SharedFlow<String> = MutableSharedFlow(),
     entryRequests: EntryRequests = EntryRequests(),
     loginItem: LoginItem? = null,
+    versionLabel: String = AppVersion.Unpackaged,
 ): AppContainer = AppContainer(
     RoomStore(database, criticalHits = CriticalHits.Standard),
     files = files,
@@ -58,4 +62,5 @@ fun createContainer(
     reminderNotices = reminderNotices,
     entryRequests = entryRequests,
     loginItem = loginItem,
+    versionLabel = versionLabel,
 )

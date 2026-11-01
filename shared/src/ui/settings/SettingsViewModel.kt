@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.usuallycoding.openadhd.data.DataFiles
 import com.usuallycoding.openadhd.data.OpenResult
 import com.usuallycoding.openadhd.data.SaveResult
+import com.usuallycoding.openadhd.domain.AppVersion
 import com.usuallycoding.openadhd.domain.BackupJson
 import com.usuallycoding.openadhd.domain.BackupResult
 import com.usuallycoding.openadhd.domain.CoinRules
@@ -76,6 +77,8 @@ class SettingsViewModel(
     private val dynamicColorSupported: Boolean = supportsDynamicColor,
     /** Starting the app at login, where the platform has it (the packaged macOS app); the Startup section is hidden without it. */
     private val loginItem: LoginItem? = null,
+    /** The version line shown at the end of Settings. */
+    val versionLabel: String = AppVersion.Unpackaged,
 ) : ViewModel() {
     private val repository: SettingsRepository get() = store
 

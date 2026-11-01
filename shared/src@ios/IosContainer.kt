@@ -6,6 +6,8 @@ import com.usuallycoding.openadhd.data.room.buildOpenAdhdDatabase
 import com.usuallycoding.openadhd.domain.EntryRequests
 import com.usuallycoding.openadhd.domain.ReminderScheduler
 import kotlinx.cinterop.ExperimentalForeignApi
+import com.usuallycoding.openadhd.domain.AppVersion
+import platform.Foundation.NSBundle
 import platform.Foundation.NSDocumentDirectory
 import platform.Foundation.NSFileManager
 import platform.Foundation.NSUserDomainMask
@@ -26,5 +28,12 @@ fun createIosContainer(
     )
     val path = requireNotNull(documents?.path) { "Documents directory unavailable" } + "/openadhd.db"
     val database = Room.databaseBuilder<OpenAdhdDatabase>(name = path).buildOpenAdhdDatabase()
-    return createContainer(database, files, reminders, entryRequests = entryRequests)
+    return createContainer(
+        database, files, reminders, entryRequests = entryRequests,
+        versionLabel = versionLabelOf(NSBundle.mainBundle.infoDictionary),
+    )
 }
+
+/** The version line from the app's Info.plist: its short version string and its bundle version, or "dev" if there is none. */
+internal fun versionLabelOf(info: Map<*, *>?): String =
+    AppVersion.label(info?.get("CFBundleShortVersionString") as? String, info?.get("CFBundleVersion") as? String)
