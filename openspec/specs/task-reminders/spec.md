@@ -72,7 +72,7 @@ A reminder's start SHALL be later than the current time, on today's date, and ea
 - **THEN** it is saved and fires once, at 21:55
 
 ### Requirement: When a reminder fires
-A reminder SHALL fire at its start time and then at every repeat interval after it, as long as the entry is not completed and the time is earlier than the stop time from Settings. It MUST NOT fire on a later day, and times already past are never fired late.
+A reminder SHALL fire at its start time and then at every repeat interval after it, as long as the entry is not completed and the time is earlier than the stop time from Settings. It MUST NOT fire on a later day, and times already past are never fired late, except that on the desktop a reminder that came due while the computer was asleep is shown when it wakes if it is at most 2 minutes late.
 
 #### Scenario: Repeating until the stop time
 - **WHEN** a reminder starts at 15:00, repeats every 30 minutes and the stop time is 22:00
@@ -85,6 +85,14 @@ A reminder SHALL fire at its start time and then at every repeat interval after 
 #### Scenario: Changed stop time
 - **WHEN** the stop time in Settings is changed to 18:00
 - **THEN** reminders that would fire at 18:00 or later no longer fire
+
+#### Scenario: Desktop wakes just after the time
+- **WHEN** a desktop reminder is due at 15:00, the computer sleeps from 14:55 and wakes at 15:01
+- **THEN** the notification is shown on waking
+
+#### Scenario: Desktop wakes long after the time
+- **WHEN** a desktop reminder is due at 15:00 and a repeat at 15:30, and the computer wakes at 15:20
+- **THEN** the 15:00 reminder is not shown and the 15:30 one fires on time
 
 ### Requirement: Reminder lifecycle
 A reminder SHALL stop when its entry is completed, and unchecking the entry SHALL bring back the reminder times that are still to come. Deleting the entry removes its reminder, and the sheet SHALL offer Remove reminder while one is set. An entry in progress keeps its reminder until it is completed. Reminders MUST end at midnight with the day of their entry.
@@ -159,7 +167,7 @@ The app SHALL ask for permission to show notifications the first time the user s
 - **THEN** no notification permission is asked
 
 ### Requirement: Delivery on each platform
-On Android and iOS reminders SHALL be delivered when the app is closed, and on Android also after the device restarts, including the reminders of scheduled templates whose entries have not been generated yet. On the desktop app reminders SHALL be delivered only while the app is running, as a system notification, or as a message inside the app when the system cannot show one. When the app is opened again it SHALL work out the next reminder from the current time and MUST NOT show the ones that were missed.
+On Android and iOS reminders SHALL be delivered when the app is closed, and on Android also after the device restarts, including the reminders of scheduled templates whose entries have not been generated yet. On the desktop app reminders SHALL be delivered for as long as the app is running, including while its window is closed and it stays in the tray, as a system notification, or as a message inside the app when the system cannot show one. When the app is started again it SHALL work out the next reminder from the current time and MUST NOT show the ones that were missed.
 
 #### Scenario: Phone with the app closed
 - **WHEN** a reminder is due while the app is closed on Android or iOS
@@ -174,8 +182,12 @@ On Android and iOS reminders SHALL be delivered when the app is closed, and on A
 - **THEN** they still fire at their times
 
 #### Scenario: Desktop closed
-- **WHEN** a reminder is due while the desktop app is not running
-- **THEN** nothing is shown, and when the app is opened the next time is used
+- **WHEN** a reminder is due while the desktop app is not running because the user chose Quit or never started it
+- **THEN** nothing is shown, and when the app is started the next time is used
+
+#### Scenario: Desktop window closed
+- **WHEN** a reminder is due while the desktop window is closed and the app is in the tray
+- **THEN** a notification shows the task's name
 
 #### Scenario: Desktop running
 - **WHEN** a reminder is due while the desktop app is running
