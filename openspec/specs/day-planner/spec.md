@@ -56,7 +56,7 @@ The Today list SHALL show only entries assigned for the current calendar day on 
 
 #### Scenario: Empty Today
 - **WHEN** nothing is assigned for today
-- **THEN** the Today screen shows an empty state with a way to add a task
+- **THEN** the Today screen shows "Nothing planned for today. Tap + to add a task." and no separate button for adding a task, because the + button is on screen
 
 ### Requirement: Entry completes with its last subtask
 An entry with subtasks SHALL be shown as completed exactly when all its subtasks are completed, and as in progress while some but not all are.
@@ -356,3 +356,14 @@ While the Add to today picker's search field has focus, the on-screen keyboard S
 #### Scenario: Tapping the field
 - **WHEN** the user taps the search field after putting the keyboard away
 - **THEN** it takes focus and the keyboard is shown again
+
+### Requirement: The picker leads to the Templates screen when there are no templates
+When there are no task templates, the Add to today picker SHALL show its message about creating a template first together with a Take me there button. Pressing it SHALL close the picker, show the Templates screen on its Tasks tab and open the form to create a task template. With at least one template the picker MUST NOT show the button.
+
+#### Scenario: Take me there
+- **WHEN** no task templates exist, the user opens the Add to today picker and presses Take me there
+- **THEN** the picker closes, the Templates screen is shown on its Tasks tab and the form to create a task template is open
+
+#### Scenario: Templates exist
+- **WHEN** the user opens the Add to today picker with task templates
+- **THEN** the picker shows no Take me there button

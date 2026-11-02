@@ -19,7 +19,11 @@ The app SHALL provide a Shop screen that lists all reward templates grouped by t
 
 #### Scenario: Empty shop
 - **WHEN** no reward templates exist
-- **THEN** the shop shows an empty state that points to creating rewards on the Templates screen
+- **THEN** the shop shows "The shop is empty." with a Take me there button under it
+
+#### Scenario: Take me there
+- **WHEN** no reward templates exist and the user presses Take me there
+- **THEN** the Templates screen is shown on its Rewards tab and the form to create a reward template is open
 
 ### Requirement: Affordability
 The app SHALL treat a reward as affordable when the balance after paying its price would be no lower than the debt limit of minus 500 coins, and MUST NOT allow redeeming one that is not. For a reward that is not affordable it SHALL show how many more coins are needed to bring the balance back to the limit.
