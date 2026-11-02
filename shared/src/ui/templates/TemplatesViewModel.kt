@@ -75,6 +75,19 @@ class TemplatesViewModel(
         reorderRequested.value = on
     }
 
+    private val _createRequested = MutableStateFlow(false)
+
+    /** Whether another screen asked for the form to create a template; stays set until the Tasks tab opens it. Not saved. */
+    val createRequested: StateFlow<Boolean> = _createRequested
+
+    fun requestCreate() {
+        _createRequested.value = true
+    }
+
+    fun consumeCreateRequest() {
+        _createRequested.value = false
+    }
+
     fun moveUp(id: String) = move(id, -1)
 
     fun moveDown(id: String) = move(id, 1)

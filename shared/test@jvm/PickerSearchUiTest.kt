@@ -115,7 +115,7 @@ class PickerSearchUiTest {
         waitForIdle()
         onNodeWithText("Search tasks").assertDoesNotExist()
         onNodeWithText("Dishes").assertExists()
-        onNodeWithText("Nothing planned for today.").assertDoesNotExist()
+        onNodeWithText("Nothing planned for today. Tap + to add a task.").assertDoesNotExist()
     }
 
     @Test

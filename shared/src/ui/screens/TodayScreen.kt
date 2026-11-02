@@ -105,6 +105,8 @@ fun TodayScreen(
     historyViewModel: HistoryViewModel,
     modifier: Modifier = Modifier,
     pagerState: PagerState = rememberPagerState { 2 },
+    /** Shows the Templates screen with the form to create a task template, for a user who has none. */
+    onTakeMeToTemplates: () -> Unit = {},
 ) {
     val scope = rememberCoroutineScope()
     Column(modifier) {
@@ -121,13 +123,13 @@ fun TodayScreen(
             )
         }
         HorizontalPager(state = pagerState, modifier = Modifier.fillMaxSize()) { page ->
-            if (page == 0) TodayList(viewModel) else HistoryScreen(historyViewModel)
+            if (page == 0) TodayList(viewModel, onTakeMeToTemplates) else HistoryScreen(historyViewModel)
         }
     }
 }
 
 @Composable
-private fun TodayList(viewModel: TodayViewModel, modifier: Modifier = Modifier) {
+private fun TodayList(viewModel: TodayViewModel, onTakeMeToTemplates: () -> Unit, modifier: Modifier = Modifier) {
     val entries by viewModel.entries.collectAsStateWithLifecycle()
     val templates by viewModel.templates.collectAsStateWithLifecycle()
     val randomizer by viewModel.randomizer.collectAsStateWithLifecycle()
@@ -164,6 +166,7 @@ private fun TodayList(viewModel: TodayViewModel, modifier: Modifier = Modifier) 
             save = viewModel::saveReminder,
             clear = viewModel::clearReminder,
         ),
+        onTakeMeToTemplates = onTakeMeToTemplates,
         modifier = modifier,
     )
 }
@@ -201,6 +204,8 @@ fun TodayContent(
     onChooseAnotherEnergy: () -> Unit = {},
     onDismissRandomizer: () -> Unit = {},
     reminders: ReminderActions = ReminderActions.None,
+    /** Called from the picker when there are no task templates; the picker closes first. */
+    onTakeMeToTemplates: () -> Unit = {},
 ) {
     var picking by remember { mutableStateOf(false) }
     var optionsFor by remember { mutableStateOf<String?>(null) }
@@ -227,8 +232,7 @@ fun TodayContent(
                 verticalArrangement = Arrangement.spacedBy(16.dp),
                 modifier = Modifier.align(Alignment.Center).padding(32.dp),
             ) {
-                Text("Nothing planned for today.", style = MaterialTheme.typography.bodyLarge)
-                Button(onClick = { picking = true }) { Text("Add a task") }
+                Text("Nothing planned for today. Tap + to add a task.", style = MaterialTheme.typography.bodyLarge)
             }
         } else {
             LazyColumn(state = listState, contentPadding = PaddingValues(bottom = 88.dp)) {
@@ -294,6 +298,7 @@ fun TodayContent(
             templates = templates,
             onPick = { onAssign(it); picking = false },
             onRoll = onRollTemplate,
+            onTakeMeThere = { picking = false; onTakeMeToTemplates() },
             onDismiss = { picking = false },
         )
     }
@@ -463,6 +468,7 @@ private fun TemplatePickerDialog(
     templates: List<TaskTemplate>,
     onPick: (TaskTemplate) -> Unit,
     onRoll: (shown: List<TaskTemplate>, previousId: String?) -> TaskTemplate?,
+    onTakeMeThere: () -> Unit,
     onDismiss: () -> Unit,
 ) {
     // The query, the energy filter and the roll live in the sheet, so they start empty every time it opens.
@@ -540,6 +546,7 @@ private fun TemplatePickerDialog(
     ) {
         if (templates.isEmpty()) {
             Text("You have no task templates yet. Create one on the Templates tab first.")
+            Button(onClick = onTakeMeThere, modifier = Modifier.padding(top = 12.dp)) { Text("Take me there") }
         } else if (shown.isEmpty()) {
             Text(noMatchMessage(query.trim(), energy))
         } else {

@@ -35,6 +35,7 @@ import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
@@ -113,6 +114,7 @@ fun TaskTemplatesScreen(viewModel: TemplatesViewModel, modifier: Modifier = Modi
     val visible by viewModel.visible.collectAsStateWithLifecycle()
     val query by viewModel.query.collectAsStateWithLifecycle()
     val reordering by viewModel.reordering.collectAsStateWithLifecycle()
+    val createRequested by viewModel.createRequested.collectAsStateWithLifecycle()
     TemplatesContent(
         templates = visible,
         totalCount = templates.size,
@@ -126,6 +128,8 @@ fun TaskTemplatesScreen(viewModel: TemplatesViewModel, modifier: Modifier = Modi
         modifier = modifier,
         today = Clock.System.todayIn(TimeZone.currentSystemDefault()),
         canAlarm = viewModel.canAlarm,
+        createRequested = createRequested,
+        onCreateRequestConsumed = viewModel::consumeCreateRequest,
     )
 }
 
@@ -149,9 +153,19 @@ fun TemplatesContent(
     reordering: Boolean = false,
     onMoveUp: (id: String) -> Unit = {},
     onMoveDown: (id: String) -> Unit = {},
+    /** Another screen asked for the create form: it opens once and [onCreateRequestConsumed] clears the request. */
+    createRequested: Boolean = false,
+    onCreateRequestConsumed: () -> Unit = {},
 ) {
     // null = closed; a template with a blank id = creating; otherwise editing that template
     var editing by remember { mutableStateOf<TaskTemplate?>(null) }
+
+    LaunchedEffect(createRequested) {
+        if (createRequested) {
+            editing = TaskTemplate("", "", Tier.One, Energy.Medium)
+            onCreateRequestConsumed()
+        }
+    }
 
     Box(modifier.fillMaxSize()) {
         if (totalCount == 0) {

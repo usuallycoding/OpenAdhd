@@ -251,7 +251,7 @@ class HistoryUiTest {
     fun `the Today screen starts on Today and swiping and tapping change the tab`() = runComposeUiTest {
         setContent { App(container(historyStore())) }
         todayTab().assertIsSelected()
-        onNodeWithText("Nothing planned for today.").assertExists()
+        onNodeWithText("Nothing planned for today. Tap + to add a task.").assertExists()
 
         swipeContentRight()
         todayTab().assertIsSelected()

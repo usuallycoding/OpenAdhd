@@ -56,7 +56,7 @@ class AppUiTest {
         setContent { App(AppContainer(InMemoryStore(), dateCheckInterval = null)) }
 
         // starts on Today, empty, balance 0
-        onNodeWithText("Nothing planned for today.").assertExists()
+        onNodeWithText("Nothing planned for today. Tap + to add a task.").assertExists()
         onNodeWithContentDescription("Dopamine coins").assertExists()
 
         // Templates: blank name is rejected, then a real template is created
@@ -73,7 +73,7 @@ class AppUiTest {
 
         // Today: add it, complete it, balance becomes 10
         onNodeWithText("Today").performClick()
-        onNodeWithText("Add a task").performClick()
+        onNodeWithContentDescription("Add task to today").performClick()
         onNodeWithText("Reply to emails").performClick()
         onNodeWithText("Tier 2 · Medium energy · +10 coins").assertExists()
         onNode(isToggleable()).performClick()
@@ -97,7 +97,7 @@ class AppUiTest {
         onNodeWithText("Tier 3 · Medium energy · 3 subtasks").assertExists()
 
         onNodeWithText("Today").performClick()
-        onNodeWithText("Add a task").performClick()
+        onNodeWithContentDescription("Add task to today").performClick()
         onNodeWithText("Clean the kitchen").performClick()
 
         onNodeWithText("Whole room").assertExists()
@@ -290,7 +290,58 @@ class AppUiTest {
     fun `the shop explains when there are no rewards`() = runComposeUiTest {
         setContent { App(AppContainer(InMemoryStore(), dateCheckInterval = null)) }
         onNodeWithText("Shop").performClick()
-        onNodeWithText("The shop is empty. Add rewards on the Templates screen, in the Rewards tab.").assertExists()
+        onNodeWithText("The shop is empty.").assertExists()
+    }
+
+    @Test
+    fun `take me there from the shop opens the reward form on the Rewards tab once`() = runComposeUiTest {
+        setContent { App(AppContainer(InMemoryStore(), dateCheckInterval = null)) }
+        onNodeWithText("Shop").performClick()
+        onNodeWithText("Take me there").performClick()
+        waitForIdle()
+
+        onNodeWithText("Rewards").assertIsSelected()
+        onNodeWithText("New reward").assertExists()
+
+        onNodeWithText("Cancel").performClick()
+        waitForIdle()
+        onNodeWithText("New reward").assertDoesNotExist()
+
+        onNodeWithText("Today").performClick()
+        onNodeWithText("Templates").performClick()
+        waitForIdle()
+        onNodeWithText("New reward").assertDoesNotExist()
+    }
+
+    @Test
+    fun `take me there from the picker opens the task form on the Tasks tab once`() = runComposeUiTest {
+        setContent { App(AppContainer(InMemoryStore(), dateCheckInterval = null)) }
+        onNodeWithContentDescription("Add task to today").performClick()
+        onNodeWithText("Take me there").performClick()
+        waitForIdle()
+
+        onNodeWithText("Tasks").assertIsSelected()
+        onNodeWithText("New task").assertExists()
+        onNodeWithText("You have no task templates yet. Create one on the Templates tab first.").assertDoesNotExist()
+
+        onNodeWithText("Cancel").performClick()
+        waitForIdle()
+        onNodeWithText("New task").assertDoesNotExist()
+
+        onNodeWithText("Today").performClick()
+        onNodeWithText("Templates").performClick()
+        waitForIdle()
+        onNodeWithText("New task").assertDoesNotExist()
+    }
+
+    @Test
+    fun `the picker offers no take me there button when templates exist`() = runComposeUiTest {
+        val store = InMemoryStore().also { runBlocking { it.create("Dishes", Tier.One, Energy.Low) } }
+        setContent { App(AppContainer(store, dateCheckInterval = null)) }
+        onNodeWithContentDescription("Add task to today").performClick()
+
+        onNodeWithText("Dishes").assertExists()
+        onNodeWithText("Take me there").assertDoesNotExist()
     }
 
     // ---- mystery rolls
@@ -505,10 +556,11 @@ class AppUiTest {
     }
 
     @Test
-    fun `an empty day offers add a task but no pick one for me button`() = runComposeUiTest {
+    fun `an empty day points at the plus button and has no add a task button`() = runComposeUiTest {
         setContent { App(randomizerContent(InMemoryStore())) }
 
-        onNodeWithText("Add a task").assertExists()
+        onNodeWithText("Nothing planned for today. Tap + to add a task.").assertExists()
+        onNodeWithText("Add a task").assertDoesNotExist()
         onNodeWithText("Pick one for me").assertDoesNotExist()
         onNodeWithContentDescription("Pick one for me").performClick()
         onNodeWithText("There is nothing left to pick today. Add a task with the + button.").assertExists()

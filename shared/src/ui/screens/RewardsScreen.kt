@@ -22,6 +22,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -54,6 +55,7 @@ fun RewardsScreen(viewModel: RewardTemplatesViewModel, modifier: Modifier = Modi
     val visible by viewModel.visible.collectAsStateWithLifecycle()
     val query by viewModel.query.collectAsStateWithLifecycle()
     val reordering by viewModel.reordering.collectAsStateWithLifecycle()
+    val createRequested by viewModel.createRequested.collectAsStateWithLifecycle()
     RewardsContent(
         rewards = visible,
         totalCount = rewards.size,
@@ -65,6 +67,8 @@ fun RewardsScreen(viewModel: RewardTemplatesViewModel, modifier: Modifier = Modi
         onSave = viewModel::save,
         onDelete = viewModel::delete,
         modifier = modifier,
+        createRequested = createRequested,
+        onCreateRequestConsumed = viewModel::consumeCreateRequest,
     )
 }
 
@@ -82,9 +86,19 @@ fun RewardsContent(
     reordering: Boolean = false,
     onMoveUp: (id: String) -> Unit = {},
     onMoveDown: (id: String) -> Unit = {},
+    /** Another screen asked for the create form: it opens once and [onCreateRequestConsumed] clears the request. */
+    createRequested: Boolean = false,
+    onCreateRequestConsumed: () -> Unit = {},
 ) {
     // null = closed; a reward with a blank id = creating; otherwise editing that reward
     var editing by remember { mutableStateOf<RewardTemplate?>(null) }
+
+    LaunchedEffect(createRequested) {
+        if (createRequested) {
+            editing = RewardTemplate("", "", RewardTier.One, Energy.Low)
+            onCreateRequestConsumed()
+        }
+    }
 
     Box(modifier.fillMaxSize()) {
         if (totalCount == 0) {

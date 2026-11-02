@@ -52,6 +52,7 @@ import com.usuallycoding.openadhd.ui.theme.TodayIcon
 import com.usuallycoding.openadhd.ui.history.HistoryViewModel
 import com.usuallycoding.openadhd.ui.today.TodayViewModel
 import com.usuallycoding.openadhd.ui.wallet.WalletViewModel
+import kotlinx.coroutines.launch
 import org.jetbrains.compose.reload.DevelopmentEntryPoint
 
 private enum class Destination(val label: String, val icon: ImageVector) {
@@ -100,6 +101,7 @@ fun App(container: AppContainer) {
     val todayPager = rememberPagerState { 2 }
     val templatesPager = rememberPagerState { 2 }
     val shopPager = rememberPagerState { 2 }
+    val scope = rememberCoroutineScope()
 
     // A tapped reminder notification asks for its entry: show Today with that entry scrolled to and highlighted.
     LaunchedEffect(container) {
@@ -200,9 +202,23 @@ fun App(container: AppContainer) {
         ) { innerPadding ->
             val screenModifier = Modifier.padding(innerPadding)
             when (destination) {
-                Destination.Today -> TodayScreen(todayViewModel, historyViewModel, screenModifier, todayPager)
+                Destination.Today -> TodayScreen(
+                    todayViewModel, historyViewModel, screenModifier, todayPager,
+                    onTakeMeToTemplates = {
+                        destination = Destination.Templates
+                        scope.launch { templatesPager.scrollToPage(0) }
+                        templatesViewModel.requestCreate()
+                    },
+                )
                 Destination.Templates -> TemplatesScreen(templatesViewModel, rewardTemplatesViewModel, screenModifier, templatesPager)
-                Destination.Shop -> ShopScreen(shopViewModel, rewardHistoryViewModel, screenModifier, shopPager)
+                Destination.Shop -> ShopScreen(
+                    shopViewModel, rewardHistoryViewModel, screenModifier, shopPager,
+                    onTakeMeToRewards = {
+                        destination = Destination.Templates
+                        scope.launch { templatesPager.scrollToPage(1) }
+                        rewardTemplatesViewModel.requestCreate()
+                    },
+                )
                 Destination.Settings -> SettingsScreen(settingsViewModel, screenModifier)
             }
         }

@@ -213,4 +213,15 @@ class ViewModelsTest {
         assertTrue(events.isEmpty())
         today.viewModelScope.cancel()
     }
+
+    @Test
+    fun `a create request stays set until it is consumed`() {
+        val vm = TemplatesViewModel(store)
+        assertFalse(vm.createRequested.value)
+        vm.requestCreate()
+        assertTrue(vm.createRequested.value)
+        vm.consumeCreateRequest()
+        assertFalse(vm.createRequested.value)
+        vm.viewModelScope.cancel()
+    }
 }

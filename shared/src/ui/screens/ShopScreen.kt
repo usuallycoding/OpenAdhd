@@ -1,5 +1,6 @@
 package com.usuallycoding.openadhd.ui.screens
 
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -66,6 +67,8 @@ fun ShopScreen(
     historyViewModel: RewardHistoryViewModel,
     modifier: Modifier = Modifier,
     pagerState: PagerState = rememberPagerState { 2 },
+    /** Shows the Templates screen with the form to create a reward template, for a user who has none. */
+    onTakeMeToRewards: () -> Unit = {},
 ) {
     val shelves by viewModel.shelves.collectAsStateWithLifecycle()
     val date by historyViewModel.date.collectAsStateWithLifecycle()
@@ -90,6 +93,7 @@ fun ShopScreen(
         onPreviousDay = historyViewModel::previousDay,
         onNextDay = historyViewModel::nextDay,
         onPickDay = historyViewModel::pickDay,
+        onTakeMeToRewards = onTakeMeToRewards,
     )
 }
 
@@ -108,6 +112,7 @@ fun ShopContent(
     onPreviousDay: () -> Unit = {},
     onNextDay: () -> Unit = {},
     onPickDay: (LocalDate) -> Unit = {},
+    onTakeMeToRewards: () -> Unit = {},
 ) {
     val scope = rememberCoroutineScope()
     Column(modifier) {
@@ -124,7 +129,7 @@ fun ShopContent(
             )
         }
         HorizontalPager(state = pagerState, modifier = Modifier.fillMaxSize()) { page ->
-            if (page == 0) ShelvesList(shelves, rollOptions, balance, onRedeem, onRoll) else HistoryList(history, onPreviousDay, onNextDay, onPickDay)
+            if (page == 0) ShelvesList(shelves, rollOptions, balance, onRedeem, onRoll, onTakeMeToRewards) else HistoryList(history, onPreviousDay, onNextDay, onPickDay)
         }
     }
 
@@ -138,17 +143,21 @@ private fun ShelvesList(
     balance: Int,
     onRedeem: (String, String) -> Unit,
     onRoll: (RewardTier, String) -> Unit,
+    onTakeMeToRewards: () -> Unit,
 ) {
     var confirming by remember { mutableStateOf<RewardTemplate?>(null) }
     var rolling by remember { mutableStateOf<RollOption?>(null) }
 
     if (shelves.isEmpty()) {
         Box(Modifier.fillMaxSize()) {
-            Text(
-                "The shop is empty. Add rewards on the Templates screen, in the Rewards tab.",
-                style = MaterialTheme.typography.bodyLarge,
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(16.dp),
                 modifier = Modifier.align(Alignment.Center).padding(32.dp),
-            )
+            ) {
+                Text("The shop is empty.", style = MaterialTheme.typography.bodyLarge)
+                Button(onClick = onTakeMeToRewards) { Text("Take me there") }
+            }
         }
     } else {
         LazyColumn(contentPadding = PaddingValues(bottom = 24.dp)) {

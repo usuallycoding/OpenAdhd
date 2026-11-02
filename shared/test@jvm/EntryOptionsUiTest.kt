@@ -208,7 +208,7 @@ class EntryOptionsUiTest {
 
         assertTrue(entries().isEmpty())
         onNodeWithText("Delete task").assertDoesNotExist()
-        onNodeWithText("Nothing planned for today.").assertExists()
+        onNodeWithText("Nothing planned for today. Tap + to add a task.").assertExists()
     }
 
     @Test

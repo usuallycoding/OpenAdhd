@@ -277,4 +277,15 @@ class RewardViewModelsTest {
         assertEquals(1, rolling.redemptions.first().size)
         vm.viewModelScope.cancel()
     }
+
+    @Test
+    fun `a create request stays set until it is consumed`() {
+        val vm = RewardTemplatesViewModel(store)
+        assertFalse(vm.createRequested.value)
+        vm.requestCreate()
+        assertTrue(vm.createRequested.value)
+        vm.consumeCreateRequest()
+        assertFalse(vm.createRequested.value)
+        vm.viewModelScope.cancel()
+    }
 }
