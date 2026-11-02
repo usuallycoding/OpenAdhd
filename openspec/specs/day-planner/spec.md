@@ -343,7 +343,7 @@ While the Add to today picker's search field has focus, the on-screen keyboard S
 
 #### Scenario: Scrolling the results
 - **WHEN** the keyboard is shown in the picker and the user scrolls the list
-- **THEN** the keyboard is hidden
+- **THEN** the keyboard is hidden and the picker stays open
 
 #### Scenario: Tapping the no-match message
 - **WHEN** the keyboard is shown, nothing matches the text, and the user taps the message in the list area
