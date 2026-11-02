@@ -30,8 +30,8 @@ class TemplateRemindersTest {
         lastGenerated: LocalDate? = null,
     ) = TaskTemplate(id, "Water plants", Tier.One, Energy.Low, schedule = schedule, reminder = reminder, lastGenerated = lastGenerated)
 
-    private fun plan(vararg templates: TaskTemplate, stopHour: Int = 22, at: Instant = now) =
-        TemplateReminders.plan(templates.toList(), today, stopHour, at, zone)
+    private fun plan(vararg templates: TaskTemplate, stopMinute: Int = 22 * 60, at: Instant = now) =
+        TemplateReminders.plan(templates.toList(), today, stopMinute, at, zone)
 
     private fun days(reminders: List<com.usuallycoding.openadhd.domain.UpcomingReminder>): List<String> =
         reminders.map { it.entryId.substringAfterLast(':') }
@@ -88,15 +88,22 @@ class TemplateRemindersTest {
     }
 
     @Test
-    fun `the stop hour cuts the repeats and past times are skipped`() {
+    fun `the stop time cuts the repeats and past times are skipped`() {
         val repeating = template(reminder = TemplateReminder(9 * 60, repeatMinutes = 60))
-        val tomorrow = plan(repeating, stopHour = 12).first()
+        val tomorrow = plan(repeating, stopMinute = 12 * 60).first()
         assertEquals(listOf("09:00", "10:00", "11:00"), tomorrow.times.map { ReminderRules.clock(it, zone) })
 
         val afternoon = Instant.parse("2026-10-23T10:30:00Z")
-        val todays = plan(repeating, stopHour = 12, at = afternoon).first()
+        val todays = plan(repeating, stopMinute = 12 * 60, at = afternoon).first()
         assertEquals("template:t:2026-10-23", todays.entryId)
         assertEquals(listOf("11:00"), todays.times.map { ReminderRules.clock(it, zone) })
+    }
+
+    @Test
+    fun `a stop time with minutes cuts the repeats of a template reminder`() {
+        val repeating = template(reminder = TemplateReminder(9 * 60, repeatMinutes = 30))
+        val tomorrow = plan(repeating, stopMinute = 10 * 60 + 15).first()
+        assertEquals(listOf("09:00", "09:30", "10:00"), tomorrow.times.map { ReminderRules.clock(it, zone) })
     }
 
     @Test
@@ -107,9 +114,9 @@ class TemplateRemindersTest {
 
     @Test
     fun `the number of planned days follows the platform`() {
-        assertEquals(7, TemplateReminders.plan(listOf(template()), today, 22, Instant.parse("2026-10-23T07:00:00Z"), zone).size)
-        assertEquals(3, TemplateReminders.plan(listOf(template()), today, 22, Instant.parse("2026-10-23T07:00:00Z"), zone, days = 3).size)
-        val thirty = TemplateReminders.plan(listOf(template()), today, 22, Instant.parse("2026-10-23T07:00:00Z"), zone, days = 30)
+        assertEquals(7, TemplateReminders.plan(listOf(template()), today, 22 * 60, Instant.parse("2026-10-23T07:00:00Z"), zone).size)
+        assertEquals(3, TemplateReminders.plan(listOf(template()), today, 22 * 60, Instant.parse("2026-10-23T07:00:00Z"), zone, days = 3).size)
+        val thirty = TemplateReminders.plan(listOf(template()), today, 22 * 60, Instant.parse("2026-10-23T07:00:00Z"), zone, days = 30)
         assertEquals(30, thirty.size)
         assertEquals("template:t:2026-11-21", thirty.last().entryId)
     }

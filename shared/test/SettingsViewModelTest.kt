@@ -60,6 +60,33 @@ class SettingsViewModelTest {
     }
 
     @Test
+    fun `the stop time shows as hours and minutes and a time with minutes can be saved`() = runTest {
+        val vm = SettingsViewModel(store)
+        assertEquals("22:00", vm.row(SettingKey.ReminderStopHour).value)
+        assertEquals("22:00", vm.row(SettingKey.ReminderStopHour).defaultLabel)
+
+        var result: String? = "unset"
+        vm.save(SettingKey.ReminderStopHour, "22:30") { result = it }
+        assertNull(result)
+        assertEquals("22:30", vm.row(SettingKey.ReminderStopHour).valueLabel)
+        assertFalse(vm.row(SettingKey.ReminderStopHour).isDefault)
+
+        vm.restore(SettingKey.ReminderStopHour)
+        assertEquals("22:00", vm.row(SettingKey.ReminderStopHour).value)
+        vm.viewModelScope.cancel()
+    }
+
+    @Test
+    fun `a stop time of midnight is refused and changes nothing`() = runTest {
+        val vm = SettingsViewModel(store)
+        var result: String? = null
+        vm.save(SettingKey.ReminderStopHour, "00:00") { result = it }
+        assertEquals("Stop reminders at must be between 00:01 and 23:59", result)
+        assertEquals("22:00", vm.row(SettingKey.ReminderStopHour).value)
+        vm.viewModelScope.cancel()
+    }
+
+    @Test
     fun `the theme shows its label as value and default`() = runTest {
         val vm = SettingsViewModel(store)
         assertEquals("Follow system theme", vm.row(SettingKey.Theme).valueLabel)

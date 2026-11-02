@@ -10,6 +10,8 @@ import com.usuallycoding.openadhd.domain.PlannedTask
 import com.usuallycoding.openadhd.domain.Redemption
 import com.usuallycoding.openadhd.domain.Reminder
 import com.usuallycoding.openadhd.domain.ReminderKind
+import com.usuallycoding.openadhd.domain.SettingKey
+import com.usuallycoding.openadhd.domain.Settings
 import com.usuallycoding.openadhd.domain.RedemptionSource
 import com.usuallycoding.openadhd.domain.RewardTemplate
 import com.usuallycoding.openadhd.domain.RewardTier
@@ -102,6 +104,22 @@ class BackupJsonTest {
         assertTrue(text.contains("debt_limit"))
         assertFalse(text.contains("subtask_ceiling"))
         assertEquals(mapOf("debt_limit" to "300"), valid(text).state.overrides)
+    }
+
+    @Test
+    fun `a backup with a stop hour from an earlier version imports as that time`() {
+        val text = BackupJson.encode(StoreState(), at).replace("\"settings\": {}", "\"settings\": {\"reminder_stop_hour\": \"18\"}")
+        val overrides = valid(text).state.overrides
+        assertEquals(mapOf("reminder_stop_hour" to "18:00"), overrides)
+        assertEquals(18 * 60, Settings.fromOverrides(overrides).reminderStopMinute)
+    }
+
+    @Test
+    fun `a stop time with minutes is written and read back`() {
+        val state = StoreState(overrides = Settings.Default.with(SettingKey.ReminderStopHour, "22:30").overrides)
+        val text = BackupJson.encode(state, at)
+        assertTrue(text.contains("\"reminder_stop_hour\": \"22:30\""))
+        assertEquals(22 * 60 + 30, Settings.fromOverrides(valid(text).state.overrides).reminderStopMinute)
     }
 
     @Test

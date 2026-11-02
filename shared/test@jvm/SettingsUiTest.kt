@@ -69,7 +69,37 @@ class SettingsUiTest {
         onNodeWithText("Luck").assertExists()
         onNode(hasScrollAction()).performScrollToNode(hasText("Stop reminders at"))
         onNodeWithText("Reminders").assertExists()
-        onNodeWithText("22").assertExists()
+        onNodeWithText("22:00").assertExists()
+    }
+
+    @Test
+    fun `the stop time opens a clock and cancelling keeps it`() = runComposeUiTest {
+        openSettings()
+        onNode(hasScrollAction()).performScrollToNode(hasText("Stop reminders at"))
+        onNodeWithText("22:00").assertExists()
+
+        onNodeWithText("Stop reminders at").performClick()
+        onNodeWithText("OK").assertExists()
+        onNodeWithText("Cancel").performClick()
+
+        onNodeWithText("OK").assertDoesNotExist()
+        onNodeWithText("22:00").assertExists()
+    }
+
+    @Test
+    fun `the clock starts at the saved stop time and OK saves it`() = runComposeUiTest {
+        val store = InMemoryStore()
+        runBlocking { store.saveSetting(SettingKey.ReminderStopHour, "22:30") }
+        openSettings(store)
+        onNode(hasScrollAction()).performScrollToNode(hasText("Stop reminders at"))
+        onNodeWithText("22:30").assertExists()
+
+        onNodeWithText("Stop reminders at").performClick()
+        onNodeWithText("OK").performClick()
+
+        onNodeWithText("OK").assertDoesNotExist()
+        onNodeWithText("22:30").assertExists()
+        assertEquals("22:30", runBlocking { store.settings.first() }.text(SettingKey.ReminderStopHour))
     }
 
     @Test

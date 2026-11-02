@@ -3,6 +3,7 @@ package com.usuallycoding.openadhd
 import androidx.compose.ui.test.ComposeUiTest
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.hasScrollAction
+import androidx.compose.ui.test.getBoundsInRoot
 import androidx.compose.ui.test.onLast
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.onNodeWithContentDescription
@@ -46,6 +47,20 @@ class TemplateScheduleUiTest {
     }
 
     private fun ComposeUiTest.tap(text: String) = onNodeWithText(text).performClick()
+
+    @Test
+    fun `the schedule options are listed as None Daily Weekly Date Period with None chosen`() = runComposeUiTest {
+        openTemplates(InMemoryStore())
+        onNodeWithContentDescription("Add template").performClick()
+        onAllNodes(hasScrollAction()).onLast().performScrollToNode(hasText("Period"))
+
+        val options = listOf("None", "Daily", "Weekly", "Date", "Period")
+        val bounds = options.associateWith { onNodeWithText(it).getBoundsInRoot() }
+        // Reading order: higher on the screen first, then further left.
+        val inReadingOrder = options.sortedWith(compareBy({ bounds.getValue(it).top }, { bounds.getValue(it).left }))
+        assertEquals(options, inReadingOrder)
+        onNodeWithText("Only when you add it by hand.").assertExists()
+    }
 
     @Test
     fun `a weekly template is saved with the chosen days and listed with them`() = runComposeUiTest {

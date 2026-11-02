@@ -1814,13 +1814,13 @@ abstract class StoreContractTest {
         store.create("Daily", Tier.One, Energy.Low, schedule = everyDay, reminder = TemplateReminder(9 * 60, 30))
         val entry = store.generateDue(today, TimeZone.UTC).single()
         val now = Instant.parse("2026-10-23T14:10:00Z")
-        val next = ReminderRules.upcoming(entry.reminder!!, today, 22, now, TimeZone.UTC).first()
+        val next = ReminderRules.upcoming(entry.reminder!!, today, 22 * 60, now, TimeZone.UTC).first()
         assertEquals(Instant.parse("2026-10-23T14:30:00Z"), next)
 
         val once = newStore(clock)
         once.create("Daily", Tier.One, Energy.Low, schedule = everyDay, reminder = TemplateReminder(9 * 60, null))
         val single = once.generateDue(today, TimeZone.UTC).single()
-        assertTrue(ReminderRules.upcoming(single.reminder!!, today, 22, now, TimeZone.UTC).isEmpty())
+        assertTrue(ReminderRules.upcoming(single.reminder!!, today, 22 * 60, now, TimeZone.UTC).isEmpty())
     }
 
     @Test
@@ -1873,8 +1873,8 @@ abstract class StoreContractTest {
         val now = Instant.parse("2026-10-23T14:10:00Z")
         val repeating = store.assign(store.create("A", Tier.One, Energy.Low, reminder = TemplateReminder(9 * 60, 30)), today, TimeZone.UTC)
         val once = store.assign(store.create("B", Tier.One, Energy.Low, reminder = TemplateReminder(9 * 60, null)), today, TimeZone.UTC)
-        assertEquals(Instant.parse("2026-10-23T14:30:00Z"), ReminderRules.upcoming(repeating.reminder!!, today, 22, now, TimeZone.UTC).first())
-        assertTrue(ReminderRules.upcoming(once.reminder!!, today, 22, now, TimeZone.UTC).isEmpty())
+        assertEquals(Instant.parse("2026-10-23T14:30:00Z"), ReminderRules.upcoming(repeating.reminder!!, today, 22 * 60, now, TimeZone.UTC).first())
+        assertTrue(ReminderRules.upcoming(once.reminder!!, today, 22 * 60, now, TimeZone.UTC).isEmpty())
     }
 
     @Test

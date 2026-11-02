@@ -23,12 +23,12 @@ object TemplateReminders {
     /**
      * For each of the [days] days from [today], the reminder of every template that is due that day, has a reminder and has not
      * generated that day's entry. A generated entry, even one the user has since deleted, brings its own reminder instead.
-     * Times follow [ReminderRules.upcoming], so the stop hour and the rule that past times never fire apply.
+     * Times follow [ReminderRules.upcoming], so the stop time and the rule that past times never fire apply.
      */
     fun plan(
         templates: List<TaskTemplate>,
         today: LocalDate,
-        stopHour: Int,
+        stopMinute: Int,
         now: Instant,
         zone: TimeZone,
         days: Int = Days,
@@ -41,7 +41,7 @@ object TemplateReminders {
                 .mapNotNull { template ->
                     val reminder = template.reminder ?: return@mapNotNull null
                     val start = ReminderRules.at(date, reminder.hour, reminder.minute, zone)
-                    val times = ReminderRules.upcoming(Reminder(start, reminder.repeatMinutes, reminder.kind), date, stopHour, now, zone)
+                    val times = ReminderRules.upcoming(Reminder(start, reminder.repeatMinutes, reminder.kind), date, stopMinute, now, zone)
                     if (times.isEmpty()) null else UpcomingReminder(id(template.id, date), template.name, times, reminder.kind)
                 }
         }

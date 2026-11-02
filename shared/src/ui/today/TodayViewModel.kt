@@ -198,12 +198,12 @@ class TodayViewModel(
     /** Whether this platform offers alarms, so the sheet offers the Notification / Alarm choice. */
     val canAlarm: Boolean = reminders?.supportsAlarms == true
 
-    private val reminderStopHour: StateFlow<Int> =
-        store.settings.map { it.reminderStopHour }.stateIn(viewModelScope, SharingStarted.Eagerly, Settings.Default.reminderStopHour)
+    private val reminderStopMinute: StateFlow<Int> =
+        store.settings.map { it.reminderStopMinute }.stateIn(viewModelScope, SharingStarted.Eagerly, Settings.Default.reminderStopMinute)
 
     /** In 30 minutes, In 1 hour and This evening, measured from now, with the ones that cannot work marked. */
     fun reminderPresets(): List<ReminderPreset> =
-        ReminderRules.presets(clock.now(), today.value, reminderStopHour.value, timeZone)
+        ReminderRules.presets(clock.now(), today.value, reminderStopMinute.value, timeZone)
 
     /** The instant of [hour]:[minute] today, for a time picked on the clock. */
     fun reminderStartAt(hour: Int, minute: Int): Instant = ReminderRules.at(today.value, hour, minute, timeZone)
@@ -223,7 +223,7 @@ class TodayViewModel(
         kind: ReminderKind = ReminderKind.Notification,
         onResult: (ReminderSaveResult) -> Unit,
     ) {
-        val problem = ReminderRules.check(start, clock.now(), today.value, reminderStopHour.value, timeZone)
+        val problem = ReminderRules.check(start, clock.now(), today.value, reminderStopMinute.value, timeZone)
         if (problem != null) return onResult(ReminderSaveResult.Refused(problem.message))
         viewModelScope.launch {
             if (!store.setReminder(entryId, Reminder(start, repeatMinutes, kind))) {

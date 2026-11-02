@@ -466,7 +466,7 @@ private fun TemplateDialog(
 
 /** How a template is added to Today, as the form offers it. */
 private enum class ScheduleMode(val label: String) {
-    None("None"), Date("Date"), Weekly("Weekly"), Period("Period"), Daily("Daily");
+    None("None"), Daily("Daily"), Weekly("Weekly"), Date("Date"), Period("Period");
 
     companion object {
         fun of(schedule: TaskSchedule): ScheduleMode = when (schedule) {

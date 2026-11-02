@@ -63,23 +63,59 @@ class SettingsTest {
     }
 
     @Test
-    fun `the reminder stop hour defaults to 22 and accepts 1 to 23`() {
-        assertEquals(22, defaults.reminderStopHour)
-        assertEquals("22", defaults.text(SettingKey.ReminderStopHour))
-        assertEquals(1, accepted(SettingKey.ReminderStopHour, "1").reminderStopHour)
-        assertEquals(23, accepted(SettingKey.ReminderStopHour, "23").reminderStopHour)
-        assertEquals("Stop reminders at must be between 1 and 23", refusal(SettingKey.ReminderStopHour, "24"))
-        assertEquals("Stop reminders at must be between 1 and 23", refusal(SettingKey.ReminderStopHour, "0"))
-        assertEquals("Enter a whole number", refusal(SettingKey.ReminderStopHour, "late"))
+    fun `the reminder stop time defaults to 22 00`() {
+        assertEquals(22 * 60, defaults.reminderStopMinute)
+        assertEquals("22:00", defaults.text(SettingKey.ReminderStopHour))
+        assertEquals("22:00", SettingKey.ReminderStopHour.display(defaults.text(SettingKey.ReminderStopHour)))
     }
 
     @Test
-    fun `a saved stop hour is read back from the overrides and leaves the rules alone`() {
+    fun `the reminder stop time accepts hours and minutes`() {
+        assertEquals(22 * 60 + 30, accepted(SettingKey.ReminderStopHour, "22:30").reminderStopMinute)
+        assertEquals(7 * 60 + 5, accepted(SettingKey.ReminderStopHour, "7:05").reminderStopMinute)
+        assertEquals(1, accepted(SettingKey.ReminderStopHour, "00:01").reminderStopMinute)
+        assertEquals(23 * 60 + 59, accepted(SettingKey.ReminderStopHour, " 23:59 ").reminderStopMinute)
+        assertEquals("22:30", accepted(SettingKey.ReminderStopHour, "22:30").text(SettingKey.ReminderStopHour))
+    }
+
+    @Test
+    fun `a plain hour from an earlier version is read as that hour`() {
+        assertEquals(60, accepted(SettingKey.ReminderStopHour, "1").reminderStopMinute)
+        assertEquals(22 * 60, accepted(SettingKey.ReminderStopHour, "22").reminderStopMinute)
+        assertEquals(23 * 60, accepted(SettingKey.ReminderStopHour, "23").reminderStopMinute)
+        assertEquals("18:00", accepted(SettingKey.ReminderStopHour, "18").text(SettingKey.ReminderStopHour))
+        assertEquals("18:00", SettingKey.ReminderStopHour.display("18"))
+    }
+
+    @Test
+    fun `midnight and values that are not a time of day are refused`() {
+        val range = "Stop reminders at must be between 00:01 and 23:59"
+        assertEquals(range, refusal(SettingKey.ReminderStopHour, "00:00"))
+        assertEquals(range, refusal(SettingKey.ReminderStopHour, "0"))
+        assertEquals(range, refusal(SettingKey.ReminderStopHour, "24"))
+        assertEquals(range, refusal(SettingKey.ReminderStopHour, "25:00"))
+        assertEquals(range, refusal(SettingKey.ReminderStopHour, "22:60"))
+        assertEquals("Enter a time, such as 22:30", refusal(SettingKey.ReminderStopHour, "late"))
+        assertEquals("Enter a time, such as 22:30", refusal(SettingKey.ReminderStopHour, ""))
+        assertEquals("Enter a time, such as 22:30", refusal(SettingKey.ReminderStopHour, "22:5"))
+    }
+
+    @Test
+    fun `a saved stop time is read back from the overrides and leaves the rules alone`() {
         val settings = Settings.fromOverrides(mapOf("reminder_stop_hour" to "18"))
-        assertEquals(18, settings.reminderStopHour)
+        assertEquals(18 * 60, settings.reminderStopMinute)
         assertEquals(GameRules.Default, settings.rules)
-        assertEquals(mapOf("reminder_stop_hour" to "18"), settings.overrides)
-        assertEquals(22, Settings.fromOverrides(mapOf("reminder_stop_hour" to "30")).reminderStopHour)
+        // The value is written from now on as hours and minutes.
+        assertEquals(mapOf("reminder_stop_hour" to "18:00"), settings.overrides)
+        assertEquals(mapOf("reminder_stop_hour" to "22:30"), Settings.fromOverrides(mapOf("reminder_stop_hour" to "22:30")).overrides)
+        assertEquals(emptyMap(), Settings.fromOverrides(mapOf("reminder_stop_hour" to "22")).overrides)
+    }
+
+    @Test
+    fun `a stored stop time that is not valid is ignored`() {
+        for (bad in listOf("30", "24", "0", "00:00", "25:00", "late", "")) {
+            assertEquals(22 * 60, Settings.fromOverrides(mapOf("reminder_stop_hour" to bad)).reminderStopMinute, bad)
+        }
     }
 
     @Test

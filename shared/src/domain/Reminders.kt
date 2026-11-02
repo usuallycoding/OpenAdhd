@@ -30,8 +30,8 @@ sealed interface ReminderProblem {
         override val message = "A reminder must be set for today"
     }
 
-    data class AfterStop(val stopHour: Int) : ReminderProblem {
-        override val message = "Reminders stop at ${stopHour.toString().padStart(2, '0')}:00, so choose an earlier time"
+    data class AfterStop(val stopMinute: Int) : ReminderProblem {
+        override val message = "Reminders stop at ${ReminderStop.format(stopMinute)}, so choose an earlier time"
     }
 }
 
@@ -47,35 +47,35 @@ object ReminderRules {
 
     const val EveningHour = 18
 
-    /** The moment reminders stop on [date]: [stopHour] o'clock in [zone]. Nothing fires at or after it. */
-    fun stopInstant(date: LocalDate, stopHour: Int, zone: TimeZone): Instant =
-        LocalDateTime(date, LocalTime(stopHour, 0)).toInstant(zone)
+    /** The moment reminders stop on [date]: [stopMinute] minutes after midnight in [zone]. Nothing fires at or after it. */
+    fun stopInstant(date: LocalDate, stopMinute: Int, zone: TimeZone): Instant =
+        LocalDateTime(date, LocalTime(stopMinute / 60, stopMinute % 60)).toInstant(zone)
 
     /** What is wrong with starting a reminder at [start] on [date], or null when it can be saved. */
-    fun check(start: Instant, now: Instant, date: LocalDate, stopHour: Int, zone: TimeZone): ReminderProblem? = when {
+    fun check(start: Instant, now: Instant, date: LocalDate, stopMinute: Int, zone: TimeZone): ReminderProblem? = when {
         start <= now -> ReminderProblem.Passed
         start.toLocalDateTime(zone).date != date -> ReminderProblem.NotToday
-        start >= stopInstant(date, stopHour, zone) -> ReminderProblem.AfterStop(stopHour)
+        start >= stopInstant(date, stopMinute, zone) -> ReminderProblem.AfterStop(stopMinute)
         else -> null
     }
 
     /** In 30 minutes, In 1 hour and This evening, each marked unavailable when it could not be saved now. */
-    fun presets(now: Instant, date: LocalDate, stopHour: Int, zone: TimeZone): List<ReminderPreset> {
+    fun presets(now: Instant, date: LocalDate, stopMinute: Int, zone: TimeZone): List<ReminderPreset> {
         val thisMinute = Instant.fromEpochMilliseconds(now.toEpochMilliseconds() / 60_000 * 60_000)
         val evening = LocalDateTime(date, LocalTime(EveningHour, 0)).toInstant(zone)
         return listOf(
             "In 30 minutes" to thisMinute + 30.minutes,
             "In 1 hour" to thisMinute + 60.minutes,
             "This evening" to evening,
-        ).map { (label, start) -> ReminderPreset(label, start, check(start, now, date, stopHour, zone) == null) }
+        ).map { (label, start) -> ReminderPreset(label, start, check(start, now, date, stopMinute, zone) == null) }
     }
 
     /**
      * Every time [reminder] still has to fire for an entry of [date]: its start and each repeat after it that is
      * later than [now] and earlier than the stop time. Times already past are never included.
      */
-    fun upcoming(reminder: Reminder, date: LocalDate, stopHour: Int, now: Instant, zone: TimeZone): List<Instant> {
-        val stop = stopInstant(date, stopHour, zone)
+    fun upcoming(reminder: Reminder, date: LocalDate, stopMinute: Int, now: Instant, zone: TimeZone): List<Instant> {
+        val stop = stopInstant(date, stopMinute, zone)
         val times = mutableListOf<Instant>()
         var time = reminder.startAt
         val step = reminder.repeatMinutes?.takeIf { it > 0 }?.minutes

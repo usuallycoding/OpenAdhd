@@ -84,9 +84,9 @@ class ReminderCoordinator(
                 combine(
                     store.entriesFor(date),
                     store.templates,
-                    store.settings.map { it.reminderStopHour }.distinctUntilChanged(),
-                ) { entries, templates, stopHour ->
-                    upcoming(date, entries, stopHour) + TemplateReminders.plan(templates, date, stopHour, clock.now(), zone, scheduler.planDays)
+                    store.settings.map { it.reminderStopMinute }.distinctUntilChanged(),
+                ) { entries, templates, stopMinute ->
+                    upcoming(date, entries, stopMinute) + TemplateReminders.plan(templates, date, stopMinute, clock.now(), zone, scheduler.planDays)
                 }
             }
             .distinctUntilChanged()
@@ -94,13 +94,13 @@ class ReminderCoordinator(
     }
 
     /** The reminders of the pending entries of [date] that still have a time to fire, measured from now. */
-    fun upcoming(date: LocalDate, entries: List<PlannedTask>, stopHour: Int): List<UpcomingReminder> {
+    fun upcoming(date: LocalDate, entries: List<PlannedTask>, stopMinute: Int): List<UpcomingReminder> {
         val now = clock.now()
         return entries
             .filter { !it.isCompleted }
             .mapNotNull { entry ->
                 val reminder = entry.reminder ?: return@mapNotNull null
-                val times = ReminderRules.upcoming(reminder, date, stopHour, now, zone)
+                val times = ReminderRules.upcoming(reminder, date, stopMinute, now, zone)
                 if (times.isEmpty()) null else UpcomingReminder(entry.id, entry.name, times, reminder.kind)
             }
     }

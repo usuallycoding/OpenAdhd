@@ -39,8 +39,8 @@ data class GameRules(
 data class Settings(
     val name: String = "",
     val rules: GameRules = GameRules.Default,
-    /** The hour of the day, 1 to 23, at which reminders stop for the day. */
-    val reminderStopHour: Int = 22,
+    /** The minute of the day, 1 to 1439 (00:01 to 23:59), at which reminders stop for the day. */
+    val reminderStopMinute: Int = ReminderStop.DefaultMinute,
     val themeMode: ThemeMode = ThemeMode.System,
     /** Whether Android 12+ takes the app's colors from the wallpaper; a platform without dynamic color ignores it. */
     val dynamicColor: Boolean = true,
@@ -70,7 +70,7 @@ data class Settings(
         SettingKey.CriticalOneIn -> rules.criticalOneIn.toString()
         SettingKey.CriticalMultiplier -> rules.criticalMultiplier.toString()
         SettingKey.UpgradeOneIn -> rules.upgradeOneIn.toString()
-        SettingKey.ReminderStopHour -> reminderStopHour.toString()
+        SettingKey.ReminderStopHour -> ReminderStop.format(reminderStopMinute)
         SettingKey.Theme -> themeMode.name
         SettingKey.DynamicColor -> if (dynamicColor) DynamicColorDynamic else DynamicColorApp
     }
@@ -80,8 +80,8 @@ data class Settings(
         if (key == SettingKey.Name) return copy(name = value)
         if (key == SettingKey.Theme) return copy(themeMode = ThemeMode.valueOf(value))
         if (key == SettingKey.DynamicColor) return copy(dynamicColor = value == DynamicColorDynamic)
+        if (key == SettingKey.ReminderStopHour) return copy(reminderStopMinute = ReminderStop.parse(value)!!)
         val number = value.toInt()
-        if (key == SettingKey.ReminderStopHour) return copy(reminderStopHour = number)
         fun <T> List<T>.set(index: Int, item: T) = toMutableList().also { it[index] = item }
         return copy(
             rules = when (key) {
@@ -136,6 +136,8 @@ enum class SettingKey(
     val group: SettingGroup,
     val range: IntRange?,
     val choices: List<String>? = null,
+    /** A time of day, chosen on a clock and stored as HH:mm (a plain hour from an earlier version is read as that hour). */
+    val isTime: Boolean = false,
 ) {
     Theme("theme", "Theme", SettingGroup.Appearance, null, ThemeMode.entries.map { it.name }),
     DynamicColor("dynamic_color", "Dynamic color", SettingGroup.Appearance, null, listOf(DynamicColorDynamic, DynamicColorApp)),
@@ -153,11 +155,12 @@ enum class SettingKey(
     CriticalOneIn("critical_one_in", "Critical hit chance, 1 in", SettingGroup.Luck, 2..1000),
     CriticalMultiplier("critical_multiplier", "Critical hit multiplier", SettingGroup.Luck, 2..10),
     UpgradeOneIn("upgrade_one_in", "Roll upgrade chance, 1 in", SettingGroup.Luck, 2..1000),
-    ReminderStopHour("reminder_stop_hour", "Stop reminders at", SettingGroup.Reminders, 1..23);
+    /** The time reminders stop at. Its name and storage key are from when it was an hour; it now holds a time of day. */
+    ReminderStopHour("reminder_stop_hour", "Stop reminders at", SettingGroup.Reminders, null, isTime = true);
 
     val isChoice: Boolean get() = choices != null
 
-    val isText: Boolean get() = range == null && choices == null
+    val isText: Boolean get() = range == null && choices == null && !isTime
 
     /** [text], a stored value of this setting, as the user reads it: a choice shows its label, an empty name "Not set". */
     fun display(text: String): String = when (this) {
@@ -167,11 +170,13 @@ enum class SettingKey(
             DynamicColorApp -> "App colors"
             else -> text
         }
+        ReminderStopHour -> ReminderStop.parse(text)?.let(ReminderStop::format) ?: text
         else -> text.ifEmpty { "Not set" }
     }
 
     /** What is wrong with [text] on its own (not a number, not a choice, out of range, name too long), or null. */
     fun problemWith(text: String): String? {
+        if (isTime) return ReminderStop.problemWith(text, label)
         if (choices != null) return if (text.trim() in choices) null else "Choose one of the options"
         val range = range ?: return if (text.trim().length > MaxNameLength) "The name can be at most $MaxNameLength characters" else null
         val number = text.trim().toIntOrNull() ?: return "Enter a whole number"
@@ -180,5 +185,43 @@ enum class SettingKey(
 
     companion object {
         const val MaxNameLength = 40
+    }
+}
+
+/**
+ * The time reminders stop at, in minutes after midnight. It is stored as text: HH:mm, or only an hour, which an earlier
+ * version wrote and which means that hour and 00 minutes. 00:00 is refused, so the range is 00:01 to 23:59.
+ */
+object ReminderStop {
+    const val DefaultMinute = 22 * 60
+
+    private val HourOnly = Regex("""\d{1,2}""")
+    private val HourAndMinute = Regex("""(\d{1,2}):(\d{2})""")
+
+    /** The minute of the day [text] stands for, or null when it is not a time from 00:01 to 23:59. */
+    fun parse(text: String): Int? {
+        val trimmed = text.trim()
+        val minute = if (HourOnly.matches(trimmed)) {
+            trimmed.toInt() * 60
+        } else {
+            val (hour, minutes) = HourAndMinute.matchEntire(trimmed)?.destructured ?: return null
+            if (minutes.toInt() > 59) return null
+            hour.toInt() * 60 + minutes.toInt()
+        }
+        return minute.takeIf { it in 1 until 24 * 60 }
+    }
+
+    /** [minute] as HH:mm. */
+    fun format(minute: Int): String = "${(minute / 60).toString().padStart(2, '0')}:${(minute % 60).toString().padStart(2, '0')}"
+
+    /** Why [text] cannot be the stop time, or null: not a time at all, or a time outside 00:01 to 23:59. */
+    fun problemWith(text: String, label: String): String? {
+        if (parse(text) != null) return null
+        val trimmed = text.trim()
+        return if (HourOnly.matches(trimmed) || HourAndMinute.matches(trimmed)) {
+            "$label must be between 00:01 and 23:59"
+        } else {
+            "Enter a time, such as 22:30"
+        }
     }
 }

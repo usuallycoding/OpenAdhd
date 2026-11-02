@@ -70,7 +70,7 @@ class DesktopAlarmKindUiTest {
         onAllNodes(hasScrollAction()).onLast().performScrollToNode(hasText(text))
     }
 
-    private fun preset(label: String) = ReminderRules.presets(clock.now(), today, 22, zone).first { it.label == label }
+    private fun preset(label: String) = ReminderRules.presets(clock.now(), today, 22 * 60, zone).first { it.label == label }
 
     @Test
     fun `the entry sheet offers notification and alarm with the current kind selected`() = runComposeUiTest {

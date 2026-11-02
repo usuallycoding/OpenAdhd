@@ -58,7 +58,7 @@ class EntryOptionsUiTest {
         onNodeWithContentDescription("Options for $name").performClick()
     }
 
-    private fun preset(label: String) = ReminderRules.presets(clock.now(), today, 22, zone).first { it.label == label }
+    private fun preset(label: String) = ReminderRules.presets(clock.now(), today, 22 * 60, zone).first { it.label == label }
 
     @Test
     fun `a pending entry shows the options button and no remove button`() = runComposeUiTest {

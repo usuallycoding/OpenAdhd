@@ -11,6 +11,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.ListItem
@@ -20,6 +21,8 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.TimePicker
+import androidx.compose.material3.rememberTimePickerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -37,6 +40,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.usuallycoding.openadhd.domain.ReminderStop
 import com.usuallycoding.openadhd.domain.formatCoins
 import com.usuallycoding.openadhd.domain.SettingKey
 import com.usuallycoding.openadhd.domain.ThemeMode
@@ -161,12 +165,53 @@ fun SettingsScreen(viewModel: SettingsViewModel, modifier: Modifier = Modifier) 
             )
             return@let
         }
+        if (row.key.isTime) {
+            TimeSettingDialog(
+                row = row,
+                onDismiss = { editing = null },
+                onSave = viewModel::save,
+            )
+            return@let
+        }
         SettingDialog(
             row = row,
             onDismiss = { editing = null },
             onSave = viewModel::save,
         )
     }
+}
+
+/** A setting that is a time of day, chosen on a 24-hour clock that starts at its current value. */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun TimeSettingDialog(
+    row: SettingRow,
+    onDismiss: () -> Unit,
+    onSave: (key: SettingKey, text: String, onResult: (String?) -> Unit) -> Unit,
+) {
+    val current = ReminderStop.parse(row.value) ?: ReminderStop.DefaultMinute
+    val picker = rememberTimePickerState(current / 60, current % 60, is24Hour = true)
+    var error by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(picker.hour, picker.minute) { error = null }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(row.key.label) },
+        text = {
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                TimePicker(state = picker)
+                error?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error) }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = {
+                onSave(row.key, ReminderStop.format(picker.hour * 60 + picker.minute)) { problem ->
+                    if (problem == null) onDismiss() else error = problem
+                }
+            }) { Text("OK") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+    )
 }
 
 @Composable
