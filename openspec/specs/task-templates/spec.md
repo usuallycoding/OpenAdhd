@@ -93,11 +93,15 @@ A template SHALL be able to hold an ordered, flat list of subtasks, each with a 
 - **THEN** a tier 4 template can have at most 6 subtasks, and a tier 1 template still at most 5
 
 ### Requirement: Template schedule
-A template SHALL have a schedule that decides on which days it is added to Today automatically: None, Date, Weekly, Period or Daily. None means the template is only added by hand and is the default.
+A template SHALL have a schedule that decides on which days it is added to Today automatically: None, Daily, Weekly, Date or Period, offered in that order in the template form. None means the template is only added by hand and is the default.
 
 #### Scenario: Default
 - **WHEN** the user creates a template without choosing a schedule
 - **THEN** its schedule is None
+
+#### Scenario: Order of the options
+- **WHEN** the user opens the template form
+- **THEN** the schedule options are listed as None, Daily, Weekly, Date, Period
 
 #### Scenario: Date
 - **WHEN** the user saves a template with the schedule Date and a chosen day

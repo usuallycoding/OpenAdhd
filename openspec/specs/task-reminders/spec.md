@@ -71,6 +71,10 @@ A reminder's start SHALL be later than the current time, on today's date, and ea
 - **WHEN** the stop time is 22:00 and the user picks 21:55 with every 30 minutes
 - **THEN** it is saved and fires once, at 21:55
 
+#### Scenario: Stop time with minutes
+- **WHEN** the stop time is 22:30 and the user picks 22:15 and saves, and then picks 22:30 and saves
+- **THEN** the first is saved, and the second is not and the sheet says reminders stop at 22:30
+
 ### Requirement: When a reminder fires
 A reminder SHALL fire at its start time and then at every repeat interval after it, as long as the entry is not completed and the time is earlier than the stop time from Settings. It MUST NOT fire on a later day, and times already past are never fired late, except on the desktop: a notification that came due while the computer was asleep is shown when it wakes if it is at most 2 minutes late, and an alarm that came due while it was asleep rings once when it wakes, as the desktop alarm rules say.
 
