@@ -243,9 +243,14 @@ class TodayViewModel(
         }
     }
 
-    /** Opens the system setting for full-screen alerts, from the message shown after saving an alarm. */
+    /** Opens the system page for what alarms need, from the message shown after saving an alarm without them. */
     fun openAlarmSettings() {
         reminders?.openAlarmSettings()
+    }
+
+    /** Opens the system page for notifications, from the message shown after saving a reminder with notifications off. */
+    fun openNotificationSettings() {
+        reminders?.openNotificationSettings()
     }
 
     fun clearReminder(entryId: String) {

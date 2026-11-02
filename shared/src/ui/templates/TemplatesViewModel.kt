@@ -31,6 +31,12 @@ import kotlinx.coroutines.launch
 
 enum class TemplateInputError { NameRequired, SubtaskTitleRequired, TooManySubtasks }
 
+/** The system settings page a [TemplateNotice] offers to open: where notifications are allowed, or what alarms need. */
+enum class SettingsTarget { Notifications, Alarms }
+
+/** A short message for the screen, with an action that opens a system settings page when [settings] says which. */
+data class TemplateNotice(val text: String, val settings: SettingsTarget? = null)
+
 class TemplatesViewModel(
     private val repository: TemplateRepository,
     settings: Flow<Settings> = flowOf(Settings.Default),
@@ -98,10 +104,10 @@ class TemplatesViewModel(
         if (moved != ids) viewModelScope.launch { repository.reorderTemplates(moved) }
     }
 
-    private val _notices = MutableSharedFlow<String>(extraBufferCapacity = 4)
+    private val _notices = MutableSharedFlow<TemplateNotice>(extraBufferCapacity = 4)
 
     /** Short messages for the screen, such as that notifications are off after saving a template reminder. */
-    val notices: SharedFlow<String> = _notices
+    val notices: SharedFlow<TemplateNotice> = _notices
 
     /**
      * Creates a template, or updates the one with [id]. Invalid input is ignored; check [validate] first
@@ -132,11 +138,11 @@ class TemplatesViewModel(
                 val notificationsAllowed = reminders.ensurePermission()
                 val alarmsAllowed = reminder.kind != ReminderKind.Alarm || reminders.ensureAlarmPermission()
                 if (!alarmsAllowed) {
-                    _notices.emit(AlarmsOff)
+                    _notices.emit(TemplateNotice(AlarmsOff, SettingsTarget.Alarms))
                 } else if (!notificationsAllowed) {
-                    _notices.emit(NotificationsOff)
+                    _notices.emit(TemplateNotice(NotificationsOff, SettingsTarget.Notifications))
                 } else if (reminder.kind == ReminderKind.Alarm && !reminders.fullScreenAlarmsAllowed()) {
-                    _notices.emit(FullScreenOff)
+                    _notices.emit(TemplateNotice(FullScreenOff, SettingsTarget.Alarms))
                 }
             }
         }

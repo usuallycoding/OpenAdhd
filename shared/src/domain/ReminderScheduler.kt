@@ -41,8 +41,21 @@ interface ReminderScheduler {
      */
     suspend fun ensureAlarmPermission(): Boolean = true
 
-    /** Opens the system setting where the user can allow full-screen alerts; nothing where there is none. */
+    /**
+     * Opens the system page where the user can allow what alarms need: the full-screen alerts setting on Android, the app's
+     * settings page on iOS, where alarms are allowed; nothing where there is none.
+     */
     fun openAlarmSettings() {}
+
+    /** Opens the system page where the user can allow notifications for the app; nothing where there is none, as on the desktop. */
+    fun openNotificationSettings() {}
+
+    /**
+     * Called each time the app returns to the front, for example from the system settings after the user turned notifications on.
+     * A platform that cannot keep what it armed while a permission was off arms it again here; the same arming as at start, so it is
+     * safe to repeat. Nothing by default, as on the desktop.
+     */
+    fun onAppResumed() {}
 
     /**
      * How many days from today the reminders of scheduled templates are planned for ([TemplateReminders]). A platform that can keep
@@ -61,6 +74,21 @@ interface ReminderScheduler {
      * the future is armed. Called again with the full list whenever anything changes.
      */
     fun replaceAll(upcoming: List<UpcomingReminder>)
+}
+
+/**
+ * The last plan a platform scheduler was handed, kept so it can be handed over again when the app returns to the front. There is
+ * none until the first one: an empty list is a plan (nothing is due), but "no plan yet" is not, and handing over an empty list
+ * then would remove what is already pending.
+ */
+class RememberedPlan {
+    /** The last plan, or null before the first. */
+    var last: List<UpcomingReminder>? = null
+        private set
+
+    fun remember(plan: List<UpcomingReminder>) {
+        last = plan
+    }
 }
 
 /**

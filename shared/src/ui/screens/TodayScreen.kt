@@ -163,6 +163,7 @@ private fun TodayList(viewModel: TodayViewModel, onTakeMeToTemplates: () -> Unit
             currentTime = viewModel::currentTime,
             supportsAlarms = viewModel.canAlarm,
             openAlarmSettings = viewModel::openAlarmSettings,
+            openNotificationSettings = viewModel::openNotificationSettings,
             save = viewModel::saveReminder,
             clear = viewModel::clearReminder,
         ),

@@ -16,6 +16,10 @@ class FakeReminderScheduler(
     var settingsOpened = 0
         private set
 
+    /** How many times the notification settings were asked for; [settingsOpened] counts the alarm settings. */
+    var notificationSettingsOpened = 0
+        private set
+
     val schedules = mutableListOf<List<UpcomingReminder>>()
     var permissionRequests = 0
         private set
@@ -35,6 +39,18 @@ class FakeReminderScheduler(
 
     override fun openAlarmSettings() {
         settingsOpened++
+    }
+
+    override fun openNotificationSettings() {
+        notificationSettingsOpened++
+    }
+
+    /** How many times the app told this scheduler it returned to the front. */
+    var resumes = 0
+        private set
+
+    override fun onAppResumed() {
+        resumes++
     }
 
     override fun hasPermission(): Boolean = granted

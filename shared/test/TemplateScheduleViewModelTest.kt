@@ -7,6 +7,8 @@ import com.usuallycoding.openadhd.domain.ScheduleProblem
 import com.usuallycoding.openadhd.domain.TaskSchedule
 import com.usuallycoding.openadhd.domain.TemplateReminder
 import com.usuallycoding.openadhd.domain.Tier
+import com.usuallycoding.openadhd.ui.templates.SettingsTarget
+import com.usuallycoding.openadhd.ui.templates.TemplateNotice
 import com.usuallycoding.openadhd.ui.templates.TemplatesViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -86,8 +88,8 @@ class TemplateReminderPermissionTest {
     @AfterTest
     fun tearDown() = Dispatchers.resetMain()
 
-    private fun notices(vm: TemplatesViewModel): MutableList<String> {
-        val seen = mutableListOf<String>()
+    private fun notices(vm: TemplatesViewModel): MutableList<TemplateNotice> {
+        val seen = mutableListOf<TemplateNotice>()
         vm.viewModelScope.launch(UnconfinedTestDispatcher()) { vm.notices.collect { seen += it } }
         return seen
     }
@@ -101,7 +103,7 @@ class TemplateReminderPermissionTest {
 
         assertEquals(1, scheduler.permissionRequests)
         assertEquals(TemplateReminder(540, 30), vm.templates.value.single().reminder)
-        assertEquals(listOf(TemplatesViewModel.NotificationsOff), seen)
+        assertEquals(listOf(TemplateNotice(TemplatesViewModel.NotificationsOff, SettingsTarget.Notifications)), seen)
     }
 
     @Test
@@ -163,7 +165,7 @@ class TemplateReminderPermissionTest {
         val vm = TemplatesViewModel(store, reminders = scheduler)
         val seen = notices(vm)
         vm.save(null, "Meds", Tier.One, Energy.Low, reminder = TemplateReminder(540, null, com.usuallycoding.openadhd.domain.ReminderKind.Alarm))
-        assertEquals(listOf(TemplatesViewModel.FullScreenOff), seen)
+        assertEquals(listOf(TemplateNotice(TemplatesViewModel.FullScreenOff, SettingsTarget.Alarms)), seen)
         assertEquals(1, vm.templates.value.size)
     }
 
@@ -188,7 +190,7 @@ class TemplateReminderPermissionTest {
         val vm = TemplatesViewModel(store, reminders = scheduler)
         val seen = notices(vm)
         vm.save(null, "Meds", Tier.One, Energy.Low, reminder = TemplateReminder(540, null, com.usuallycoding.openadhd.domain.ReminderKind.Alarm))
-        assertEquals(listOf(TemplatesViewModel.NotificationsOff), seen)
+        assertEquals(listOf(TemplateNotice(TemplatesViewModel.NotificationsOff, SettingsTarget.Notifications)), seen)
     }
 
     @Test
@@ -197,7 +199,7 @@ class TemplateReminderPermissionTest {
         val vm = TemplatesViewModel(store, reminders = scheduler)
         val seen = notices(vm)
         vm.save(null, "Meds", Tier.One, Energy.Low, reminder = TemplateReminder(540, null, com.usuallycoding.openadhd.domain.ReminderKind.Alarm))
-        assertEquals(listOf(TemplatesViewModel.AlarmsOff), seen)
+        assertEquals(listOf(TemplateNotice(TemplatesViewModel.AlarmsOff, SettingsTarget.Alarms)), seen)
         assertEquals(1, vm.templates.value.size)
         assertEquals(1, scheduler.alarmPermissionRequests)
     }

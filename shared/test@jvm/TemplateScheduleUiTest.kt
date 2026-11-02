@@ -158,6 +158,22 @@ class TemplateScheduleUiTest {
     }
 
     @Test
+    fun `the notifications notice has an action that opens the notification settings`() = runComposeUiTest {
+        val scheduler = FakeReminderScheduler(granted = false, grantsWhenAsked = false)
+        setContent { App(AppContainer(InMemoryStore(), dateCheckInterval = null, reminders = scheduler)) }
+        onNodeWithText("Templates").performClick()
+        onNodeWithContentDescription("Add template").performClick()
+        onNodeWithText("Name").performTextInput("Meds")
+        tap("Set a time")
+        tap("OK")
+        tap("Save")
+
+        tap("Open settings")
+        assertEquals(1, scheduler.notificationSettingsOpened)
+        assertEquals(0, scheduler.settingsOpened)
+    }
+
+    @Test
     fun `saving a template reminder with notifications allowed shows no notice`() = runComposeUiTest {
         val store = InMemoryStore()
         val scheduler = FakeReminderScheduler(granted = false, grantsWhenAsked = true)

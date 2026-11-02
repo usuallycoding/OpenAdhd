@@ -3,9 +3,14 @@ package com.usuallycoding.openadhd.data
 import com.usuallycoding.openadhd.domain.AlarmPlan
 import com.usuallycoding.openadhd.domain.EntryRequests
 import com.usuallycoding.openadhd.domain.ReminderScheduler
+import com.usuallycoding.openadhd.domain.RememberedPlan
 import com.usuallycoding.openadhd.domain.ScheduledTime
 import com.usuallycoding.openadhd.domain.UpcomingReminder
 import kotlinx.coroutines.suspendCancellableCoroutine
+import platform.Foundation.NSURL
+import platform.UIKit.UIApplication
+import platform.UIKit.UIApplicationOpenNotificationSettingsURLString
+import platform.UIKit.UIApplicationOpenSettingsURLString
 import platform.UserNotifications.UNAuthorizationOptionAlert
 import platform.UserNotifications.UNAuthorizationOptionSound
 import platform.UserNotifications.UNAuthorizationStatusAuthorized
@@ -22,6 +27,8 @@ import platform.UserNotifications.UNTimeIntervalNotificationTrigger
 import platform.UserNotifications.UNUserNotificationCenter
 import platform.UserNotifications.UNUserNotificationCenterDelegateProtocol
 import platform.darwin.NSObject
+import platform.darwin.dispatch_async
+import platform.darwin.dispatch_get_main_queue
 import kotlin.coroutines.resume
 import kotlin.time.Clock
 
@@ -37,22 +44,57 @@ class IosReminderScheduler(
 ) : ReminderScheduler {
     private val center = UNUserNotificationCenter.currentNotificationCenter()
     private var authorized = false
-    private var lastUpcoming: List<UpcomingReminder> = emptyList()
+    private val plan = RememberedPlan()
 
     /** UIKit keeps its delegate weakly, so it is held here. It makes a notification show as a banner while the app is open. */
     private val delegate = ForegroundDelegate(requests)
 
     init {
         center.delegate = delegate
-        center.getNotificationSettingsWithCompletionHandler { settings ->
-            val status = settings?.authorizationStatus
-            authorized = status == UNAuthorizationStatusAuthorized || status == UNAuthorizationStatusProvisional
-        }
+        refreshAuthorization {}
     }
 
     override val supportsAlarms: Boolean = true
 
+    /** The app's Notifications page in Settings (iOS 15.4 and later, else the app's settings page, which lists them too). */
+    override fun openNotificationSettings() {
+        open(UIApplicationOpenNotificationSettingsURLString)
+    }
+
+    /** The app's settings page, where the Alarms permission is. */
+    override fun openAlarmSettings() {
+        open(UIApplicationOpenSettingsURLString)
+    }
+
+    /** Opens [address] in Settings; an address that cannot be opened is ignored. */
+    private fun open(address: String?) {
+        val url = (address ?: UIApplicationOpenSettingsURLString).let { NSURL.URLWithString(it) } ?: return
+        UIApplication.sharedApplication.openURL(url, options = emptyMap<Any?, Any?>(), completionHandler = null)
+    }
+
     override fun hasPermission(): Boolean = authorized
+
+    /** Reads whether notifications are allowed now, which the user may have changed in Settings, and then calls [onDone]. */
+    private fun refreshAuthorization(onDone: () -> Unit) {
+        center.getNotificationSettingsWithCompletionHandler { settings ->
+            val status = settings?.authorizationStatus
+            authorized = status == UNAuthorizationStatusAuthorized || status == UNAuthorizationStatusProvisional
+            onDone()
+        }
+    }
+
+    /**
+     * iOS does not keep a notification that was scheduled while notifications were off, and AlarmKit may have been allowed since, so on
+     * return the permission is read again and the last plan is handed over again. Before the first plan there is nothing to hand over,
+     * and an empty list would remove what is pending ([RememberedPlan]).
+     */
+    override fun onAppResumed() {
+        refreshAuthorization {
+            dispatch_async(dispatch_get_main_queue()) {
+                plan.last?.let { replaceAll(it) }
+            }
+        }
+    }
 
     override suspend fun ensurePermission(): Boolean = suspendCancellableCoroutine { continuation ->
         // Answers at once without a prompt when the user has already decided.
@@ -70,12 +112,12 @@ class IosReminderScheduler(
             bridge.requestAuthorization { granted -> if (continuation.isActive) continuation.resume(granted) }
         }
         // The reminder was saved before the answer, so it was handed over as a notification: route it again.
-        if (allowed) replaceAll(lastUpcoming)
+        if (allowed) plan.last?.let { replaceAll(it) }
         return allowed
     }
 
     override fun replaceAll(upcoming: List<UpcomingReminder>) {
-        lastUpcoming = upcoming
+        plan.remember(upcoming)
         val bridge = alarmBridge()
         val items = upcoming.flatMap { reminder ->
             reminder.times.map { ScheduledTime(reminder.entryId, reminder.text, it.toEpochMilliseconds(), reminder.kind) }

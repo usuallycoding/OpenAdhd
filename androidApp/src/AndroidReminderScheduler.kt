@@ -47,6 +47,27 @@ class AndroidReminderScheduler(private val activity: ComponentActivity) : Remind
         }
     }
 
+    /** The app's notification page, where the user allows notifications; before Android 8, which has none, the app's details page. */
+    override fun openNotificationSettings() {
+        val settings = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)
+        } else {
+            Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:${context.packageName}"))
+        }.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        try {
+            activity.startActivity(settings)
+        } catch (_: ActivityNotFoundException) {
+        }
+    }
+
+    /**
+     * Arms the kept plan again, as after a restart, whenever the app returns to the front, for example from the notification settings.
+     * Idempotent: a time that is already armed is only updated.
+     */
+    override fun onAppResumed() {
+        ReminderAlarms.topUpSafely(context)
+    }
+
     override fun hasPermission(): Boolean {
         val allowed = Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU ||
             context.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED

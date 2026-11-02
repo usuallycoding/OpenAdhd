@@ -213,6 +213,15 @@ class ReminderViewModelTest {
     }
 
     @Test
+    fun `opening the notification settings goes to the scheduler`() = runTest {
+        val scheduler = FakeReminderScheduler()
+        viewModel(scheduler).openNotificationSettings()
+        assertEquals(1, scheduler.notificationSettingsOpened)
+        assertEquals(0, scheduler.settingsOpened)
+        viewModel(null).openNotificationSettings()
+    }
+
+    @Test
     fun `a refused alarm permission saves the alarm and says alarms are off`() = runTest {
         val scheduler = FakeReminderScheduler(supportsAlarms = true, alarmsAllowed = false)
         val vm = viewModel(scheduler)

@@ -40,8 +40,10 @@ class ReminderActions(
     val clear: (entryId: String) -> Unit,
     /** Whether the Notification / Alarm choice is offered; false where only notifications exist, as on the desktop. */
     val supportsAlarms: Boolean = false,
-    /** Opens the system setting for full-screen alerts, offered after an alarm is saved without them. */
+    /** Opens the system page for what alarms need: full-screen alerts on Android, the app's settings on iOS. Offered after an alarm is saved without them. */
     val openAlarmSettings: () -> Unit = {},
+    /** Opens the system page where the user allows notifications for the app, offered after a reminder is saved with them off. */
+    val openNotificationSettings: () -> Unit = {},
 ) {
     companion object {
         val None = ReminderActions(
@@ -133,6 +135,7 @@ internal fun EntrySheet(
                     "Notifications are turned off for OpenAdhd. Turn them on in your device's settings to get reminders.",
                     color = MaterialTheme.colorScheme.error,
                 )
+                TextButton(onClick = reminders.openNotificationSettings) { Text("Open settings") }
             }
 
             if (alarmsOff) {
@@ -140,6 +143,7 @@ internal fun EntrySheet(
                     "Alarms are turned off for OpenAdhd, so this reminder will be shown as a notification. Turn them on in your device's settings.",
                     color = MaterialTheme.colorScheme.error,
                 )
+                TextButton(onClick = reminders.openAlarmSettings) { Text("Open settings") }
             }
             if (fullScreenOff) {
                 Text(

@@ -199,6 +199,21 @@ class EntryOptionsUiTest {
     }
 
     @Test
+    fun `the notifications off message has a button that opens the notification settings`() = runComposeUiTest {
+        val scheduler = FakeReminderScheduler(granted = false, grantsWhenAsked = false)
+        entry()
+        show(scheduler)
+        openOptions()
+        onNodeWithText("Open settings").assertDoesNotExist()
+        onNodeWithText("In 30 minutes").performClick()
+        onNodeWithText("Save reminder").performClick()
+
+        onNodeWithText("Open settings").performClick()
+        assertEquals(1, scheduler.notificationSettingsOpened)
+        assertEquals(0, scheduler.settingsOpened)
+    }
+
+    @Test
     fun `delete task removes the entry and closes the sheet`() = runComposeUiTest {
         entry()
         show()

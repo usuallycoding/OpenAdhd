@@ -254,6 +254,25 @@ class AlarmKindUiTest {
         onNodeWithText(com.usuallycoding.openadhd.ui.templates.TemplatesViewModel.FullScreenOff).assertExists()
     }
 
+    @Test
+    fun `the full screen notice has an action that opens the alarm settings`() = runComposeUiTest {
+        val scheduler = FakeReminderScheduler(supportsAlarms = true, fullScreenAllowed = false)
+        show(alarms = true, scheduler = scheduler)
+        onNodeWithText("Templates").performClick()
+        onNodeWithContentDescription("Add template").performClick()
+        onNodeWithText("Name").performTextInput("Meds")
+        onNodeWithText("Set a time").performClick()
+        onNodeWithText("OK").performClick()
+        reveal("Alarm")
+        onNodeWithText("Alarm").performClick()
+        onNodeWithText("Save").performClick()
+        waitForIdle()
+
+        onNodeWithText("Open settings").performClick()
+        assertEquals(1, scheduler.settingsOpened)
+        assertEquals(0, scheduler.notificationSettingsOpened)
+    }
+
     private val alarmsOffMessage = "Alarms are turned off for OpenAdhd, so this reminder will be shown as a notification. Turn them on in your device's settings."
 
     @Test
@@ -267,6 +286,22 @@ class AlarmKindUiTest {
         waitForIdle()
         assertEquals(ReminderKind.Alarm, entries().single().reminder?.kind)
         onNodeWithText(alarmsOffMessage).assertExists()
+    }
+
+    @Test
+    fun `the alarms off message has a button that opens the alarm settings`() = runComposeUiTest {
+        entry()
+        val scheduler = FakeReminderScheduler(supportsAlarms = true, alarmsAllowed = false)
+        show(alarms = true, scheduler = scheduler)
+        onNodeWithContentDescription("Options for Clean the kitchen").performClick()
+        onNodeWithText("In 30 minutes").performClick()
+        onNodeWithText("Alarm").performClick()
+        onNodeWithText("Save reminder").performClick()
+        waitForIdle()
+
+        onNodeWithText("Open settings").performClick()
+        assertEquals(1, scheduler.settingsOpened)
+        assertEquals(0, scheduler.notificationSettingsOpened)
     }
 
     @Test

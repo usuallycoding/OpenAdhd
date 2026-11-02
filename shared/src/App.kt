@@ -13,7 +13,9 @@ import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.*
@@ -24,6 +26,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.usuallycoding.openadhd.domain.formatCoins
@@ -41,6 +44,7 @@ import com.usuallycoding.openadhd.ui.rewards.RewardTemplatesViewModel
 import com.usuallycoding.openadhd.ui.settings.SettingsViewModel
 import com.usuallycoding.openadhd.ui.shop.RewardHistoryViewModel
 import com.usuallycoding.openadhd.ui.shop.ShopViewModel
+import com.usuallycoding.openadhd.ui.templates.SettingsTarget
 import com.usuallycoding.openadhd.ui.templates.TemplatesViewModel
 import com.usuallycoding.openadhd.ui.theme.AppTheme
 import com.usuallycoding.openadhd.ui.theme.CoinIcon
@@ -89,6 +93,13 @@ fun App(container: AppContainer) {
     // Adds the entries of scheduled templates to Today when the app starts, when the date changes and when a template changes.
     LaunchedEffect(container) {
         ScheduledEntries(container.store, todayViewModel.today).run()
+    }
+
+    // When the app returns to the front, for example from the system settings after notifications were turned on, the platform arms
+    // its reminders again: one saved while notifications were off must fire without restarting the app.
+    LifecycleResumeEffect(container) {
+        container.reminders?.onAppResumed()
+        onPauseOrDispose {}
     }
 
     // Keeps the platform's notifications equal to the reminders in the store, for as long as the app is shown.
@@ -154,7 +165,21 @@ fun App(container: AppContainer) {
     }
 
     LaunchedEffect(templatesViewModel) {
-        templatesViewModel.notices.collect { text -> snackbarHostState.showSnackbar(text) }
+        templatesViewModel.notices.collect { notice ->
+            // A notice that points at a system page has an action for it, which keeps the snackbar up long enough to press.
+            val result = snackbarHostState.showSnackbar(
+                message = notice.text,
+                actionLabel = if (notice.settings != null) "Open settings" else null,
+                duration = if (notice.settings != null) SnackbarDuration.Long else SnackbarDuration.Short,
+            )
+            if (result == SnackbarResult.ActionPerformed) {
+                when (notice.settings) {
+                    SettingsTarget.Notifications -> container.reminders?.openNotificationSettings()
+                    SettingsTarget.Alarms -> container.reminders?.openAlarmSettings()
+                    null -> {}
+                }
+            }
+        }
     }
 
     LaunchedEffect(todayViewModel) {
