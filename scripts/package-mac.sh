@@ -6,7 +6,7 @@ root=$(cd "$(dirname "$0")/.." && pwd)
 dist="$root/dist"
 work="$root/build/package-mac"
 name=OpenAdhd
-version=1.0.0
+version=1.0.1
 mainClass=com.usuallycoding.openadhd.MainKt
 jar=$root/build/tasks/_desktopApp_executableJarJvm/desktopApp-jvm-executable.jar
 

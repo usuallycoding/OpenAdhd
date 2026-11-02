@@ -11,8 +11,8 @@ settings:
   android:
     namespace: com.usuallycoding.openadhd
     applicationId: com.usuallycoding.openadhd
-    versionName: 1.0.0
-    versionCode: 1
+    versionName: 1.0.1
+    versionCode: 2
     signing:
       enabled: true
       propertiesFile: ../secret/android-signing.properties
