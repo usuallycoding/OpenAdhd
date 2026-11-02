@@ -13,11 +13,16 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.SheetValue
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
 
@@ -35,17 +40,28 @@ fun FormSheet(
     onDismiss: () -> Unit,
     header: (@Composable ColumnScope.() -> Unit)? = null,
     /**
-     * Puts the keyboard away when the body is tapped or scrolled. Off by default: a form's body holds text fields,
-     * and a tap on one of them must not clear the focus it has just taken. Meant for a sheet whose search field is
-     * in the [header] and whose body only lists results.
+     * Takes focus out of the field, which puts the keyboard away, when the body is tapped or scrolled. Off by default:
+     * a form's body holds text fields, and a tap on one of them must not clear the focus it has just taken. Meant for
+     * a sheet whose search field is in the [header] and whose body only lists results. Whatever this is set to, a
+     * downward scroll on the body while the keyboard is open puts away only the keyboard and leaves the sheet open.
      */
     dismissKeyboardOnBodyInteraction: Boolean = false,
     footer: @Composable RowScope.(requestClose: () -> Unit) -> Unit,
     content: @Composable ColumnScope.() -> Unit,
 ) {
-    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    val focus = LocalFocusManager.current
+    val keyboard = LocalSoftwareKeyboardController.current
+    val keyboardShowing by rememberKeyboardShowing()
+    // While the keyboard is showing the sheet refuses to move to Hidden and puts the keyboard away instead, so a swipe on
+    // its title or footer, or a tap on the dimmed area, closes only the keyboard.
+    val gate = remember(focus, keyboard) { SheetDismissGate({ keyboardShowing }, { focus.putKeyboardAway(keyboard) }) }
+    val sheetState = rememberModalBottomSheetState(
+        skipPartiallyExpanded = true,
+        confirmValueChange = { target -> gate.allows(movingToHidden = target == SheetValue.Hidden) },
+    )
     val scope = rememberCoroutineScope()
     val requestClose: () -> Unit = {
+        gate.closing = true
         scope.launch { sheetState.hide() }.invokeOnCompletion { onDismiss() }
     }
 
@@ -67,6 +83,7 @@ fun FormSheet(
                 verticalArrangement = Arrangement.spacedBy(12.dp),
                 modifier = Modifier
                     .weight(1f, fill = false)
+                    .putKeyboardAwayOnScroll()
                     .then(if (dismissKeyboardOnBodyInteraction) Modifier.dismissKeyboardOnTapOrScroll() else Modifier)
                     .verticalScroll(rememberScrollState())
                     .padding(horizontal = 24.dp, vertical = 8.dp),
