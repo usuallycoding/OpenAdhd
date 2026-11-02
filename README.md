@@ -21,10 +21,11 @@ Use the run configurations provided by the run widget in your IDE's toolbar. You
 
 ### Packaging (for your own use)
 
-Two scripts leave their results in `dist/` (ignored by git):
+Three scripts leave their results in `dist/` (ignored by git):
 
 - macOS: `scripts/package-mac.sh` builds `OpenAdhd.app` and `OpenAdhd.dmg`, with its own Java runtime. It needs a JDK 25 or newer with `jpackage`: it uses `JAVA_HOME` if that is one, otherwise the JDK the Kotlin toolchain downloaded. The app is not signed, so the first time, right-click it and choose Open. Your data stays in `~/.openadhd/` when you replace the app.
 - Android: `scripts/package-android.sh` builds the release `OpenAdhd.apk`, signed with your own key from `secret/`, and prints its certificate. Install it with `adb install -r dist/OpenAdhd.apk`, or copy it to the phone. The script stops with a message if the key is missing and never builds a debug APK instead.
+- iOS: `scripts/package-ios.sh` builds the release app for a real iPhone and zips it, **unsigned**, as `OpenAdhd.ipa`. It needs Xcode with the iOS SDK. Nobody can install that file as it is; see "Installing on an iPhone" below.
 
 #### The Android release key
 
@@ -56,6 +57,28 @@ The end of Settings shows the version of the app that is installed, such as "Ope
 - Android: `versionName` and `versionCode` under `settings.android` in `androidApp/module.yaml` (raise the code with every release, Android only installs a higher one over an older one).
 - iOS: `CFBundleShortVersionString` and `CFBundleVersion` in `iosApp/src/Info.plist`. They are written there as plain values, not as project variables, because the toolchain regenerates `module.xcodeproj`.
 - macOS: `version=` at the top of `scripts/package-mac.sh`.
+
+### Installing on an iPhone
+
+OpenAdhd is not in the App Store and there is no TestFlight build, because both need a paid Apple Developer account. What works with a **free Apple ID**:
+
+- **The IPA, re-signed by you.** Download `OpenAdhd.ipa` from the [latest release](https://github.com/usuallycoding/OpenAdhd/releases/latest) and let one of these tools sign it with your own Apple ID and put it on the phone:
+  - [AltStore](https://altstore.io): a helper app (AltServer) on a Mac or PC on the same Wi-Fi installs the app and refreshes it. To get update prompts, add this source in AltStore: `https://raw.githubusercontent.com/usuallycoding/OpenAdhd/main/altstore/source.json`.
+  - [SideStore](https://sidestore.io): the same source file works. It needs a computer for the first setup only and then refreshes the app on the phone.
+  - [Sideloadly](https://sideloadly.io): a computer app that installs the IPA once. You run it again every week.
+- **Build it yourself.** Open `iosApp/module.xcodeproj` in Xcode, pick your own team under Signing & Capabilities, change the bundle identifier to one of yours (the one in the project belongs to someone else's team) and run it on your phone.
+
+Any of these needs Developer Mode switched on on the phone (Settings, Privacy & Security). Apple's limits for a free Apple ID apply to all of them:
+
+- The signature lasts **7 days**. After that the app no longer opens until it is refreshed or installed again, so choose AltStore or SideStore if you want that to happen by itself. Your data stays on the phone and is there again after a refresh. Reinstalling over the old app keeps it too, but deleting the app removes it, so export a backup under Settings now and then.
+- Only 3 apps signed with a free Apple ID can be active at once.
+- Reminders and alarms use the phone's own local notifications and AlarmKit, so they do not need anything a free account lacks. An alarm needs iOS 26 or later; before that it shows as a notification.
+
+#### Making a release
+
+1. Raise the version in `iosApp/src/Info.plist` (see Version above) and run `scripts/package-ios.sh`.
+2. Create a GitHub release tagged `v<version>` (for example `v1.0.0`) and attach `dist/OpenAdhd.ipa`.
+3. Paste the `version`, `versionDate`, `downloadURL` and `size` lines the script printed into `altstore/source.json` and commit it. The size changes with every build, so use the one printed for the file you attached.
 
 ### App icons
 

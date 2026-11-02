@@ -1,0 +1,20 @@
+{
+  "name": "OpenAdhd",
+  "identifier": "com.usuallycoding.openadhd.source",
+  "subtitle": "Plan your day, earn coins, spend them on rewards",
+  "apps": [
+    {
+      "name": "OpenAdhd",
+      "bundleIdentifier": "com.usuallycoding.openadhd.OpenAdhd",
+      "developerName": "usuallycoding",
+      "subtitle": "A daily planner built for ADHD",
+      "localizedDescription": "Plan your day, finish tasks to earn coins and spend them on rewards you choose. Your data stays on the phone.",
+      "iconURL": "https://raw.githubusercontent.com/usuallycoding/OpenAdhd/main/iosApp/src/Assets.xcassets/AppIcon.appiconset/app-icon-1024.png",
+      "version": "1.0.0",
+      "versionDate": "2026-11-02",
+      "downloadURL": "https://github.com/usuallycoding/OpenAdhd/releases/download/v1.0.0/OpenAdhd.ipa",
+      "size": 16435446
+    }
+  ],
+  "news": []
+}
